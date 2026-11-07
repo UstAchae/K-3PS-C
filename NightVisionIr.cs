@@ -444,6 +444,39 @@ internal static partial class NightVisionEyepieces
         _irLaserHidden.Clear();
     }
 
+    // The optic's camera (a scope's picture) draws IR lasers as the game has it: they are drawn only while night vision
+    // is on for the frame (_NightVisionOn), which the game sets from the FPS camera's night vision in its pre-cull and
+    // leaves for the optic's camera; with the eyepieces in, that is left off for the naked eye's frame (the IR is drawn
+    // into the lenses' layer), and the scope was drawn with none. On for the optic's camera as the game would have it
+    // (its own night vision, or the FPS camera's; IkLight lights the IR lights for it by the same rule), off again after.
+    private static bool _opticIr, _toldOpticIr;
+
+    internal static void OnOpticPreCullIr(Camera camera)
+    {
+        if (!IrWanted || !OpticPicture.IsCamera(camera))
+            return;
+        var manager = EFT.CameraControl.CameraManager.Instance;
+        bool on = manager?.NightVision != null && manager.NightVision.On
+            || manager?.OpticCameraManager?.NightVision != null && manager.OpticCameraManager.NightVision.On;
+        if (!on)
+            return;
+        Shader.SetGlobalFloat(NightVisionOnId, 1f);
+        _opticIr = true;
+        if (!_toldOpticIr)
+        {
+            _toldOpticIr = true;
+            NewCameraPlugin.Log?.LogInfo("Night vision: IR lasers drawn in the optic's picture");
+        }
+    }
+
+    internal static void OnOpticPostRenderIr(Camera camera)
+    {
+        if (!_opticIr)
+            return;
+        _opticIr = false;
+        Shader.SetGlobalFloat(NightVisionOnId, 0f);
+    }
+
     private static void DetachIr()
     {
         foreach (Light light in _irAttached)

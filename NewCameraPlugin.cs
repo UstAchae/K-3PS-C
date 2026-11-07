@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.5.1";
+    public const string PluginVersion = "1.5.2";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -519,6 +519,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         Guarded(Fisheye.Reassert, camera, "pre-cull (fisheye)");
         Guarded(NewCameraSwitch.OnCameraPreCull, camera, "pre-cull (camera)");
         Guarded(NightVisionEyepieces.OnCameraPreCull, camera, "pre-cull (eyepieces)");
+        Guarded(NightVisionEyepieces.OnOpticPreCullIr, camera, "pre-cull (optic IR)");
     };
     private static readonly Camera.CameraCallback PreRender = camera =>
     {
@@ -531,6 +532,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         Guarded(NightVisionEyepieces.OnCameraPostRender, camera, "post-render (eyepieces)");
         Guarded(NightVisionEyepieces.OnCameraPostRenderIr, camera, "post-render (IR)");
         Guarded(OpticElevation.Restore, camera, "post-render (optic)");
+        Guarded(NightVisionEyepieces.OnOpticPostRenderIr, camera, "post-render (optic IR)");
     };
     private static readonly System.Collections.Generic.HashSet<string> Reported = new System.Collections.Generic.HashSet<string>();
 
