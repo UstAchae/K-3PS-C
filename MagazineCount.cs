@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// Checking a magazine, and the in-raid HUD.
+// Checking a magazine or the chamber.
 //
 // The game shows a magazine's count, and marks the magazine as checked, only in the first-person view (Idling.CheckAmmo),
 // and this mod keeps the player in the third-person one, so neither happened. Now both do. The count is the game's own
@@ -20,14 +20,10 @@ namespace EFTNewCamera;
 // A gun whose magazine does not come out (a shotgun's tube, a revolver's cylinder) has it on the chamber, in the receiver:
 // the top round of a tube is far up by the muzzle. With neither to follow it stays in the corner.
 //
-// Checking the chamber shows nothing in the game, only the animation. Here the same panel shows what is in the chamber,
+// Checking the chamber shows nothing in the game, only the animation. Here the same panel names what is in the chamber,
 // at the ejection port.
-//
-// The HUD is hidden (F12) by a transparent group over the battle screen: everything in it goes on working unseen.
 internal static class MagazineCount
 {
-    internal static bool HideUi;
-
     // Along the round from its base (patron_001's place: the magazine's own z, the round pointing to about z = 0), how
     // far is left to go at the place the text is centred on.
     private const float TowardTip = 0.4f;
@@ -52,10 +48,9 @@ internal static class MagazineCount
         MethodInfo? show = AccessTools.Method(typeof(GamePlayerOwner), nameof(GamePlayerOwner.PlayerOnOnShowAmmoDetails));
         MethodInfo? chamber = AccessTools.Method(typeof(Player.FirearmController.Idling), nameof(Player.FirearmController.Idling.CheckChamber));
         MethodInfo? panelShow = AccessTools.Method(typeof(AmmoCountPanel), nameof(AmmoCountPanel.Show));
-        MethodInfo? screen = AccessTools.Method(typeof(EftBattleUIScreen), "Show", new[] { typeof(GamePlayerOwner) });
-        if (check == null || show == null || chamber == null || panelShow == null || screen == null)
+        if (check == null || show == null || chamber == null || panelShow == null)
         {
-            NewCameraPlugin.Log?.LogWarning($"Not patched (magazine count, HUD): check {check != null}, show {show != null}, chamber {chamber != null}, panel {panelShow != null}, screen {screen != null}.");
+            NewCameraPlugin.Log?.LogWarning($"Not patched (magazine count): check {check != null}, show {show != null}, chamber {chamber != null}, panel {panelShow != null}.");
             return;
         }
         harmony.Patch(check, transpiler: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(CheckAmmoInAnyView))));
@@ -63,7 +58,6 @@ internal static class MagazineCount
             finalizer: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(ShowDetailsDone))));
         harmony.Patch(chamber, postfix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(CheckChamberPostfix))));
         harmony.Patch(panelShow, prefix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(PanelShowPrefix))));
-        harmony.Patch(screen, postfix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(ApplyHideUi))));
     }
 
     private static IEnumerable<CodeInstruction> CheckAmmoInAnyView(IEnumerable<CodeInstruction> instructions)
@@ -93,7 +87,7 @@ internal static class MagazineCount
         Player? player = __instance.Player;
         if (player == null || !player.IsYourPlayer)
             return true;
-        if (HideUi)
+        if (HudHiding.AmmoHidden)
             return false;
         _fromCheck = true;
         Player.FirearmController? hands = player.HandsController as Player.FirearmController;
@@ -132,7 +126,7 @@ internal static class MagazineCount
     // A chamber check that went ahead (the game's answer is true for a jam's handling too, which plays no check).
     private static void CheckChamberPostfix(Player.FirearmController.Idling __instance, bool __result)
     {
-        if (!__result || !NewCameraSwitch.Enabled || HideUi)
+        if (!__result || !NewCameraSwitch.Enabled || HudHiding.AmmoHidden)
             return;
         Player.FirearmController? hands = __instance.Controller;
         Player? player = Singleton<GameWorld>.Instance?.MainPlayer;
@@ -143,14 +137,13 @@ internal static class MagazineCount
         if (!MonoBehaviourSingleton<CommonUI>.Instantiated)
             return;
 
-        int count = 0;
         Ammo? ammo = null;
         foreach (Slot slot in weapon.Chambers)
         {
             if (slot.ContainedItem is Ammo round)
             {
-                count++;
-                ammo ??= round;
+                ammo = round;
+                break;
             }
         }
         Transform? gun = hands.ControllerGameObject != null ? hands.ControllerGameObject.transform : null;
@@ -159,7 +152,7 @@ internal static class MagazineCount
         try
         {
             Follow(player, hands, port, false);
-            MonoBehaviourSingleton<CommonUI>.Instance.EftBattleUIScreen.ShowAmmoCountZeroingPanel(count > 0 ? count.ToString() : "Empty".Localized(), ammo?.Name.Localized());
+            MonoBehaviourSingleton<CommonUI>.Instance.EftBattleUIScreen.ShowAmmoCountZeroingPanel(ammo != null ? ammo.Name.Localized() : "Empty".Localized());
         }
         finally
         {
@@ -251,24 +244,5 @@ internal static class MagazineCount
         _player = null;
         _hands = null;
         _round = null;
-    }
-
-    // On the setting and the master switch changing, and each time the battle screen is shown.
-    internal static void ApplyHideUi()
-    {
-        if (!MonoBehaviourSingleton<CommonUI>.Instantiated)
-            return;
-        EftBattleUIScreen? screen = MonoBehaviourSingleton<CommonUI>.Instance.EftBattleUIScreen;
-        if (screen == null)
-            return;
-        bool hide = HideUi && NewCameraSwitch.Enabled;
-        CanvasGroup? group = screen.GetComponent<CanvasGroup>();
-        if (group == null)
-        {
-            if (!hide)
-                return;
-            group = screen.gameObject.AddComponent<CanvasGroup>();
-        }
-        group.alpha = hide ? 0f : 1f;
     }
 }
