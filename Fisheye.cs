@@ -222,6 +222,22 @@ internal static class Fisheye
         _widened.fieldOfView = _widenedField;
     }
 
+    // Where a point of the straight frame (its place in the camera's view, 0 to 1) lands on the screen: the shader's
+    // straightUv the other way round. The same point when the lens is not on.
+    internal static Vector2 ToScreen(Vector2 view)
+    {
+        if (_widened == null)
+            return view;
+        float k = _shape.x, f = _shape.y, halfHeight = _shape.z, aspect = _shape.w;
+        Vector2 straight = new Vector2((view.x * 2f - 1f) * aspect, view.y * 2f - 1f);
+        float across = straight.magnitude;
+        if (across < 0.00001f)
+            return view;
+        float r = f * Mathf.Tan(k * Mathf.Atan(across * halfHeight)) / k;
+        Vector2 q = straight * (r / across);
+        return new Vector2(q.x / aspect * 0.5f + 0.5f, q.y * 0.5f + 0.5f);
+    }
+
     // The game's field back on the camera, at the end of the frame (and before the next one is worked out).
     internal static void GiveBack()
     {

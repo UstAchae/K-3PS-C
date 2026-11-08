@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.6.0";
+    public const string PluginVersion = "1.6.1";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -42,15 +42,26 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         InteractionRay.Install();
         CameraBeforePostProcessing.Install();
         HideoutEscape.Install();
+        MagazineCount.Install();
         NewCameraSwitch.Enabled = enabled.Value;
         NewCameraSwitch.FirstPersonSkeleton = skeleton.Value == SkeletonFirst;
         enabled.SettingChanged += (_, _) =>
         {
             NewCameraSwitch.Enabled = enabled.Value;
             RecoilMode.Refresh();
+            MagazineCount.ApplyHideUi();
         };
         skeleton.SettingChanged += (_, _) => NewCameraSwitch.FirstPersonSkeleton = skeleton.Value == SkeletonFirst;
         BindFisheye();
+        ConfigEntry<bool> hideUi = SettingsLayout.Bind(Config, "界面", "隐藏局内 UI", false,
+            "局内的 HUD 全部不显示：血条、体力、姿态、快捷栏、开门和搜刮的选项提示、弹药和射击模式的提示都看不见，验弹时弹匣口的弹药数也不显示。按键和操作照常有效（比如看不见选项提示也能开门）。");
+        hideUi.SettingChanged += (_, _) =>
+        {
+            MagazineCount.HideUi = hideUi.Value;
+            MagazineCount.ApplyHideUi();
+        };
+        MagazineCount.HideUi = hideUi.Value;
+        MagazineCount.ApplyHideUi();
         BindDirection();
         BindPosition();
         BindAimDistance();
@@ -513,6 +524,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     };
     private static readonly Camera.CameraCallback PreRender = camera =>
     {
+        Guarded(MagazineCount.OnCameraPreRender, camera, "pre-render (magazine count)");
         Guarded(NightVisionEyepieces.NoteRendered, camera, "pre-render (objective)");
         Guarded(NightVisionEyepieces.OnCameraPreRender, camera, "pre-render (eyepieces)");
         Guarded(NightVisionEyepieces.OnCameraPreRenderIr, camera, "pre-render (IR)");

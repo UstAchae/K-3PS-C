@@ -29,6 +29,7 @@ internal static class SettingsLayout
         ("12 夜视仪挂架", new[] { "挂架升高", "挂架降低", "挂架仰起", "挂架俯下", "挂架往前", "挂架往后" }),
         ("13 鱼眼", new[] { "启用", "视野", "弯曲", "暗角", "清晰度方式", "清晰度补偿" }),
         ("14 镜头朝向（高级）", new[] { "俯仰", "偏航", "翻滚" }),
+        ("15 界面", new[] { "隐藏局内 UI" }),
     };
 
     // The groups the settings were in before (1.4.4), by their new group, for taking the saved values over.
@@ -48,6 +49,7 @@ internal static class SettingsLayout
         ["12 夜视仪挂架"] = "头戴式成像装备",
         ["13 鱼眼"] = "鱼眼",
         ["14 镜头朝向（高级）"] = "镜头朝向",
+        ["15 界面"] = "界面",
     };
 
     static SettingsLayout()
