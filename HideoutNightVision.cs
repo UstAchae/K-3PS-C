@@ -64,8 +64,6 @@ internal static class HideoutNightVision
 
         if (observers < 2 || kept < 2 || button == null)
             NewCameraPlugin.Log?.LogWarning($"Hideout night vision: found {observers} of 2 observer choices, {kept} of 2 filter keepers, button {(button != null)}; what was not found stays as the game has it");
-        else
-            NewCameraPlugin.Log?.LogInfo("Hideout night vision: the goggles worn are used, the hideout's own filter is off");
     }
 
     private static HideoutPlayer? Hideout()

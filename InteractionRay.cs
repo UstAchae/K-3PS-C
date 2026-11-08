@@ -11,7 +11,7 @@ namespace EFTNewCamera;
 // the screen, started as far behind as the game starts it (EFTHardSettings.BEHIND_CAST).
 internal static class InteractionRay
 {
-    private static bool _patched, _told;
+    private static bool _patched;
 
     internal static void Install()
     {
@@ -35,11 +35,6 @@ internal static class InteractionRay
         Vector3 forward = rotation * Vector3.forward;
         float behind = EFTHardSettings.Instance != null ? EFTHardSettings.Instance.BEHIND_CAST : 0f;
         __result = new Ray(position - forward * behind, forward);
-        if (!_told)
-        {
-            _told = true;
-            NewCameraPlugin.Log?.LogInfo("Interaction ray: cast from this mod's camera, through the screen's centre");
-        }
         return false;
     }
 }

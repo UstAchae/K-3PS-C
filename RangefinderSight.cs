@@ -55,17 +55,9 @@ internal static class RangefinderSight
         return Quaternion.AngleAxis(Vector3.SignedAngle(right, view * Vector3.right, axis), axis) * turn;
     }
 
-    // The item's icon or preview leaves its pooled model on the Weapon Preview layer, and taking it in hand only brings the
-    // meshes back, not the reading, which the optic camera (seeing no Weapon Preview) then never draws.
-    internal static void ReadingPostfix(TacticalRangeFinderController __instance)
-    {
-        if (NewCameraSwitch.Enabled)
-            TransformTools.SetLayersRecursively(__instance.gameObject, LayerMask.NameToLayer("Player"));
-    }
-
     // Each optic camera frame, once our pose has carried that camera: the game's own text (its mesh, its material) drawn
-    // into the picture where its canvas has it. The canvas itself does not show while the camera is carried, though all
-    // its state is as it should be: it is drawn from where things stood before our pose, it seems.
+    // into the picture where its canvas has it. Unity takes canvases for drawing as it updates them, before the camera's
+    // pre-cull in which this mod moves the device and the camera, so the canvas itself does not show.
     internal static void DrawReading(Player player, Camera camera)
     {
         TacticalRangeFinderController? display = player.HandsController is PortableRangeFinderController controller && controller.IsAiming

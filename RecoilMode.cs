@@ -51,9 +51,6 @@ internal static class RecoilMode
     {
         if (Chainloader.PluginInfos.TryGetValue(ReworkGuid, out BepInEx.PluginInfo info) && info.Instance != null)
             _rework = info.Instance.GetType().Assembly;
-        NewCameraPlugin.Log?.LogInfo(_rework != null
-            ? "Recoil: SPTRecoilReworkLegacy found; its patches are in only while it is chosen."
-            : "Recoil: SPTRecoilReworkLegacy not installed.");
     }
 
     internal static string[] Choices => ReworkInstalled ? new[] { Legacy, Rework } : new[] { Legacy };
@@ -61,7 +58,6 @@ internal static class RecoilMode
     internal static void Set(string mode)
     {
         _mode = mode == Rework && ReworkInstalled ? Rework : Legacy;
-        NewCameraPlugin.Log?.LogInfo($"Recoil: {(_mode == Rework ? "Recoil Rework" : "the older recoil")} chosen.");
         Refresh();
     }
 
@@ -115,7 +111,6 @@ internal static class RecoilMode
         }
         foreach (Removed removed in Taken)
             new Harmony(removed.Patch.owner).Unpatch(removed.Original, removed.Patch.PatchMethod);
-        NewCameraPlugin.Log?.LogInfo($"Recoil: SPTRecoilReworkLegacy's {Taken.Count} patches taken out.");
     }
 
     private static void Collect(MethodBase original, HarmonyPatchType kind, IEnumerable<Patch> patches)
@@ -150,7 +145,6 @@ internal static class RecoilMode
                     break;
             }
         }
-        NewCameraPlugin.Log?.LogInfo($"Recoil: SPTRecoilReworkLegacy's {Taken.Count} patches put back.");
         Taken.Clear();
     }
 

@@ -41,7 +41,6 @@ internal static class Fisheye
     private static Camera? _widened;       // the camera given our field this frame
     private static float _gameField;       // its field as the game had it
     private static float _widenedField;    // ours on it
-    private static bool _toldReset;
     private static Vector4 _shape;         // k, f, the straight frame's half height, aspect (Justachae/Fisheye)
     private static Vector4 _shade;         // the image circle's radius and soft edge, the light's falloff
     private static Camera? _imageCamera;
@@ -213,11 +212,6 @@ internal static class Fisheye
     {
         if (_widened == null || Mathf.Abs(_widened.fieldOfView - _widenedField) < 0.001f)
             return;
-        if (!_toldReset)
-        {
-            _toldReset = true;
-            NewCameraPlugin.Log?.LogInfo($"Fisheye: the camera's field was set to {_widened.fieldOfView:F2} after ours ({_widenedField:F2}); put back before rendering.");
-        }
         _gameField = _widened.fieldOfView;
         _widened.fieldOfView = _widenedField;
     }

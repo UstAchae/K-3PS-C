@@ -13,7 +13,7 @@ namespace EFTNewCamera;
 // is done first, from the post-processing's OnPreCull, once a frame (NewCameraSwitch.OnCameraPreCull).
 internal static class CameraBeforePostProcessing
 {
-    private static bool _patched, _told;
+    private static bool _patched;
 
     internal static void Install()
     {
@@ -36,10 +36,5 @@ internal static class CameraBeforePostProcessing
         if (camera == null || camera != EFT.CameraControl.CameraManager.Instance?.Camera)
             return;
         NewCameraPlugin.GuardedPreCull(camera);
-        if (!_told && NewCameraSwitch.Enabled)
-        {
-            _told = true;
-            NewCameraPlugin.Log?.LogInfo("Camera placed before its post-processing makes the frame's commands");
-        }
     }
 }

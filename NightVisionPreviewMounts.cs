@@ -59,7 +59,6 @@ internal static partial class NightVisionEyepieces
             _previewMounts.Add(rig);
             _previewMountOf[model] = rig;
             rig.Adjust();
-            NewCameraPlugin.Log?.LogInfo($"Mount set as kept on a model of the player ({model.name})");
         }
         catch (System.Exception e)
         {

@@ -33,7 +33,6 @@ internal static class HideoutCinemachine
         {
             _brain.enabled = false;
             _turnedOff = true;
-            NewCameraPlugin.Log?.LogInfo("Hideout camera: the hideout's Cinemachine brain off while this mod places the camera, as in a raid");
         }
     }
 

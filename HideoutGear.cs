@@ -82,7 +82,6 @@ internal static class HideoutGear
             PlayerBody.SlotView view = new PlayerBody.SlotView(body, equipment.GetSlot(name), body.GetSlotBone(name), name, backpack, body.GetAlternativeHolsterBone(name));
             body.SlotViews.AddOrReplace(name, view)?.Dispose();
         }
-        NewCameraPlugin.Log?.LogInfo($"Hideout model: dressed from {(ReferenceEquals(equipment, hideout.OriginalInventory?.Inventory?.Equipment) ? "the gear worn" : "the shooting range's copy")}");
         HideoutNightVision.Refresh(hideout);
         return true;
     }

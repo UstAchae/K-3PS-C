@@ -33,8 +33,6 @@ internal static class CameraNear
         if (Mathf.Abs(now - _ours) > 1e-6f)
             _gameNear = now;
         float near = Mathf.Min(Near, _gameNear);
-        if (Mathf.Abs(near - _ours) > 1e-6f)
-            NewCameraPlugin.Log?.LogInfo($"Near clip plane: the game's {_gameNear:F3} m, drawn at {near:F3} m.");
         _ours = near;
         if (Mathf.Abs(now - near) > 1e-6f)
             camera.nearClipPlane = near;

@@ -495,16 +495,10 @@ internal static partial class NightVisionEyepieces
             if (cameras != null && cameras.TryGetValue(camera, out AmbientLight.CamSettings settings) && settings != null)
             {
                 ambient.DrawStencil(settings, camera);
-                if (!_toldAmbient && camera == Camera.main)
-                {
-                    _toldAmbient = true;
-                    NewCameraPlugin.Log?.LogInfo("Ambient light: its indoor shade laid out again for the camera where this mod has it");
-                }
             }
         }
     }
 
-    private static bool _toldAmbient;
 
     private static void ClearLensMap(RenderTexture target)
     {

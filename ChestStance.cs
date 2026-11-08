@@ -47,8 +47,6 @@ internal static class ChestStance
 
     private static readonly AccessTools.FieldRef<InputPreset> CurrentPreset = AccessTools.StaticFieldRefAccess<InputPreset>(AccessTools.Field(typeof(InputManager), "_currentPreset"));
 
-    private static bool _toldHolds;
-
     // The game's aim key set to aim while held, not to toggle. Read from the combinations the game works with: the
     // settings' press type is given to copies of the preset's own (InputPreset.UpdateBindings), which keep the default.
     private static EPressType AimType()
@@ -58,22 +56,9 @@ internal static class ChestStance
             return EPressType.Press;
         for (int i = 0; i < working.Length; i++)
             if (working[i] is InputKeyCombination key && key.GameKey == EGameKey.Aim)
-            {
-                if (key.Type == EPressType.Continuous && !_toldHolds)
-                {
-                    _toldHolds = true;
-                    NewCameraPlugin.Log?.LogInfo("Chest stance: the game's aim key is set to hold, the stance is taken by a click");
-                }
-                else if (key.Type == EPressType.DoubleClick && !_toldDouble)
-                {
-                    _toldDouble = true;
-                    NewCameraPlugin.Log?.LogInfo("Chest stance: the game's aim key is set to a double click, the stance is taken by a hold");
-                }
                 return key.Type;
-            }
         return EPressType.Press;
     }
-    private static bool _toldDouble;
     private static bool _pendingWatched;  // a press watched here (aim key set to a double click), not held back
     private const float LeftSeconds = 0.4f;   // past the carry's blend back to the hip
     private const float EnterSeconds = 0.25f; // from the aim into the stance

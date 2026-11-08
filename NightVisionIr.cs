@@ -449,7 +449,7 @@ internal static partial class NightVisionEyepieces
     // leaves for the optic's camera; with the eyepieces in, that is left off for the naked eye's frame (the IR is drawn
     // into the lenses' layer), and the scope was drawn with none. On for the optic's camera as the game would have it
     // (its own night vision, or the FPS camera's; IkLight lights the IR lights for it by the same rule), off again after.
-    private static bool _opticIr, _toldOpticIr;
+    private static bool _opticIr;
 
     internal static void OnOpticPreCullIr(Camera camera)
     {
@@ -462,11 +462,6 @@ internal static partial class NightVisionEyepieces
             return;
         Shader.SetGlobalFloat(NightVisionOnId, 1f);
         _opticIr = true;
-        if (!_toldOpticIr)
-        {
-            _toldOpticIr = true;
-            NewCameraPlugin.Log?.LogInfo("Night vision: IR lasers drawn in the optic's picture");
-        }
     }
 
     internal static void OnOpticPostRenderIr(Camera camera)
