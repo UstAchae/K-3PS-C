@@ -2,6 +2,7 @@ using EFT;
 using EFT.CameraControl;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace EFTNewCamera;
 
@@ -18,6 +19,10 @@ internal static class RangefinderSight
 
     // A little further off the eye than the item's own relief.
     private const float ExtraRelief = 0.015f;
+
+    private static CommandBuffer? _reading;
+    private static Camera? _readingCamera;
+    private static int _readingVertices;
 
     private static float _aimedAt = -1f;
     private static bool _logged;
@@ -62,6 +67,40 @@ internal static class RangefinderSight
             TransformTools.SetLayersRecursively(__instance.gameObject, LayerMask.NameToLayer("Player"));
     }
 
+    // Each optic camera frame, once our pose has carried that camera: the game's own text (its mesh, its material) drawn
+    // into the picture where its canvas has it. The canvas itself does not show while the camera is carried, though all
+    // its state is as it should be: it is drawn from where things stood before our pose, it seems.
+    internal static void DrawReading(Player player, Camera camera)
+    {
+        TacticalRangeFinderController? display = player.HandsController is PortableRangeFinderController controller && controller.IsAiming
+            ? Display(controller)
+            : null;
+        TMPro.TMP_Text? text = display != null && display.isActiveAndEnabled ? display._textOnDisplay : null;
+        Mesh? mesh = text != null ? text.mesh : null;
+        if (mesh == null)
+        {
+            ClearReading();
+            return;
+        }
+        if (_reading == null)
+            _reading = new CommandBuffer { name = "Rangefinder reading" };
+        if (_readingCamera != camera)
+        {
+            if (_readingCamera != null)
+                _readingCamera.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, _reading);
+            camera.AddCommandBuffer(CameraEvent.AfterForwardAlpha, _reading);
+            _readingCamera = camera;
+        }
+        _reading.Clear();
+        _reading.DrawMesh(mesh, text!.rectTransform.localToWorldMatrix, text.materialForRendering, 0, 0);
+        _readingVertices = mesh.vertexCount;
+    }
+
+    internal static void ClearReading()
+    {
+        _reading?.Clear();
+    }
+
     // Temporary: where the lens ended up, once per aim, a second in.
     internal static void Report(Player player, bool aiming, Vector3 cameraPosition, Quaternion cameraRotation)
     {
@@ -84,6 +123,6 @@ internal static class RangefinderSight
         Camera? optic = CameraManager.Instance?.OpticCameraManager?.Camera;
         Canvas? canvas = display._canvas;
         TMPro.TMP_Text? text = display._textOnDisplay;
-        NewCameraPlugin.Log?.LogInfo($"Rangefinder reading: active {display.gameObject.activeInHierarchy}, text '{text?.text}', characters {text?.textInfo?.characterCount}, text on {text?.enabled}, alpha {text?.color.a:F2}, culled {text?.canvasRenderer?.cull}, text layer {text?.gameObject.layer}, canvas on {canvas?.enabled}, canvas layer {canvas?.gameObject.layer}, mode {canvas?.renderMode}, plane {canvas?.planeDistance:F2}, scale {canvas?.transform.lossyScale.x:F7}, size {(canvas?.transform as RectTransform)?.rect.size.ToString("F0")}, camera '{canvas?.worldCamera?.name}', optic on {optic?.enabled}, near {optic?.nearClipPlane:F3}, far {optic?.farClipPlane:F0}, fov {optic?.fieldOfView:F2}, mask {optic?.cullingMask}, pixels {optic?.pixelWidth}x{optic?.pixelHeight}");
+        NewCameraPlugin.Log?.LogInfo($"Rangefinder reading: active {display.gameObject.activeInHierarchy}, text '{text?.text}', characters {text?.textInfo?.characterCount}, text on {text?.enabled}, alpha {text?.color.a:F2}, culled {text?.canvasRenderer?.cull}, text layer {text?.gameObject.layer}, canvas on {canvas?.enabled}, canvas layer {canvas?.gameObject.layer}, mode {canvas?.renderMode}, plane {canvas?.planeDistance:F2}, scale {canvas?.transform.lossyScale.x:F7}, size {(canvas?.transform as RectTransform)?.rect.size.ToString("F0")}, camera '{canvas?.worldCamera?.name}', optic on {optic?.enabled}, near {optic?.nearClipPlane:F3}, far {optic?.farClipPlane:F0}, fov {optic?.fieldOfView:F2}, mask {optic?.cullingMask}, pixels {optic?.pixelWidth}x{optic?.pixelHeight}, drew {_readingVertices} vertices with '{text?.materialForRendering?.shader?.name}' on '{_readingCamera?.name}'");
     }
 }
