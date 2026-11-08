@@ -20,6 +20,9 @@ namespace EFTNewCamera;
 // A gun whose magazine does not come out (a shotgun's tube, a revolver's cylinder) has it on the chamber, in the receiver:
 // the top round of a tube is far up by the muzzle. With neither to follow it stays in the corner.
 //
+// Checking the chamber shows nothing in the game, only the animation. Here the same panel shows what is in the chamber,
+// at the ejection port.
+//
 // The HUD is hidden (F12) by a transparent group over the battle screen: everything in it goes on working unseen.
 internal static class MagazineCount
 {
@@ -47,16 +50,18 @@ internal static class MagazineCount
         Harmony harmony = new Harmony(NewCameraPlugin.PluginGuid + ".magazine");
         MethodInfo? check = AccessTools.Method(typeof(Player.FirearmController.Idling), nameof(Player.FirearmController.Idling.CheckAmmo));
         MethodInfo? show = AccessTools.Method(typeof(GamePlayerOwner), nameof(GamePlayerOwner.PlayerOnOnShowAmmoDetails));
+        MethodInfo? chamber = AccessTools.Method(typeof(Player.FirearmController.Idling), nameof(Player.FirearmController.Idling.CheckChamber));
         MethodInfo? panelShow = AccessTools.Method(typeof(AmmoCountPanel), nameof(AmmoCountPanel.Show));
         MethodInfo? screen = AccessTools.Method(typeof(EftBattleUIScreen), "Show", new[] { typeof(GamePlayerOwner) });
-        if (check == null || show == null || panelShow == null || screen == null)
+        if (check == null || show == null || chamber == null || panelShow == null || screen == null)
         {
-            NewCameraPlugin.Log?.LogWarning($"Not patched (magazine count, HUD): check {check != null}, show {show != null}, panel {panelShow != null}, screen {screen != null}.");
+            NewCameraPlugin.Log?.LogWarning($"Not patched (magazine count, HUD): check {check != null}, show {show != null}, chamber {chamber != null}, panel {panelShow != null}, screen {screen != null}.");
             return;
         }
         harmony.Patch(check, transpiler: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(CheckAmmoInAnyView))));
         harmony.Patch(show, prefix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(ShowDetailsPrefix))),
             finalizer: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(ShowDetailsDone))));
+        harmony.Patch(chamber, postfix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(CheckChamberPostfix))));
         harmony.Patch(panelShow, prefix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(PanelShowPrefix))));
         harmony.Patch(screen, postfix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(ApplyHideUi))));
     }
@@ -94,11 +99,18 @@ internal static class MagazineCount
         Player.FirearmController? hands = player.HandsController as Player.FirearmController;
         bool inMagazine = false;
         Transform? round = hands != null ? FindPlace(hands, out inMagazine) : null;
+        Follow(player, hands, round, inMagazine);
+        return true;
+    }
+
+    // Keeps the panel's text on the place, from now until the panel has faded.
+    private static void Follow(Player player, Player.FirearmController? hands, Transform? place, bool inMagazine)
+    {
         AmmoCountPanel? panel = MonoBehaviourSingleton<CommonUI>.Instantiated ? MonoBehaviourSingleton<CommonUI>.Instance.EftBattleUIScreen?._ammoCountPanel : null;
-        if (round == null || panel == null)
+        if (place == null || panel == null)
         {
             StopFollowing();
-            return true;
+            return;
         }
         if (!ReferenceEquals(panel, _panel) || _round == null)
         {
@@ -111,12 +123,48 @@ internal static class MagazineCount
         }
         _player = player;
         _hands = hands;
-        _round = round;
+        _round = place;
         _inMagazine = inMagazine;
         _started = Time.unscaledTime;
-        Canvas? canvas = panel.GetComponentInParent<Canvas>();
-        NewCameraPlugin.Log?.LogInfo($"Magazine count: following {round.parent?.name}/{round.name}; panel canvas {canvas?.rootCanvas.renderMode}, parent layout {panel.transform.parent?.GetComponent<UnityEngine.UI.LayoutGroup>() != null}.");
-        return true;
+        NewCameraPlugin.Log?.LogInfo($"Magazine count: following {place.parent?.name}/{place.name}.");
+    }
+
+    // A chamber check that went ahead (the game's answer is true for a jam's handling too, which plays no check).
+    private static void CheckChamberPostfix(Player.FirearmController.Idling __instance, bool __result)
+    {
+        if (!__result || !NewCameraSwitch.Enabled || HideUi)
+            return;
+        Player.FirearmController? hands = __instance.Controller;
+        Player? player = Singleton<GameWorld>.Instance?.MainPlayer;
+        if (hands == null || player == null || !player.IsYourPlayer || !ReferenceEquals(player.HandsController, hands))
+            return;
+        if (!(hands.Item is Weapon weapon) || !weapon.HasChambers || weapon.MalfState.State != Weapon.EMalfunctionState.None)
+            return;
+        if (!MonoBehaviourSingleton<CommonUI>.Instantiated)
+            return;
+
+        int count = 0;
+        Ammo? ammo = null;
+        foreach (Slot slot in weapon.Chambers)
+        {
+            if (slot.ContainedItem is Ammo round)
+            {
+                count++;
+                ammo ??= round;
+            }
+        }
+        Transform? gun = hands.ControllerGameObject != null ? hands.ControllerGameObject.transform : null;
+        Transform? port = gun != null ? TransformTools.FindTransformRecursive(gun, "shellport") ?? TransformTools.FindTransformRecursive(gun, "patron_in_weapon") : null;
+        _fromCheck = true;
+        try
+        {
+            Follow(player, hands, port, false);
+            MonoBehaviourSingleton<CommonUI>.Instance.EftBattleUIScreen.ShowAmmoCountZeroingPanel(count > 0 ? count.ToString() : "Empty".Localized(), ammo?.Name.Localized());
+        }
+        finally
+        {
+            _fromCheck = false;
+        }
     }
 
     private static System.Exception? ShowDetailsDone(System.Exception? __exception)
