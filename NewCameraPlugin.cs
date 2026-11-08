@@ -66,6 +66,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         CameraBeforePostProcessing.Install();
         HideoutEscape.Install();
         HideoutAreaView.Install();
+        GrassMotion.Install();
         MagazineCount.Install();
         HudHiding.Install();
         FirstPersonGates.Install();
