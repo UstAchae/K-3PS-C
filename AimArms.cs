@@ -254,6 +254,15 @@ internal static class AimArms
             Vector3 sightPosition = bone != null ? bone.position : Vector3.zero;
             Vector3 sightForward = Vector3.forward;
             bool ironAligned = bone != null && animation != null && ResolveIronSight(animation, bone, out sightPosition, out sightForward);
+            // The rangefinder: its lens is the aim point, whatever the game's aim bone does.
+            bool rangefinder = RangefinderSight.TryGet(player, out Transform rangefinderLens, out Transform rangefinderBody, out float rangefinderRelief);
+            if (rangefinder)
+            {
+                bone = rangefinderLens;
+                sightPosition = bone.position;
+                sightForward = RangefinderSight.Forward(rangefinderBody);
+                ironAligned = true;
+            }
             if (bone != null)
             {
                 sightPoint = sightPosition;
@@ -274,7 +283,7 @@ internal static class AimArms
             if (aiming && bone != null && animation != null)
             {
                 sightId = bone.GetInstanceID();
-                float relief = SightRelief(animation, bone);
+                float relief = rangefinder ? rangefinderRelief - ForwardDistance : SightRelief(animation, bone);
                 // From the aiming eye: the camera, or where the eye would be at the chest, where the camera stays.
                 Vector3 aimPoint = new Vector3(CameraPosition.PoseAcross, 0f, ForwardDistance + relief);
                 // The stock at the chest (ChestStance): the gun as aimed, lower and to the right of the eye.
@@ -293,6 +302,9 @@ internal static class AimArms
                     if (ironAligned)
                         turn = TurnFromTo(sightForward, bodyRotation * Vector3.forward);
                 }
+
+                if (rangefinder)
+                    turn = RangefinderSight.Level(turn, rangefinderBody, bodyRotation);
 
                 // Canted in about the line of sight, through the sight (the carry's pivot), by the same angle whatever sight
                 // the game has turned the gun for.
@@ -456,6 +468,7 @@ internal static class AimArms
         if (weapon == null)
             return;
         weapon.SetPositionAndRotation(weaponPosition, weaponRotation);
+        RangefinderSight.Report(player, aiming, cameraPosition, cameraRotation);
         _shotFrame = Time.frameCount;
         _shotFireport = player.HandsController is Player.FirearmController firearm && firearm.CurrentFireport?.Original != null
             ? firearm.CurrentFireport.Original.position

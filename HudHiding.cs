@@ -38,7 +38,6 @@ internal static class HudHiding
         new Panel("隐藏瞄具提示", "切换瞄具倍率、模式时的提示。", s => s._opticCratePanel),
         new Panel("隐藏战术装置提示", "切换激光、手电时的提示。", s => s._tacticalInteractionPanel),
         new Panel("隐藏手势面板", "手势和语音的选择面板。", s => s._gesturesPanel),
-        new Panel("隐藏指南针", "指南针的方位。", s => s._azimuthPanel),
         new Panel("隐藏时间", "局内时间面板。", s => s._locationTimePanel),
     };
 
