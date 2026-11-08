@@ -187,6 +187,7 @@ internal static class AimArms
             return;
         deltaTime = Time.deltaTime;
         nFixedFrames = 1;
+        CalibratedSight.EveryFrame(__instance);
     }
 
     // The third-person procedural animation leaves out the breath and the hands' shake that sway the gun in first
@@ -1611,6 +1612,8 @@ internal static class AimArms
 
     private static bool ResolveIronSight(ProceduralWeaponAnimation animation, Transform bone, out Vector3 position, out Vector3 forward)
     {
+        if (CalibratedSight.TryResolve(animation, bone, out position, out forward))
+            return true;
         position = bone.position;
         forward = bone.name == "aim_camera" ? -bone.up : -bone.forward;
         var scope = Scopes.Current(animation);
