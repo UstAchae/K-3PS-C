@@ -32,10 +32,9 @@ internal static class HudHiding
     {
         new Panel("隐藏血条", "身体各部位的血量面板。", s => s._characterHealthPanel),
         new Panel("隐藏体力和姿态", "左下角的体力条和姿态小人。", s => s._battleStancePanel),
-        new Panel("隐藏快捷栏", "快捷栏的物品格子。", s => s._quickAccessPanel),
+        new Panel("隐藏快捷栏", "快捷栏的物品格子，以及换弹时选弹匣的面板（按住 R 滚动滚轮）。", s => s._quickAccessPanel),
         new Panel("隐藏交互选项", "开门、搜刮这类选项。看不见选项，操作仍然有效。", s => s._actionPanel),
         Ammo,
-        new Panel("隐藏选弹提示", "切换子弹时的提示。", s => s.AmmoSelector),
         new Panel("隐藏瞄具提示", "切换瞄具倍率、模式时的提示。", s => s._opticCratePanel),
         new Panel("隐藏战术装置提示", "切换激光、手电时的提示。", s => s._tacticalInteractionPanel),
         new Panel("隐藏手势面板", "手势和语音的选择面板。", s => s._gesturesPanel),
