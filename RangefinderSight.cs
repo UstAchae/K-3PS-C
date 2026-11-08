@@ -13,6 +13,14 @@ internal static class RangefinderSight
     private static readonly AccessTools.FieldRef<PortableRangeFinderController, OpticSight> Optic =
         AccessTools.FieldRefAccess<PortableRangeFinderController, OpticSight>("_opticSight");
 
+    private static readonly AccessTools.FieldRef<PortableRangeFinderController, TacticalRangeFinderController> Display =
+        AccessTools.FieldRefAccess<PortableRangeFinderController, TacticalRangeFinderController>("_rangeFinderController");
+
+    // A little further off the eye than the item's own relief.
+    private const float ExtraRelief = 0.015f;
+    // The optic camera's near plane is 0.05 m, and nothing of the device lies in front of that.
+    private const float ReadingDistance = 0.1f;
+
     private static float _aimedAt = -1f;
     private static bool _logged;
 
@@ -28,7 +36,7 @@ internal static class RangefinderSight
             return false;
         lens = optic.LensRenderer.transform;
         device = optic.transform;
-        relief = optic.DistanceToCamera;
+        relief = optic.DistanceToCamera + ExtraRelief;
         return true;
     }
 
@@ -48,6 +56,14 @@ internal static class RangefinderSight
         return Quaternion.AngleAxis(Vector3.SignedAngle(right, view * Vector3.right, axis), axis) * turn;
     }
 
+    // The reading is a canvas 2 m in front of the optic camera, depth tested against the scene, so anything nearer than
+    // that hides it: nearer to the camera, it shows whatever is aimed at.
+    internal static void ReadingPostfix(TacticalRangeFinderController __instance)
+    {
+        if (NewCameraSwitch.Enabled && __instance._canvas != null)
+            __instance._canvas.planeDistance = ReadingDistance;
+    }
+
     // Temporary: where the lens ended up, once per aim, a second in.
     internal static void Report(Player player, bool aiming, Vector3 cameraPosition, Quaternion cameraRotation)
     {
@@ -64,5 +80,10 @@ internal static class RangefinderSight
         _logged = true;
         Quaternion toView = Quaternion.Inverse(cameraRotation);
         NewCameraPlugin.Log?.LogInfo($"Rangefinder: lens '{lens.name}' in view {(toView * (lens.position - cameraPosition)).ToString("F3")}, relief {relief:F3}, forward in view {(toView * Forward(device)).ToString("F3")}, right in view {(toView * device.right).ToString("F3")}");
+        TacticalRangeFinderController? display = player.HandsController is PortableRangeFinderController controller ? Display(controller) : null;
+        if (display == null)
+            return;
+        Camera? optic = CameraManager.Instance?.OpticCameraManager?.Camera;
+        NewCameraPlugin.Log?.LogInfo($"Rangefinder reading: active {display.gameObject.activeInHierarchy}, text '{display._textOnDisplay?.text}', canvas on {display._canvas?.enabled}, plane {display._canvas?.planeDistance:F2}, canvas camera '{display._canvas?.worldCamera?.name}', layer {display._textOnDisplay?.gameObject.layer}, optic camera on {optic?.enabled}, mask {optic?.cullingMask}");
     }
 }
