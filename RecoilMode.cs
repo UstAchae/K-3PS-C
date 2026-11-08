@@ -10,18 +10,19 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// Whose recoil the gun has (F12 「瞄准」 → 后坐力): the game's own, this mod's physical model (RealRecoil), or
-// SPTRecoilReworkLegacy's, when that mod is installed. It has no switch of its own (its patches are always in), so
-// while it is not chosen its patches are taken out of the game, and put back as they were when it is. Its server
-// part changes some guns' recoil figures in the database; that stays, whatever is chosen here.
+// Whose recoil the gun has (F12 「瞄准」 → 后坐力): the older one (the game's own shot effect, carried to the third-person
+// gun and body by AimArms.Recoil and BodyRecoil, as in 1.1.1), or SPTRecoilReworkLegacy's, when that mod is installed.
+// It has no switch of its own (its patches are always in), so while it is not chosen its patches are taken out of the
+// game, and put back as they were when it is. Its server part changes some guns' recoil figures in the database; that
+// stays, whatever is chosen here.
 internal static class RecoilMode
 {
-    internal const string Physical = "物理后坐力", Vanilla = "原版", Rework = "Recoil Rework";
+    internal const string Legacy = "旧版后坐力", Rework = "Recoil Rework";
     private const string ReworkGuid = "com.pein.camerarecoilmod";
 
     private static Assembly? _rework;
     private static bool _reworkIn = true;
-    private static string _mode = Physical;
+    private static string _mode = Legacy;
     private static readonly List<Removed> Taken = new();
 
     private readonly struct Removed
@@ -55,21 +56,18 @@ internal static class RecoilMode
             : "Recoil: SPTRecoilReworkLegacy not installed.");
     }
 
-    internal static string[] Choices => ReworkInstalled ? new[] { Physical, Vanilla, Rework } : new[] { Physical, Vanilla };
+    internal static string[] Choices => ReworkInstalled ? new[] { Legacy, Rework } : new[] { Legacy };
 
     internal static void Set(string mode)
     {
-        _mode = mode == Rework && !ReworkInstalled ? Physical : mode;
+        _mode = mode == Rework && ReworkInstalled ? Rework : Legacy;
+        NewCameraPlugin.Log?.LogInfo($"Recoil: {(_mode == Rework ? "Recoil Rework" : "the older recoil")} chosen.");
         Refresh();
     }
 
     // Also when the master switch changes: with the mod off, Recoil Rework works as it would without it.
     internal static void Refresh()
     {
-        bool physical = _mode == Physical;
-        if (RealRecoil.Enabled && !physical)
-            RealRecoil.Rest();
-        RealRecoil.Enabled = physical;
         SetRework(_mode == Rework || !NewCameraSwitch.Enabled);
     }
 

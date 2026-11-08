@@ -319,10 +319,7 @@ internal static class AimArms
             _hasHeadMean = false;
         }
 
-        // RealRecoil from the hip: the gun kicks in the hands (against the upper body), through the carry below.
-        bool hipRecoil = !aiming && !_mounted && RealRecoil.Active && !RealRecoil.Resting
-            && player.HandsController is Player.FirearmController && bones?.Weapon_Root_Anim != null;
-        if (!aiming && !hipRecoil && !_blendAiming && _offset.sqrMagnitude < 0.00000001f && Settled(_turn) && Settled(turn) && _blend >= 1f)
+        if (!aiming && !_blendAiming && _offset.sqrMagnitude < 0.00000001f && Settled(_turn) && Settled(turn) && _blend >= 1f)
         {
             _hasCarry = false;
             Remember(gunPart, cameraPosition, cameraRotation, Vector3.zero, Vector3.zero, Quaternion.identity);
@@ -407,23 +404,11 @@ internal static class AimArms
         Quaternion carryTurn = _turn;
         Vector3 pivot = seenPivot ?? sightPoint ?? (bones.Weapon_Root_Anim != null ? bones.Weapon_Root_Anim.position : Vector3.zero);
         Quaternion kick = Quaternion.identity;
-        // A pistol in the hands turns about the wrists (RealRecoil.Pistol), the right hand's.
-        Vector3? grip = RealRecoil.Pistol && bones.RightPalm != null ? bones.RightPalm.position : (Vector3?)null;
         if (aiming && !_mounted)
-            kick = RealRecoil.Active
-                ? GunRecoil(player.ProceduralWeaponAnimation, bones.Weapon_Root_Anim, pivot, cameraPosition, cameraRotation, true, grip, ref displacement, ref carryTurn)
-                : Recoil(player.ProceduralWeaponAnimation, bones.Weapon_Root_Anim, pivot, ref displacement, ref carryTurn);
-        else if (hipRecoil)
-            // The upper body's turn is already on the bones (the gun goes with it, TorsoRecoil); only the kick in the hands.
-            GunRecoil(player.ProceduralWeaponAnimation, bones.Weapon_Root_Anim, pivot, cameraPosition, cameraRotation, false, grip, ref displacement, ref carryTurn);
+            kick = Recoil(player.ProceduralWeaponAnimation, bones.Weapon_Root_Anim, pivot, ref displacement, ref carryTurn);
         else if (!aiming && _mounted && bones.Weapon_Root_Anim != null)
             kick = ShotKick(player.ProceduralWeaponAnimation, bones.Weapon_Root_Anim.rotation);
         _viewKick = !aiming && _mounted ? kick : Quaternion.identity;
-        if (aiming && !_mounted && RealRecoil.Active && !RealRecoil.Pistol)
-        {
-            _sightKick = kick;
-            _sightKickFrame = Time.frameCount;
-        }
         _carryDisplacement = displacement;
         _carryPivot = pivot;
         _carryTurn = carryTurn;
@@ -531,9 +516,7 @@ internal static class AimArms
             StartHandAction(BoltMinSeconds);
         if (!NewCameraSwitch.Enabled)
             return;
-        bool carry = _hasCarry && Time.frameCount - _shotFrame <= 2;
-        bool torso = Time.frameCount - _torsoFrame <= 2;
-        if (!carry && !torso)
+        if (!_hasCarry || Time.frameCount - _shotFrame > 2)
             return;
         Player? player = Singleton<GameWorld>.Instance?.MainPlayer;
         if (player == null || !ReferenceEquals(player.HandsController, __instance))
@@ -541,166 +524,23 @@ internal static class AimArms
         if (_shotFireport.HasValue && (__instance.CurrentFireport?.Original?.position - _shotFireport.Value)?.sqrMagnitude < 0.000001f)
             return;
 
-        // The game's own pose of the gun: first the upper body's recoil about the waist, then the carry, which was
-        // taken from the bones after the upper body had turned.
-        if (torso)
-        {
-            position = _torsoPivot + _torsoTurn * (position - _torsoPivot);
-            direction = _torsoTurn * direction;
-        }
-        if (carry)
-        {
-            position = _carryPivot + _carryDisplacement + _carryTurn * (position - _carryPivot);
-            direction = _carryTurn * direction;
-        }
+        // The game's own pose of the gun, then the carry, which was taken from the bones as they stood.
+        position = _carryPivot + _carryDisplacement + _carryTurn * (position - _carryPivot);
+        direction = _carryTurn * direction;
     }
 
-    private static Vector3 _torsoPivot;
-    private static Quaternion _torsoTurn = Quaternion.identity;
-    private static int _torsoFrame = -10;
 
-    // RealRecoil: the upper body turned about the waist, with the shoulders, arms, head and gun on it. Before the
-    // camera is taken from the head, so the view and the aimed gun go with it.
-    internal static void TorsoRecoil(Player player)
-    {
-        RealRecoil.Update();
-        if (!RealRecoil.Active || RealRecoil.Resting)
-            return;
-        PlayerBones? bones = player.PlayerBones;
-        Transform? chest = bones?.Ribcage?.Original;
-        if (bones == null || chest == null || !(player.HandsController is Player.FirearmController firearm))
-            return;
-        Vector3 forward = Vector3.ProjectOnPlane(PosedLook(player) * Vector3.forward, Vector3.up);
-        if (forward.sqrMagnitude < 0.000001f)
-            return;
-        forward.Normalize();
-        Vector3 right = Vector3.Cross(Vector3.up, forward);
-        Quaternion turn = Quaternion.AngleAxis(-RealRecoil.WaistYawLeft * Mathf.Rad2Deg, Vector3.up)
-            * Quaternion.AngleAxis(-RealRecoil.WaistPitch * RecoilRiseScale * Mathf.Rad2Deg, right);
-        if (Settled(turn))
-            return;
 
-        Transform upper = FollowRoot(bones, chest);
-        Vector3 pivot = upper.position;
-        Carry(upper, pivot, Vector3.zero, turn);
-        if (bones.Shoulders != null)
-        {
-            foreach (Transform shoulder in bones.Shoulders)
-                CarryLoose(shoulder, upper, pivot, Vector3.zero, turn);
-        }
-        CarryLoose(bones.LeftShoulder?.Original, upper, pivot, Vector3.zero, turn);
-        CarryLoose(bones.RightShoulder?.Original, upper, pivot, Vector3.zero, turn);
-        // The gun does not hang under the spine: left where it was, the hands went off it with the arms. It goes with
-        // the upper body, unless it already went along under something moved above.
-        Transform? third = bones.Weapon_Root_Third, anim = bones.Weapon_Root_Anim;
-        if (third != null && !MovedWithTorso(bones, upper, third))
-            Carry(third, pivot, Vector3.zero, turn);
-        if (anim != null && (third == null || !anim.IsChildOf(third)) && !MovedWithTorso(bones, upper, anim))
-            Carry(anim, pivot, Vector3.zero, turn);
-        _torsoPivot = pivot;
-        _torsoTurn = turn;
-        _torsoFrame = Time.frameCount;
-        _shotFireport = firearm.CurrentFireport?.Original != null ? firearm.CurrentFireport.Original.position : (Vector3?)null;
-    }
 
-    private static bool MovedWithTorso(PlayerBones bones, Transform upper, Transform bone)
-    {
-        if (bone.IsChildOf(upper))
-            return true;
-        if (bones.Shoulders != null)
-        {
-            foreach (Transform shoulder in bones.Shoulders)
-                if (shoulder != null && bone.IsChildOf(shoulder))
-                    return true;
-        }
-        Transform? left = bones.LeftShoulder?.Original, right = bones.RightShoulder?.Original;
-        return (left != null && bone.IsChildOf(left)) || (right != null && bone.IsChildOf(right));
-    }
-
-    // RealRecoil: the view with the upper body's turn about the waist taken back out. A shot's turn is quick (tens of
-    // milliseconds) and the eyes counter it in full, as the vestibulo-ocular reflex does: the view stays on the target
-    // and the sight and the gun move in it. The view still moves with the head.
-    //
-    // The head turned by the cheek on the stock (HeadRecoil) is countered the same way.
-
-    internal static Quaternion EyesAgainstRecoil(Quaternion cameraRotation)
-    {
-        return _torsoFrame == Time.frameCount ? Quaternion.Inverse(_torsoTurn) * cameraRotation : cameraRotation;
-    }
-
-    // RealRecoil: the head against the upper body (the neck and the cheek on the stock), from the hip. After the gun has
-    // been placed at the eye. The head turns and the eye goes with it; the eyes counter the turn in full, as they do
-    // the upper body's (EyesAgainstRecoil), so the view only moves.
-    internal static void HeadRecoil(Player player, ref Vector3 cameraPosition, ref Quaternion cameraRotation)
-    {
-        if (!RealRecoil.Active || RealRecoil.Resting)
-            return;
-        // Aimed, the head goes with the gun (SightKick): moved as the gun is, not pushed off it by the stock on its own,
-        // which put the eye beside and under the sight's line.
-        if (_sightKickFrame == Time.frameCount)
-            return;
-        Transform? neck = player.PlayerBones?.Neck;
-        if (neck == null)
-            return;
-        Quaternion turn = Quaternion.AngleAxis(-RealRecoil.HeadYawLeft * Mathf.Rad2Deg, cameraRotation * Vector3.up)
-            * Quaternion.AngleAxis(-RealRecoil.HeadPitch * Mathf.Rad2Deg, cameraRotation * Vector3.right);
-        if (Settled(turn))
-            return;
-        Vector3 pivot = neck.position;
-        Carry(neck, pivot, Vector3.zero, turn);
-        cameraPosition = pivot + turn * (cameraPosition - pivot);
-    }
-
-    // How much larger the gun's slide back in the shoulder is drawn than the physical recoil works it out (F12).
-    internal static float RecoilTravelScale = 4f;
-
-    // How much larger the climb is than the physical recoil works it out (F12): the upper body's pitch about the waist and
-    // the gun's in the shoulder, up and back down alike; sideways as worked out. The muzzle climbs that much, and the
-    // bullet, leaving along it, with it.
-    internal static float RecoilRiseScale = 3f;
-
-    // Where the butt sits in the shoulder, from the eye on the cheek weld: a little behind it and below.
-    private const float PocketBehindEye = 0.12f;
-    private const float PocketBelowEye = 0.07f;
-
-    // RealRecoil: the gun against the upper body at the shoulder pocket, sliding back along the bore and turning
-    // about the pocket. (The game's own recoil pivot is not the stock: turned about it, a gun whose muzzle went
-    // right swung its sight end left.)
-    private static Quaternion GunRecoil(ProceduralWeaponAnimation? animation, Transform? weapon, Vector3 pivot, Vector3 cameraPosition, Quaternion cameraRotation, bool withTorso, Vector3? grip, ref Vector3 displacement, ref Quaternion turn)
-    {
-        if (animation == null || weapon == null || animation.HandsContainer == null || RealRecoil.Resting)
-            return Quaternion.identity;
-
-        // The aimed gun is laid along the mouse's look (SteadyHead), not along the head the upper body turned, so the
-        // upper body's turn about the waist is put on it here as well; the view already has it from the head.
-        Quaternion torso = withTorso && _torsoFrame == Time.frameCount ? _torsoTurn : Quaternion.identity;
-        Quaternion kick = torso
-            * Quaternion.AngleAxis(-RealRecoil.GunYawLeft * Mathf.Rad2Deg, cameraRotation * Vector3.up)
-            * Quaternion.AngleAxis(-RealRecoil.GunPitch * (RealRecoil.Pistol ? 1f : RecoilRiseScale) * Mathf.Rad2Deg, cameraRotation * Vector3.right);
-        // Sliding back along the line of sight hardly shows from the eye (8 mm is a few pixels), so the slide is drawn
-        // larger: a move back along the line of sight only, the muzzle's direction (and the bullet's) unchanged.
-        Vector3 back = -(cameraRotation * Vector3.forward) * (RealRecoil.GunBack * (RealRecoil.Pistol ? 1f : RecoilTravelScale));
-        Vector3 recoilPivot = grip ?? cameraPosition - cameraRotation * new Vector3(0f, PocketBelowEye, PocketBehindEye);
-        if (withTorso)
-            _sightKickPivot = recoilPivot;
-        displacement = recoilPivot + kick * (pivot + displacement - recoilPivot) - pivot + back;
-        turn = kick * turn;
-        return kick;
-    }
 
     internal static void CarryOptic(Camera camera)
     {
-        bool torso = _torsoFrame == Time.frameCount;
-        if ((!_hasCarry && !torso) || _opticFrame == Time.frameCount)
+        if (!_hasCarry || _opticFrame == Time.frameCount)
             return;
 
         _opticFrame = Time.frameCount;
-        // The game placed the sight's camera from the gun as it posed it: first the upper body's recoil about the
-        // waist (RealRecoil), then the carry, which was taken from the bones after the upper body had turned.
-        if (torso)
-            Carry(camera.transform, _torsoPivot, Vector3.zero, _torsoTurn);
-        if (_hasCarry)
-            CarryWithGun(camera.transform);
+        // The game placed the sight's camera from the gun as it posed it; the carry moves it with the gun.
+        CarryWithGun(camera.transform);
     }
 
     internal static bool GunCarried => _hasCarry;
@@ -1089,22 +929,6 @@ internal static class AimArms
         return _viewKick * view;
     }
 
-    // Aimed, while a shot's physical recoil plays: the head goes with the gun, the cheek on the stock. The camera is
-    // carried as the gun is (the upper body's turn about the waist and the gun's in the shoulder, about the shoulder
-    // pocket), so the eye stays on the line of the sight and the scene jumps with the shot. Turning the view alone
-    // about the eye left the sight's line passing over it, a few millimetres per degree of climb. After the balance
-    // (VestibularView), which would turn it back.
-    private static Quaternion _sightKick = Quaternion.identity;
-    private static Vector3 _sightKickPivot;
-    private static int _sightKickFrame = -1;
-
-    internal static void SightKick(ref Vector3 cameraPosition, ref Quaternion cameraRotation)
-    {
-        if (_sightKickFrame != Time.frameCount || Settled(_sightKick))
-            return;
-        cameraPosition = _sightKickPivot + _sightKick * (cameraPosition - _sightKickPivot);
-        cameraRotation = _sightKick * cameraRotation;
-    }
 
     private static void Sway(ProceduralWeaponAnimation animation, Transform third, Transform anim, Transform sightBone, Vector3 sight, Vector3 sightForward, bool ironAligned, int sightId, Vector3 cameraPosition, Quaternion cameraRotation, Vector3 aimPoint, out Vector3 displacement, out Quaternion turn)
     {

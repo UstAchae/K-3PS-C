@@ -102,8 +102,7 @@ internal static class VestibularView
             _eyeSteady = Vector3.Lerp(_eyeSteady, _eyeFirst, follow);
         }
 
-        // Aiming too: the aimed gun is laid along the same mouse look the view is balanced to, so the sight stays put,
-        // and when a shot turns the body and head (RealRecoil) the eyes hold the target while the sight jumps.
+        // Aiming too: the aimed gun is laid along the same mouse look the view is balanced to, so the sight stays put.
         bool free = !movement.IsInMountedState
             && !movement.IsStationaryWeaponInHands
             && movement.RotationAction == MovementContext.DefaultRotationFunction

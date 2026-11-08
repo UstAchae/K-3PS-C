@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.5.2";
+    public const string PluginVersion = "1.6.0";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -272,7 +272,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void BindVestibular()
     {
         ConfigEntry<bool> balance = SettingsLayout.Bind(Config, "前庭平衡", "总开关", true,
-            new ConfigDescription("像内耳前庭带着眼球那样，镜头位置不动，只把镜头转回玩家想看的方向，抵消走路、跑步时头的晃动。注视点取视线上实际看到的东西的距离；切枪、换弹、打药、翻背包、搜刮、开门等动作时，动画让头转去看手或包的部分会保留。开镜时也起作用。（物理后坐力带来的转动不经过这里：腰射时上身后仰、头被枪托带偏，都由眼睛立刻完全抵消；瞄准开枪时头跟着枪一起动，眼睛留在瞄准线上，画面随每一枪跳起再落回。）架枪、固定武器、翻越、攀爬时不起作用；中键自由看保留。关闭后镜头完全按头部原样晃动。",
+            new ConfigDescription("像内耳前庭带着眼球那样，镜头位置不动，只把镜头转回玩家想看的方向，抵消走路、跑步时头的晃动。注视点取视线上实际看到的东西的距离；切枪、换弹、打药、翻背包、搜刮、开门等动作时，动画让头转去看手或包的部分会保留。开镜时也起作用。开枪时后坐力给镜头的转动不受影响。架枪、固定武器、翻越、攀爬时不起作用；中键自由看保留。关闭后镜头完全按头部原样晃动。",
                 null, new ConfigurationManagerAttributes { Order = 3 }));
         ConfigEntry<float> strength = SettingsLayout.Bind(Config, "前庭平衡", "强度", 0.7f,
             new ConfigDescription("左右和上下平衡多少。0 是不平衡（原样），1 是完全平衡。",
@@ -346,8 +346,8 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void BindAimDistance()
     {
         RecoilMode.Find();
-        ConfigEntry<string> recoil = SettingsLayout.Bind(Config, "瞄准", "后坐力", RecoilMode.Physical,
-            new ConfigDescription("开枪时用谁的后坐力。物理后坐力：本 mod 的，按子弹和火药的冲量推动身体的弹簧和阻尼（腰、肩窝、头；手枪是手腕和手臂），下面三项只管它。原版：游戏自己的后坐力。Recoil Rework：别人的后坐力 mod SPTRecoilReworkLegacy，装了它才有这一项；不选它时它的改动全部撤下，选它时再装回去。它的服务端部分改了一些枪的后坐数值，那部分在这里关不掉，选“原版”时也带着。局内可以随时切换；切到或切离 Recoil Rework 后，换一次枪才完全生效。",
+        ConfigEntry<string> recoil = SettingsLayout.Bind(Config, "瞄准", "后坐力", RecoilMode.Legacy,
+            new ConfigDescription("开枪时用谁的后坐力。旧版后坐力：1.1.1 版的做法，用游戏自己的后坐力，枪口上跳的力度由下面的“后坐力上跳”决定，镜头和身体跟着动。Recoil Rework：别人的后坐力 mod SPTRecoilReworkLegacy，装了它才有这一项；不选它时它的改动全部撤下，选它时再装回去。它的服务端部分改了一些枪的后坐数值，那部分在这里关不掉，选“旧版后坐力”时也带着。局内可以随时切换；切到或切离 Recoil Rework 后，换一次枪才完全生效。",
                 new AcceptableValueList<string>(RecoilMode.Choices)));
         recoil.SettingChanged += (_, _) => RecoilMode.Set(recoil.Value);
         RecoilMode.Set(recoil.Value);
@@ -358,21 +358,11 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             "瞄准时按住，瞄准的前后距离慢慢变大，枪离镜头更远。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
         _aimDistanceCloser = SettingsLayout.Bind(Config, "瞄准", "前后距离调近快捷键", new KeyboardShortcut(KeyCode.Minus),
             "瞄准时按住，瞄准的前后距离慢慢变小，枪离镜头更近。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
-        ConfigEntry<float> pocket = SettingsLayout.Bind(Config, "瞄准", "肩窝硬度", 0.2f,
-            new ConfigDescription("物理后坐力：枪托在肩窝里被顶住的硬度，管开枪时枪往后坐多少、在肩窝里翻多少，身体其他部分不受影响。1 是最硬，一发 5.56 枪只往后坐约 5 毫米；0.2 约 8 毫米；越小后坐越明显，回正的快慢差不多，调到 0.1 附近会略微往前过一点再回来。",
-                new AcceptableValueRange<float>(0.1f, 1f)));
-        pocket.SettingChanged += (_, _) => RealRecoil.PocketStiffness = pocket.Value;
-        ConfigEntry<float> travel = SettingsLayout.Bind(Config, "瞄准", "后坐距离倍数", 4f,
-            new ConfigDescription("物理后坐力：开枪时枪往后坐的距离在画面上放大几倍。枪是沿视线退向眼睛的，按物理算的几毫米从眼睛看几乎看不出来，放大后每一枪能看到枪往后一顶。只放大往后退的距离，不转动枪，枪口指向和子弹方向不变。手枪（没装抵肩枪托）按自己的模型，不受这一项影响。1 是按物理算的原样；默认 4，一发 5.56 大约往后 3 厘米。",
-                new AcceptableValueRange<float>(1f, 8f)));
-        travel.SettingChanged += (_, _) => AimArms.RecoilTravelScale = travel.Value;
-        AimArms.RecoilTravelScale = travel.Value;
-        ConfigEntry<float> rise = SettingsLayout.Bind(Config, "瞄准", "上跳倍数", 3f,
-            new ConfigDescription("物理后坐力：开枪时枪口上跳（上身后仰加上枪在肩窝里往上翻）放大几倍，上跳和回正一起放大，快慢不变，左右方向不变。1 是按物理算的原样（一发 5.56 约 0.3°）；默认 3，约 1°。子弹沿枪口射出，所以连射时后面几发也跟着打得更高、散得更开，压枪更难；单发影响不大（子弹出膛时枪还没开始跳）。手枪（没装抵肩枪托）按自己的模型，不受这一项影响。",
-                new AcceptableValueRange<float>(1f, 6f)));
-        rise.SettingChanged += (_, _) => AimArms.RecoilRiseScale = rise.Value;
-        AimArms.RecoilRiseScale = rise.Value;
-        RealRecoil.PocketStiffness = pocket.Value;
+        ConfigEntry<float> recoilKick = SettingsLayout.Bind(Config, "瞄准", "后坐力上跳", 0.25f,
+            new ConfigDescription("瞄准开枪时枪口上跳的力度，1 是原版第一人称的力度，0 是不跳。子弹跟着枪口走。",
+                new AcceptableValueRange<float>(0f, 2f)));
+        recoilKick.SettingChanged += (_, _) => AimArms.RecoilKick = recoilKick.Value;
+        AimArms.RecoilKick = recoilKick.Value;
         _aimDistance.SettingChanged += (_, _) => AimArms.ForwardDistance = _aimDistance.Value;
         AimArms.ForwardDistance = _aimDistance.Value;
     }
@@ -412,7 +402,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 
     private bool _aimDistanceHeld;
 
-    // The recoil amounts and the follow delay are the code's own (AimArms, RealRecoil), with no settings.
+    // The follow delay and the view's share of the recoil are the code's own (AimArms), with no settings.
     private void BindSway()
     {
         BindSwaySet("瞄准摆动-平时", "平时（不屏息、手臂有体力）", AimArms.Normal, 0.05f, 0.1f, 1f);
@@ -738,10 +728,7 @@ internal static class NewCameraSwitch
             {
                 AimArms.UnliftHead(head);
                 AimArms.FollowMountedGun(player);
-                AimArms.TorsoRecoil(player);
-                // The eyes turn against the recoil's turn of the upper body (vestibulo-ocular reflex): the view keeps
-                // its direction, and only moves with the head.
-                _poseRotation = AimArms.EyesAgainstRecoil(CameraDirection.Resolve(head.rotation));
+                _poseRotation = CameraDirection.Resolve(head.rotation);
                 // A magnified sight through the goggle: the camera (the objective) ahead of the eyes, the gun with it.
                 CameraPosition.ScopeAhead = 0f;
                 CameraPosition.ScopeAhead = NightVisionEyepieces.ScopePull(player, CameraPosition.Resolve(head.position, _poseRotation), _poseRotation);
@@ -757,14 +744,7 @@ internal static class NewCameraSwitch
                 }
                 else
                     _poseRotation = AimArms.KickView(_poseRotation);
-                // The head the cheek and neck turned (RealRecoil): the eyes go with it, their direction held.
-                Vector3 beforeHead = _posePosition;
-                AimArms.HeadRecoil(player, ref _posePosition, ref _poseRotation);
-                PoseFromHead += _posePosition - beforeHead;
                 _poseRotation = VestibularView.Stabilize(player, _posePosition, _poseRotation);
-            Vector3 beforeSight = _posePosition;
-            AimArms.SightKick(ref _posePosition, ref _poseRotation);
-            PoseFromHead += _posePosition - beforeSight;
                 Vector3 beforeRecoil = _posePosition;
                 AimArms.BodyRecoil(player, ref _posePosition, ref _poseRotation);
                 PoseFromHead += _posePosition - beforeRecoil;
