@@ -22,10 +22,6 @@ internal static class RangefinderSight
 
     private static CommandBuffer? _reading;
     private static Camera? _readingCamera;
-    private static int _readingVertices;
-
-    private static float _aimedAt = -1f;
-    private static bool _logged;
 
     internal static bool TryGet(Player player, out Transform lens, out Transform device, out float relief)
     {
@@ -76,8 +72,7 @@ internal static class RangefinderSight
             ? Display(controller)
             : null;
         TMPro.TMP_Text? text = display != null && display.isActiveAndEnabled ? display._textOnDisplay : null;
-        Mesh? mesh = text != null ? text.mesh : null;
-        if (mesh == null)
+        if (text == null || text.textInfo == null)
         {
             ClearReading();
             return;
@@ -92,37 +87,21 @@ internal static class RangefinderSight
             _readingCamera = camera;
         }
         _reading.Clear();
-        _reading.DrawMesh(mesh, text!.rectTransform.localToWorldMatrix, text.materialForRendering, 0, 0);
-        _readingVertices = mesh.vertexCount;
+        // Each of its materials has its own mesh, and the characters may well all be in another than the first.
+        Matrix4x4 place = text.rectTransform.localToWorldMatrix;
+        TMPro.TMP_TextInfo info = text.textInfo;
+        for (int i = 0; i < info.materialCount && i < info.meshInfo.Length; i++)
+        {
+            Mesh? mesh = info.meshInfo[i].mesh;
+            Material? material = info.meshInfo[i].material;
+            if (mesh == null || material == null || info.meshInfo[i].vertexCount == 0)
+                continue;
+            _reading.DrawMesh(mesh, place, material, 0, 0);
+        }
     }
 
     internal static void ClearReading()
     {
         _reading?.Clear();
-    }
-
-    // Temporary: where the lens ended up, once per aim, a second in.
-    internal static void Report(Player player, bool aiming, Vector3 cameraPosition, Quaternion cameraRotation)
-    {
-        if (!aiming || !TryGet(player, out Transform lens, out Transform device, out float relief))
-        {
-            _aimedAt = -1f;
-            _logged = false;
-            return;
-        }
-        if (_aimedAt < 0f)
-            _aimedAt = Time.time;
-        if (_logged || Time.time - _aimedAt < 1f)
-            return;
-        _logged = true;
-        Quaternion toView = Quaternion.Inverse(cameraRotation);
-        NewCameraPlugin.Log?.LogInfo($"Rangefinder: lens '{lens.name}' in view {(toView * (lens.position - cameraPosition)).ToString("F3")}, relief {relief:F3}, forward in view {(toView * Forward(device)).ToString("F3")}, right in view {(toView * device.right).ToString("F3")}");
-        TacticalRangeFinderController? display = player.HandsController is PortableRangeFinderController controller ? Display(controller) : null;
-        if (display == null)
-            return;
-        Camera? optic = CameraManager.Instance?.OpticCameraManager?.Camera;
-        Canvas? canvas = display._canvas;
-        TMPro.TMP_Text? text = display._textOnDisplay;
-        NewCameraPlugin.Log?.LogInfo($"Rangefinder reading: active {display.gameObject.activeInHierarchy}, text '{text?.text}', characters {text?.textInfo?.characterCount}, text on {text?.enabled}, alpha {text?.color.a:F2}, culled {text?.canvasRenderer?.cull}, text layer {text?.gameObject.layer}, canvas on {canvas?.enabled}, canvas layer {canvas?.gameObject.layer}, mode {canvas?.renderMode}, plane {canvas?.planeDistance:F2}, scale {canvas?.transform.lossyScale.x:F7}, size {(canvas?.transform as RectTransform)?.rect.size.ToString("F0")}, camera '{canvas?.worldCamera?.name}', optic on {optic?.enabled}, near {optic?.nearClipPlane:F3}, far {optic?.farClipPlane:F0}, fov {optic?.fieldOfView:F2}, mask {optic?.cullingMask}, pixels {optic?.pixelWidth}x{optic?.pixelHeight}, drew {_readingVertices} vertices with '{text?.materialForRendering?.shader?.name}' on '{_readingCamera?.name}'");
     }
 }

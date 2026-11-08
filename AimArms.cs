@@ -468,7 +468,6 @@ internal static class AimArms
         if (weapon == null)
             return;
         weapon.SetPositionAndRotation(weaponPosition, weaponRotation);
-        RangefinderSight.Report(player, aiming, cameraPosition, cameraRotation);
         _shotFrame = Time.frameCount;
         _shotFireport = player.HandsController is Player.FirearmController firearm && firearm.CurrentFireport?.Original != null
             ? firearm.CurrentFireport.Original.position

@@ -120,7 +120,6 @@ internal static class MagazineCount
         _round = place;
         _inMagazine = inMagazine;
         _started = Time.unscaledTime;
-        NewCameraPlugin.Log?.LogInfo($"Magazine count: following {place.parent?.name}/{place.name}.");
     }
 
     // A chamber check that went ahead (the game's answer is true for a jam's handling too, which plays no check).
