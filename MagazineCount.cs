@@ -7,50 +7,54 @@ using EFT.UI;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace EFTNewCamera;
 
 // Checking a magazine, and the in-raid HUD.
 //
 // The game shows a magazine's count, and marks the magazine as checked, only in the first-person view (Idling.CheckAmmo),
-// and this mod keeps the player in the third-person one, so neither happened. Now both do, and the count (the game's own
-// words for it, by the player's magazine drills) is drawn at the magazine's mouth, the top round's place in its model
-// (patron_001), following it through the animation, not at the bottom right of the screen. A gun with no magazine model
-// to follow (an internal one) keeps the game's panel.
+// and this mod keeps the player in the third-person one, so neither happened. Now both do. The count is the game's own
+// panel, with its words, lettering, fading and timing; only its place changes: while it shows a check, its text is kept
+// centred on the top round in the magazine, following it through the animation, and it goes back to its corner after.
+// A gun with no magazine model to follow (an internal one) leaves it in the corner.
 //
 // The HUD is hidden (F12) by a transparent group over the battle screen: everything in it goes on working unseen.
 internal static class MagazineCount
 {
     internal static bool HideUi;
 
-    private const float FadeInAfter = 0.35f, FadeSeconds = 0.12f;
-    private const float MinSeconds = 0.8f, MaxSeconds = 8f;   // the animation is idle until it has started; never left up
-    private static readonly Color TextColor = new Color(0.35f, 1f, 0.35f, 1f);
+    // Along the round from its base (patron_001's place: the magazine's own z, the round pointing to about z = 0), how
+    // far is left to go at the place the text is centred on.
+    private const float TowardTip = 0.4f;
+    // The panel fades in 0.5 s, stays 3 s and fades out 0.5 s (BattleUIComponentAnimation).
+    private const float StartedSeconds = 0.6f, MaxSeconds = 4.6f;
 
-    private static GameObject? _root;
-    private static RectTransform? _place;
-    private static CanvasGroup? _group;
-    private static TextMeshProUGUI? _count, _details;
-
+    private static AmmoCountPanel? _panel;
+    private static RectTransform? _panelRect;
+    private static CanvasGroup? _fading;
+    private static Vector2 _corner;
     private static Player? _player;
     private static Player.FirearmController? _hands;
-    private static Transform? _mouth;
-    private static float _started, _endedAt = -1f;
+    private static Transform? _round;
+    private static float _started;
+    private static bool _fromCheck;
 
     internal static void Install()
     {
         Harmony harmony = new Harmony(NewCameraPlugin.PluginGuid + ".magazine");
         MethodInfo? check = AccessTools.Method(typeof(Player.FirearmController.Idling), nameof(Player.FirearmController.Idling.CheckAmmo));
         MethodInfo? show = AccessTools.Method(typeof(GamePlayerOwner), nameof(GamePlayerOwner.PlayerOnOnShowAmmoDetails));
+        MethodInfo? panelShow = AccessTools.Method(typeof(AmmoCountPanel), nameof(AmmoCountPanel.Show));
         MethodInfo? screen = AccessTools.Method(typeof(EftBattleUIScreen), "Show", new[] { typeof(GamePlayerOwner) });
-        if (check == null || show == null || screen == null)
+        if (check == null || show == null || panelShow == null || screen == null)
         {
-            NewCameraPlugin.Log?.LogWarning($"Not patched (magazine count, HUD): check {check != null}, show {show != null}, screen {screen != null}.");
+            NewCameraPlugin.Log?.LogWarning($"Not patched (magazine count, HUD): check {check != null}, show {show != null}, panel {panelShow != null}, screen {screen != null}.");
             return;
         }
         harmony.Patch(check, transpiler: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(CheckAmmoInAnyView))));
-        harmony.Patch(show, prefix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(ShowDetailsPrefix))));
+        harmony.Patch(show, prefix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(ShowDetailsPrefix))),
+            finalizer: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(ShowDetailsDone))));
+        harmony.Patch(panelShow, prefix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(PanelShowPrefix))));
         harmony.Patch(screen, postfix: new HarmonyMethod(AccessTools.Method(typeof(MagazineCount), nameof(ApplyHideUi))));
     }
 
@@ -73,7 +77,8 @@ internal static class MagazineCount
             NewCameraPlugin.Log?.LogWarning("Magazine count: no point-of-view read in Idling.CheckAmmo.");
     }
 
-    private static bool ShowDetailsPrefix(GamePlayerOwner __instance, int ammoCount, int maxAmmoCount, int mastering, string details, bool foldingMechanimWeapon)
+    // The game about to show a check's count on its panel.
+    private static bool ShowDetailsPrefix(GamePlayerOwner __instance)
     {
         if (!NewCameraSwitch.Enabled)
             return true;
@@ -82,34 +87,48 @@ internal static class MagazineCount
             return true;
         if (HideUi)
             return false;
+        _fromCheck = true;
         Player.FirearmController? hands = player.HandsController as Player.FirearmController;
-        Transform? mouth = hands != null ? FindMouth(hands) : null;
-        if (mouth == null || !EnsureLabel())
+        Transform? round = hands != null ? FindTopRound(hands) : null;
+        AmmoCountPanel? panel = MonoBehaviourSingleton<CommonUI>.Instantiated ? MonoBehaviourSingleton<CommonUI>.Instance.EftBattleUIScreen?._ammoCountPanel : null;
+        if (round == null || panel == null)
+        {
+            StopFollowing();
             return true;
-
-        string message = foldingMechanimWeapon
-            ? AmmoCountPanel.GetAmmoCountByLevelForFoldingMechanismWeapon(ammoCount, maxAmmoCount)
-            : AmmoCountPanel.GetAmmoCountByLevel(ammoCount, maxAmmoCount, mastering);
-        // A number the drills let the player know exactly is given with what the magazine holds.
-        _count!.text = int.TryParse(message, out int exact) ? exact + "/" + maxAmmoCount : message;
-        bool hasDetails = !string.IsNullOrEmpty(details);
-        _details!.gameObject.SetActive(hasDetails);
-        if (hasDetails)
-            _details.text = details;
-
+        }
+        if (!ReferenceEquals(panel, _panel) || _round == null)
+        {
+            StopFollowing();
+            _panel = panel;
+            _panelRect = (RectTransform)panel.transform;
+            _corner = _panelRect.anchoredPosition;
+            BattleUIComponentAnimation? animation = panel.GetComponent<BattleUIComponentAnimation>();
+            _fading = animation != null ? animation._canvasGroup : null;
+        }
         _player = player;
         _hands = hands;
-        _mouth = mouth;
-        _started = Time.time;
-        _endedAt = -1f;
-        _group!.alpha = 0f;
-        _root!.SetActive(true);
-        NewCameraPlugin.Log?.LogInfo($"Magazine count: \"{_count.text}\" at {mouth.parent?.name}/{mouth.name}.");
-        return false;
+        _round = round;
+        _started = Time.unscaledTime;
+        Canvas? canvas = panel.GetComponentInParent<Canvas>();
+        NewCameraPlugin.Log?.LogInfo($"Magazine count: following {round.parent?.name}/{round.name}; panel canvas {canvas?.rootCanvas.renderMode}, parent layout {panel.transform.parent?.GetComponent<UnityEngine.UI.LayoutGroup>() != null}.");
+        return true;
+    }
+
+    private static System.Exception? ShowDetailsDone(System.Exception? __exception)
+    {
+        _fromCheck = false;
+        return __exception;
+    }
+
+    // Anything else the panel is asked to show (the zeroing, a fire mode) stays in its corner.
+    private static void PanelShowPrefix()
+    {
+        if (!_fromCheck)
+            StopFollowing();
     }
 
     // Looked up once per check, under the gun in the hands.
-    private static Transform? FindMouth(Player.FirearmController hands)
+    private static Transform? FindTopRound(Player.FirearmController hands)
     {
         GameObject? gun = hands.ControllerGameObject;
         if (gun == null)
@@ -118,118 +137,53 @@ internal static class MagazineCount
         return slot != null ? TransformTools.FindTransformRecursive(slot, "patron_001") : null;
     }
 
-    private static bool EnsureLabel()
-    {
-        if (_root != null)
-            return true;
-        if (!MonoBehaviourSingleton<CommonUI>.Instantiated)
-            return false;
-        // The game's own lettering, from its ammo panel.
-        TextMeshProUGUI? theirs = MonoBehaviourSingleton<CommonUI>.Instance.EftBattleUIScreen?._ammoCountPanel?._ammoCount;
-        if (theirs == null || theirs.font == null)
-            return false;
-
-        _root = new GameObject("Justachae magazine count");
-        Object.DontDestroyOnLoad(_root);
-        Canvas canvas = _root.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 10;
-        _group = _root.AddComponent<CanvasGroup>();
-        _group.blocksRaycasts = false;
-        _group.interactable = false;
-
-        GameObject place = new GameObject("Place", typeof(RectTransform));
-        place.transform.SetParent(_root.transform, false);
-        _place = (RectTransform)place.transform;
-        _place.anchorMin = _place.anchorMax = Vector2.zero;
-        _place.pivot = new Vector2(0f, 0.5f);
-        _place.sizeDelta = Vector2.zero;
-        float scale = Screen.height / 1080f;
-        _count = MakeText(place.transform, theirs.font, 30f * scale, 0f);
-        _details = MakeText(place.transform, theirs.font, 17f * scale, -30f * scale);
-        _root.SetActive(false);
-        return true;
-    }
-
-    private static TextMeshProUGUI MakeText(Transform parent, TMP_FontAsset font, float size, float y)
-    {
-        GameObject go = new GameObject("Text", typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        TextMeshProUGUI text = go.AddComponent<TextMeshProUGUI>();
-        text.font = font;
-        text.fontSize = size;
-        text.color = TextColor;
-        text.alignment = TextAlignmentOptions.MidlineLeft;
-        text.enableWordWrapping = false;
-        text.raycastTarget = false;
-        text.outlineWidth = 0.15f;
-        text.outlineColor = new Color32(0, 0, 0, 200);
-        RectTransform rect = text.rectTransform;
-        rect.anchorMin = rect.anchorMax = Vector2.zero;
-        rect.pivot = new Vector2(0f, 0.5f);
-        rect.anchoredPosition = new Vector2(0f, y);
-        rect.sizeDelta = new Vector2(600f, 60f);
-        return text;
-    }
-
     // Before the FPS camera renders, with the gun and the camera in their places for this frame.
     internal static void OnCameraPreRender(Camera camera)
     {
-        if (_mouth == null && _root == null)
-            return;
-        if (_player == null && (_root == null || !_root.activeSelf))
+        if (_panel == null || _player == null)
             return;
         if (camera == null || !camera.CompareTag("MainCamera"))
             return;
-
-        float now = Time.time, elapsed = now - _started;
-        bool gone = _mouth == null || _player == null || !NewCameraSwitch.Enabled || HideUi
-            || !ReferenceEquals(_player.HandsController, _hands);
-        if (gone)
+        float elapsed = Time.unscaledTime - _started;
+        if (_round == null || !NewCameraSwitch.Enabled || !ReferenceEquals(_player.HandsController, _hands) || elapsed >= MaxSeconds
+            || (elapsed >= StartedSeconds && (_fading == null || _fading.alpha <= 0.001f)))
         {
-            Stop();
-            return;
-        }
-        if (_endedAt < 0f && elapsed >= MinSeconds && (elapsed >= MaxSeconds || Settled(_hands!)))
-            _endedAt = now;
-        if (_endedAt >= 0f && now - _endedAt >= FadeSeconds)
-        {
-            Stop();
+            StopFollowing();
             return;
         }
 
-        float alpha = _endedAt >= 0f
-            ? 1f - (now - _endedAt) / FadeSeconds
-            : Mathf.Clamp01((elapsed - FadeInAfter) / FadeSeconds);
-        // In the inventory or a menu the battle screen is off, and so is this.
-        bool screen = MonoBehaviourSingleton<CommonUI>.Instantiated
-            && MonoBehaviourSingleton<CommonUI>.Instance.EftBattleUIScreen.gameObject.activeInHierarchy;
-        Vector3 viewport = camera.WorldToViewportPoint(_mouth!.position);
-        if (!screen || viewport.z <= 0f)
-            alpha = 0f;
-        _group!.alpha = alpha;
-        if (alpha <= 0f)
+        Transform magazine = _round.parent;
+        Vector3 local = magazine.InverseTransformPoint(_round.position);
+        Vector3 place = magazine.TransformPoint(new Vector3(local.x, local.y, local.z * TowardTip));
+        Vector3 viewport = camera.WorldToViewportPoint(place);
+        if (viewport.z <= 0f)
             return;
-
         Vector2 onScreen = Fisheye.ToScreen(new Vector2(viewport.x, viewport.y));
-        float scale = Screen.height / 1080f;
-        _place!.anchoredPosition = new Vector2(onScreen.x * Screen.width + 26f * scale, onScreen.y * Screen.height + 10f * scale);
+        Canvas root = _panel.GetComponentInParent<Canvas>().rootCanvas;
+        Camera? uiCamera = root.renderMode == RenderMode.ScreenSpaceOverlay ? null : root.worldCamera;
+        if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(_panelRect, new Vector2(onScreen.x * Screen.width, onScreen.y * Screen.height), uiCamera, out Vector3 target))
+            return;
+        // The panel's text, as drawn, centred there, wherever it sits in the panel.
+        _panelRect!.position += target - TextCentre(_panel);
     }
 
-    private static bool Settled(Player.FirearmController hands)
+    private static Vector3 TextCentre(AmmoCountPanel panel)
     {
-        FirearmsAnimator? animator = hands.FirearmsAnimator;
-        return animator == null || (animator.IsIdling() && !animator.Animator.IsInTransition(FirearmsAnimator.HANDS_LAYER_INDEX));
+        Vector3 centre = Centre(panel._ammoCount);
+        if (panel._ammoDetails != null && panel._ammoDetails.gameObject.activeSelf)
+            centre = (centre + Centre(panel._ammoDetails)) * 0.5f;
+        return centre;
     }
 
-    private static void Stop()
+    private static Vector3 Centre(TextMeshProUGUI text) => text.rectTransform.TransformPoint(text.textBounds.center);
+
+    private static void StopFollowing()
     {
+        if (_panelRect != null && _player != null)
+            _panelRect.anchoredPosition = _corner;
         _player = null;
         _hands = null;
-        _mouth = null;
-        _endedAt = -1f;
-        if (_root != null && _root.activeSelf)
-            _root.SetActive(false);
+        _round = null;
     }
 
     // On the setting and the master switch changing, and each time the battle screen is shown.
