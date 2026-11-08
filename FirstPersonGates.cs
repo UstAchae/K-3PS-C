@@ -8,7 +8,7 @@ namespace EFTNewCamera;
 
 // What the game shows the player only in the first-person view, which this mod keeps the player out of: these places
 // read the view as first person while the mod is on. The fire mode's text, the compass's panel (shown and hidden), and
-// the portable rangefinder's sight and reading. (The magazine check: MagazineCount.)
+// the portable rangefinder's sight and reading, the AGS-17's sight. (The magazine check: MagazineCount.)
 internal static class FirstPersonGates
 {
     private static readonly MethodInfo FirstPersonGetter = AccessTools.PropertyGetter(typeof(Player), nameof(Player.FirstPersonPointOfView));
@@ -21,8 +21,25 @@ internal static class FirstPersonGates
         Patch(harmony, transpiler, "fire mode", AccessTools.Method(typeof(Player.FirearmController.Idling), nameof(Player.FirearmController.Idling.ShowFireMode)));
         Patch(harmony, transpiler, "compass shown", AccessTools.Method(typeof(Player), nameof(Player.SetPropVisibility)));
         Patch(harmony, transpiler, "compass hidden", AccessTools.Method(typeof(GamePlayerOwner), nameof(GamePlayerOwner.CompassStateChanged)));
+        Patch(harmony, transpiler, "AGS-17 sight", AgsRotation());
         Patch(harmony, transpiler, "rangefinder", AccessTools.Method(typeof(PortableRangeFinderController.PortableRangeFinderIdling), nameof(PortableRangeFinderController.PortableRangeFinderIdling.SetAiming)));
         Patch(harmony, transpiler, "rangefinder, dropping the backpack", AccessTools.Method(typeof(PortableRangeFinderController.PortableRangeFinderDropBackpackOperation), nameof(PortableRangeFinderController.PortableRangeFinderDropBackpackOperation.SetAiming)));
+    }
+
+    // The stationary weapon's rotation function: a delegate in a compiler's class, found by what it calls.
+    private static MethodInfo? AgsRotation()
+    {
+        MethodInfo adjust = AccessTools.Method(typeof(EFT.Animations.ProceduralWeaponAnimation), nameof(EFT.Animations.ProceduralWeaponAnimation.AdjustOpticsPAG17));
+        foreach (System.Type nested in typeof(MovementContext).GetNestedTypes(AccessTools.all))
+            foreach (MethodInfo method in nested.GetMethods(AccessTools.all))
+            {
+                if (method.IsAbstract || method.DeclaringType != nested || method.IsGenericMethod)
+                    continue;
+                foreach (CodeInstruction instruction in PatchProcessor.GetOriginalInstructions(method))
+                    if (instruction.Calls(adjust))
+                        return method;
+            }
+        return null;
     }
 
     private static void Patch(Harmony harmony, HarmonyMethod transpiler, string what, MethodInfo? target)

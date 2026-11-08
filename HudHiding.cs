@@ -26,7 +26,8 @@ internal static class HudHiding
         }
     }
 
-    private static readonly Panel Ammo = new Panel("隐藏弹药和射击模式提示", "验弹、检查枪膛的显示，以及射击模式、归零的提示。", s => s._ammoCountPanel);
+    private static readonly Panel Ammo = new Panel("隐藏弹药和射击模式提示", "验弹、检查枪膛的显示，以及射击模式的提示。", s => s._ammoCountPanel);
+    private static readonly Panel Optic = new Panel("隐藏瞄具提示", "切换瞄具倍率、模式时的提示，以及归零距离（比如 M2A1 的距离、AGS 的角度和高度）。", s => s._opticCratePanel);
 
     internal static readonly Panel[] Panels =
     {
@@ -35,7 +36,7 @@ internal static class HudHiding
         new Panel("隐藏快捷栏", "快捷栏的物品格子，以及换弹时选弹匣的面板（按住 R 滚动滚轮）。", s => s._quickAccessPanel),
         new Panel("隐藏交互选项", "开门、搜刮这类选项。看不见选项，操作仍然有效。", s => s._actionPanel),
         Ammo,
-        new Panel("隐藏瞄具提示", "切换瞄具倍率、模式时的提示。", s => s._opticCratePanel),
+        Optic,
         new Panel("隐藏战术装置提示", "切换激光、手电时的提示。", s => s._tacticalInteractionPanel),
         new Panel("隐藏手势面板", "手势和语音的选择面板。", s => s._gesturesPanel),
         new Panel("隐藏时间", "局内时间面板。", s => s._locationTimePanel),
@@ -53,7 +54,17 @@ internal static class HudHiding
             NewCameraPlugin.Log?.LogWarning("Not patched (HUD hiding): the battle screen has no Show.");
             return;
         }
-        new Harmony(NewCameraPlugin.PluginGuid + ".hud").Patch(show, postfix: new HarmonyMethod(AccessTools.Method(typeof(HudHiding), nameof(Apply))));
+        Harmony harmony = new Harmony(NewCameraPlugin.PluginGuid + ".hud");
+        harmony.Patch(show, postfix: new HarmonyMethod(AccessTools.Method(typeof(HudHiding), nameof(Apply))));
+        // The range shares the ammo's panel on screen, but it is the sight's: it is stopped on its way from the player. A
+        // chamber check's name goes to that panel directly.
+        harmony.Patch(AccessTools.Method(typeof(GamePlayerOwner), nameof(GamePlayerOwner.OnShowAmmoCountZeroingPanel)),
+            prefix: new HarmonyMethod(AccessTools.Method(typeof(HudHiding), nameof(RangePrefix))));
+    }
+
+    private static bool RangePrefix()
+    {
+        return !(Optic.Hidden && NewCameraSwitch.Enabled);
     }
 
     // On a setting or the master switch changing, and each time the battle screen is shown.

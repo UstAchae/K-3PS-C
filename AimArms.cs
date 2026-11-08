@@ -626,10 +626,7 @@ internal static class AimArms
         _mountBlend = Mathf.MoveTowards(_mountBlend, want ? 1f : 0f, Time.deltaTime / BlendSeconds);
         float along = _mountBlend * _mountBlend * (3f - 2f * _mountBlend);
         if (along <= 0.0001f)
-        {
-            GrenadeSight.AimPicture(player);
             return false;
-        }
 
         // The camera stays fixed on the head. Ease that camera onto the planted sight, and back off it.
         Quaternion fromCamera = CameraDirection.Resolve(head.rotation);
@@ -639,7 +636,6 @@ internal static class AimArms
         Vector3 displacement = partialCameraPosition - CameraPosition.Resolve(Vector3.zero, partialCamera) - head.position;
         MoveBody(player, bones, head, displacement, turn);
         ApplyMountedLook(bones, head);
-        GrenadeSight.AimPicture(player);
         return true;
     }
 
