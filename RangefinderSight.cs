@@ -58,9 +58,14 @@ internal static class RangefinderSight
 
     // The reading is a canvas 2 m in front of the optic camera, depth tested against the scene, so anything nearer than
     // that hides it: nearer to the camera, it shows whatever is aimed at.
+    // The item's icon or preview leaves its pooled model on the Weapon Preview layer, and taking it in hand only brings the
+    // meshes back, not the reading, which the optic camera (seeing no Weapon Preview) then never draws.
     internal static void ReadingPostfix(TacticalRangeFinderController __instance)
     {
-        if (NewCameraSwitch.Enabled && __instance._canvas != null)
+        if (!NewCameraSwitch.Enabled)
+            return;
+        TransformTools.SetLayersRecursively(__instance.gameObject, LayerMask.NameToLayer("Player"));
+        if (__instance._canvas != null)
             __instance._canvas.planeDistance = ReadingDistance;
     }
 
