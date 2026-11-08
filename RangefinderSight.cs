@@ -23,6 +23,7 @@ internal static class RangefinderSight
 
     private static float _aimedAt = -1f;
     private static bool _logged;
+    private static Vector3 _readingOff;
 
     internal static bool TryGet(Player player, out Transform lens, out Transform device, out float relief)
     {
@@ -69,6 +70,22 @@ internal static class RangefinderSight
             __instance._canvas.planeDistance = ReadingDistance;
     }
 
+    // The canvas follows the optic camera before our pose moves that camera with the device (AimArms.CarryOptic), and the
+    // window of a 3.2 degree view is far narrower than the move: the reading is put back in front of the camera as it is.
+    internal static void PlaceReading(Player player, Camera camera)
+    {
+        if (player.HandsController is not PortableRangeFinderController controller || !controller.IsAiming)
+            return;
+        TacticalRangeFinderController display = Display(controller);
+        Canvas? canvas = display != null ? display._canvas : null;
+        if (canvas == null)
+            return;
+        Transform view = camera.transform;
+        Transform placed = canvas.transform;
+        _readingOff = view.InverseTransformPoint(placed.position);
+        placed.SetPositionAndRotation(view.position + view.forward * canvas.planeDistance, view.rotation);
+    }
+
     // Temporary: where the lens ended up, once per aim, a second in.
     internal static void Report(Player player, bool aiming, Vector3 cameraPosition, Quaternion cameraRotation)
     {
@@ -89,6 +106,6 @@ internal static class RangefinderSight
         if (display == null)
             return;
         Camera? optic = CameraManager.Instance?.OpticCameraManager?.Camera;
-        NewCameraPlugin.Log?.LogInfo($"Rangefinder reading: active {display.gameObject.activeInHierarchy}, text '{display._textOnDisplay?.text}', canvas on {display._canvas?.enabled}, plane {display._canvas?.planeDistance:F2}, canvas camera '{display._canvas?.worldCamera?.name}', layer {display._textOnDisplay?.gameObject.layer}, optic camera on {optic?.enabled}, mask {optic?.cullingMask}");
+        NewCameraPlugin.Log?.LogInfo($"Rangefinder reading: active {display.gameObject.activeInHierarchy}, text '{display._textOnDisplay?.text}', canvas on {display._canvas?.enabled}, plane {display._canvas?.planeDistance:F2}, canvas camera '{display._canvas?.worldCamera?.name}', layer {display._textOnDisplay?.gameObject.layer}, optic camera on {optic?.enabled}, mask {optic?.cullingMask}, canvas was at {_readingOff.ToString("F3")} from the camera, now {(optic != null && display._canvas != null ? optic.transform.InverseTransformPoint(display._canvas.transform.position).ToString("F3") : "?")}");
     }
 }
