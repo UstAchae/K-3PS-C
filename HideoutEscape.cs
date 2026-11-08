@@ -51,6 +51,8 @@ internal static class HideoutEscape
 
     public static EPointOfView PointOfViewForEscape(Player player)
     {
+        if (HideoutAreaView.Holding)
+            return EPointOfView.FreeCamera;
         EPointOfView view = player.PointOfView;
         return view == EPointOfView.ThirdPerson && NewCameraSwitch.Enabled && player.IsYourPlayer ? EPointOfView.FirstPerson : view;
     }

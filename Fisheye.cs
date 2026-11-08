@@ -27,11 +27,11 @@ internal static class Fisheye
     internal static float Curve = 0.4f;    // 0 the straight picture at that field, 1 the stereographic fisheye
     internal static float Vignette = 0.6f; // 0 none, 1 the corners well into the lens barrel's dark
     internal static bool HighResolution;    // the frame rendered larger for the centre's detail (else read sharper)
-    internal static float Detail = 1f;     // how much of the centre's magnification is rendered back: 0 none, 1 all
+    internal static float Detail = 1f;     // the centre's magnification rendered back: 0 none, 1 all; above, that many
+                                           // rendered pixels each way for each pixel on the screen there (supersampling)
+    private const float HalvedAbove = 2f;
     private const float FadeSeconds = 0.25f;
     private const float MaxCornerDegrees = 85f;
-    private const float MaxSupersampling = 2.5f;
-    private const float MaxFrameScale = 1.5f;   // the frame's size over the screen's, each way, at most
 
     private static float _scale = 1f;       // the frame's size over the screen's, each way
     private static SSAA? _ssaa;             // the FPS camera's, and the ratio the game last set on it
@@ -109,13 +109,16 @@ internal static class Fisheye
         superSamplingRatio = Scaled(superSamplingRatio);
     }
 
-    // Under an upscaler the camera renders within its own frame, so no more than all of it.
+    // Under an upscaler the camera renders within its own frame, so no more than all of it: an upscaler takes no more in
+    // than it puts out. Otherwise as large as the graphics card can make a texture.
     private static float Scaled(float ratio)
     {
         if (_scale <= 1.0001f)
             return ratio;
-        return ratio < 1f ? Mathf.Min(ratio * _scale, 0.99f) : Mathf.Min(ratio * _scale, MaxSupersampling);
+        return ratio < 1f ? Mathf.Min(ratio * _scale, 0.99f) : Mathf.Min(ratio * _scale, LargestScale());
     }
+
+    private static float LargestScale() => (float)SystemInfo.maxTextureSize / Mathf.Max(Screen.width, Screen.height, 1);
 
     // The frame made the size wanted: the buffers follow at once, the camera's ratio once the game applies it (after
     // this frame's render).
@@ -133,6 +136,12 @@ internal static class Fisheye
             _gameRatio = ssaa.GetCurrentSSRatio();
         }
         ssaa.Switch(_gameRatio);
+    }
+
+    private static float WantedScale(float magnification)
+    {
+        magnification = Mathf.Max(1f, magnification);
+        return Detail <= 1f ? Mathf.Lerp(1f, magnification, Detail) : magnification * Detail;
     }
 
     // How much the fisheye magnifies the centre of the straight frame (pixels on the screen to pixels rendered).
@@ -169,11 +178,12 @@ internal static class Fisheye
         Camera? camera = CameraManager.Instance?.Camera;
         bool ours = NewCameraSwitch.Enabled && player != null && player.IsYourPlayer;
         _weight = ours ? Mathf.MoveTowards(_weight, Enabled ? 1f : 0f, Time.unscaledDeltaTime / FadeSeconds) : 0f;
-        // In steps of 0.05, so dragging a slider does not make the frame anew every frame. No more than MaxFrameScale:
-        // at the widest field and fullest curve the centre is magnified 2.8 times, and a frame that much larger (7168 by
-        // 4032 for 2560 by 1440) filled an 8 GB card's memory and stalled the game for seconds at a time.
+        // In steps of 0.05, so dragging a slider does not make the frame anew every frame. As much as the lens magnifies,
+        // on the player's choice and warning (F12): at the widest field and fullest curve the centre is magnified 2.8 times,
+        // and a frame that much larger (7168 by 4032 for 2560 by 1440) has filled an 8 GB card's memory and stalled the game
+        // for seconds at a time. Only what a graphics card cannot make at all is left out.
         float scale = ours && Enabled && HighResolution && camera != null
-            ? Mathf.Round(Mathf.Min(Mathf.Lerp(1f, Mathf.Max(1f, CentreMagnification(camera.aspect)), Detail), MaxFrameScale) * 20f) / 20f
+            ? Mathf.Round(Mathf.Min(WantedScale(CentreMagnification(camera.aspect)), LargestScale()) * 20f) / 20f
             : 1f;
         Resize(scale);
         FisheyeImage? image = Image(camera);
@@ -289,7 +299,26 @@ internal static class Fisheye
         }
         _material.SetVector(ShapeId, _shape);
         _material.SetVector(ShadeId, _shade);
-        Graphics.Blit(from, to, _material, 0);
+        if (_scale < HalvedAbove)
+        {
+            Graphics.Blit(from, to, _material, 0);
+            return;
+        }
+        // The game brings the frame to the screen with one bicubic read (SSAAImpl), which at more than about twice leaves
+        // most of its pixels out: halved here until it would no longer, each pixel counted, so what was rendered is used.
+        RenderTexture laid = RenderTexture.GetTemporary(to.width, to.height, 0, to.format);
+        Graphics.Blit(from, laid, _material, 0);
+        float over = _scale;
+        while (over >= HalvedAbove)
+        {
+            RenderTexture half = RenderTexture.GetTemporary(Mathf.Max(laid.width / 2, 1), Mathf.Max(laid.height / 2, 1), 0, to.format);
+            Graphics.Blit(laid, half);
+            RenderTexture.ReleaseTemporary(laid);
+            laid = half;
+            over *= 0.5f;
+        }
+        Graphics.Blit(laid, to);
+        RenderTexture.ReleaseTemporary(laid);
     }
 
     // The lens left by ours this frame to what comes after it: taken once, by that (NightVisionEyepieces.RenderImagePrefix).

@@ -21,6 +21,29 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
     private const string FisheyeLight = "省性能", FisheyeSharp = "高清";
+    private static GUIStyle? _warning;
+
+    // The fisheye's clarity in F12: "high" in red, with what it costs said in place, not left to the tooltip.
+    private static void DrawFisheyeClarity(ConfigEntryBase entry)
+    {
+        bool sharp = (string)entry.BoxedValue == FisheyeSharp;
+        Color color = GUI.color;
+        GUILayout.BeginVertical();
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Toggle(!sharp, FisheyeLight, GUI.skin.button, GUILayout.ExpandWidth(true)) && sharp)
+            entry.BoxedValue = FisheyeLight;
+        GUI.color = new Color(1f, 0.35f, 0.3f);
+        if (GUILayout.Toggle(sharp, FisheyeSharp + "（极吃性能）", GUI.skin.button, GUILayout.ExpandWidth(true)) && !sharp)
+            entry.BoxedValue = FisheyeSharp;
+        GUILayout.EndHorizontal();
+        _warning ??= new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, wordWrap = true };
+        GUI.color = sharp ? new Color(1f, 0.35f, 0.3f) : new Color(1f, 0.8f, 0.3f);
+        GUILayout.Label(sharp
+            ? "【警告】高清正在开启：按更高的分辨率渲染，帧数会大幅下降，显存占用大增，没有上限保护。清晰度补偿大于 1 是真正的超采样，开销按平方增长。显存不够时游戏会卡住好几秒甚至更久。卡顿就换回省性能，或调低下面的清晰度补偿。"
+            : "高清画面中心更清楚，但极吃性能和显存，配置不够不要开。", _warning);
+        GUI.color = color;
+        GUILayout.EndVertical();
+    }
 
     private void Awake()
     {
@@ -42,6 +65,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         InteractionRay.Install();
         CameraBeforePostProcessing.Install();
         HideoutEscape.Install();
+        HideoutAreaView.Install();
         MagazineCount.Install();
         HudHiding.Install();
         FirstPersonGates.Install();
@@ -92,11 +116,11 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             new ConfigDescription("镜头四角变暗：越往边缘越暗，开大后四角露出镜筒的黑色圆边。0 是没有暗角。",
                 new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 4 }));
         ConfigEntry<string> clarity = SettingsLayout.Bind(Config, "鱼眼", "清晰度方式", FisheyeLight,
-            new ConfigDescription("鱼眼把画面中心放大了，中心会变软。省性能：不提高渲染分辨率，中心用更锐利的插值放大，边缘多点取平均，几乎没有额外开销，这是一般游戏的做法。高清：按更高的分辨率渲染，真正把中心的细节补回来（程度由“清晰度补偿”决定），很吃性能和显存。",
-                new AcceptableValueList<string>(FisheyeLight, FisheyeSharp), new ConfigurationManagerAttributes { Order = 3 }));
+            new ConfigDescription("鱼眼把画面中心放大了，中心会变软。省性能：不提高渲染分辨率，中心用更锐利的插值放大，边缘多点取平均，几乎没有额外开销，这是一般游戏的做法。高清：按更高的分辨率渲染，真正把中心的细节补回来（程度由“清晰度补偿”决定）。高清极吃性能和显存，没有上限保护。",
+                new AcceptableValueList<string>(FisheyeLight, FisheyeSharp), new ConfigurationManagerAttributes { Order = 3, CustomDrawer = DrawFisheyeClarity }));
         ConfigEntry<float> detail = SettingsLayout.Bind(Config, "鱼眼", "清晰度补偿", 1f,
-            new ConfigDescription("只在清晰度方式为“高清”时起作用。鱼眼把画面中心放大了，中心会变糊。这一项让游戏按更高的分辨率渲染，把中心的清晰度补回来。1：完全补回，中心和不开鱼眼时一样清楚，但渲染的像素更多（默认视野和弯曲下约 1.8 倍），帧数会明显下降；0：不补，没有额外开销。最多按屏幕的 1.5 倍（像素 2.25 倍）渲染，以免显存不够：视野和弯曲开得很大时（比如 140 度、弯曲 1，中心放大约 2.8 倍）补不满，中心仍会有些糊。显存紧张时（8 GB 显卡、高画质贴图）建议把贴图画质调到中，或者把这一项调低。开了 DLSS 或 FSR 时，它们的渲染分辨率和输出分辨率一起提高。",
-                new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 2 }));
+            new ConfigDescription("只在清晰度方式为“高清”时起作用。0：不补，没有额外开销。1：把鱼眼对中心的放大补回来，中心和不开鱼眼时一样清楚。大于 1：真正的超采样，中心每个屏幕像素渲染多个像素后再平均，能减轻草地、远处细线的闪烁；2 表示每边 2 倍。代价按平方增长：默认视野和弯曲下，1 约 1.8 倍像素，2 约 7.3 倍；视野和弯曲都开满时，2 约 31 倍。不设上限，帧数和显存都可能撑不住，显存不够时游戏会卡住好几秒。",
+                new AcceptableValueRange<float>(0f, 2f), new ConfigurationManagerAttributes { Order = 2 }));
         void Refresh()
         {
             Fisheye.Enabled = fisheye.Value;
@@ -715,6 +739,8 @@ internal static class NewCameraSwitch
             return;
 
         Player? player = Singleton<GameWorld>.Instance?.MainPlayer;
+        if (main && HideoutWorkout.Place(player, camera))
+            return;
         if (player != null && player.IsYourPlayer && player.PointOfView == EPointOfView.FreeCamera)
             return;
 
