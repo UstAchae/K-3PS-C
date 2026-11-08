@@ -171,6 +171,8 @@ internal static class Fisheye
         __instance.gameObject.AddComponent<FisheyeImage>().enabled = false;
     }
 
+    internal static float LastWideField => _widenedField;
+
     internal static void LateUpdate()
     {
         GiveBack();

@@ -66,7 +66,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         CameraBeforePostProcessing.Install();
         HideoutEscape.Install();
         HideoutAreaView.Install();
-        GrassMotion.Install();
+        GrassCamera.Install();
         MagazineCount.Install();
         HudHiding.Install();
         FirstPersonGates.Install();
@@ -728,6 +728,14 @@ internal static class NewCameraSwitch
     }
 
     private static int _mainPlacedFrame = -1;
+
+    // Where the camera was last placed, if that was just now.
+    internal static bool LastPose(out Vector3 position, out Quaternion rotation)
+    {
+        position = _posePosition;
+        rotation = _poseRotation;
+        return _poseFrame >= 0 && Time.frameCount - _poseFrame <= 2;
+    }
 
     internal static void OnCameraPreCull(Camera camera)
     {
