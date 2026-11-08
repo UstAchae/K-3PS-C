@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using Comfort.Common;
 using EFT;
+using EFT.InventoryLogic;
 using EFT.UI;
 using HarmonyLib;
 using TMPro;
@@ -16,7 +17,8 @@ namespace EFTNewCamera;
 // and this mod keeps the player in the third-person one, so neither happened. Now both do. The count is the game's own
 // panel, with its words, lettering, fading and timing; only its place changes: while it shows a check, its text is kept
 // centred on the top round in the magazine, following it through the animation, and it goes back to its corner after.
-// A gun with no magazine model to follow (an internal one) leaves it in the corner.
+// A gun whose magazine does not come out (a shotgun's tube, a revolver's cylinder) has it on the chamber, in the receiver:
+// the top round of a tube is far up by the muzzle. With neither to follow it stays in the corner.
 //
 // The HUD is hidden (F12) by a transparent group over the battle screen: everything in it goes on working unseen.
 internal static class MagazineCount
@@ -36,6 +38,7 @@ internal static class MagazineCount
     private static Player? _player;
     private static Player.FirearmController? _hands;
     private static Transform? _round;
+    private static bool _inMagazine;
     private static float _started;
     private static bool _fromCheck;
 
@@ -89,7 +92,8 @@ internal static class MagazineCount
             return false;
         _fromCheck = true;
         Player.FirearmController? hands = player.HandsController as Player.FirearmController;
-        Transform? round = hands != null ? FindTopRound(hands) : null;
+        bool inMagazine = false;
+        Transform? round = hands != null ? FindPlace(hands, out inMagazine) : null;
         AmmoCountPanel? panel = MonoBehaviourSingleton<CommonUI>.Instantiated ? MonoBehaviourSingleton<CommonUI>.Instance.EftBattleUIScreen?._ammoCountPanel : null;
         if (round == null || panel == null)
         {
@@ -108,6 +112,7 @@ internal static class MagazineCount
         _player = player;
         _hands = hands;
         _round = round;
+        _inMagazine = inMagazine;
         _started = Time.unscaledTime;
         Canvas? canvas = panel.GetComponentInParent<Canvas>();
         NewCameraPlugin.Log?.LogInfo($"Magazine count: following {round.parent?.name}/{round.name}; panel canvas {canvas?.rootCanvas.renderMode}, parent layout {panel.transform.parent?.GetComponent<UnityEngine.UI.LayoutGroup>() != null}.");
@@ -128,13 +133,23 @@ internal static class MagazineCount
     }
 
     // Looked up once per check, under the gun in the hands.
-    private static Transform? FindTopRound(Player.FirearmController hands)
+    private static Transform? FindPlace(Player.FirearmController hands, out bool inMagazine)
     {
+        inMagazine = false;
         GameObject? gun = hands.ControllerGameObject;
         if (gun == null)
             return null;
-        Transform? slot = TransformTools.FindTransformRecursive(gun.transform, "mod_magazine");
-        return slot != null ? TransformTools.FindTransformRecursive(slot, "patron_001") : null;
+        if (hands.Item is Weapon weapon && (weapon.ReloadMode == Weapon.EReloadMode.ExternalMagazine || weapon.ReloadMode == Weapon.EReloadMode.ExternalMagazineWithInternalReloadSupport))
+        {
+            Transform? slot = TransformTools.FindTransformRecursive(gun.transform, "mod_magazine");
+            Transform? top = slot != null ? TransformTools.FindTransformRecursive(slot, "patron_001") : null;
+            if (top != null)
+            {
+                inMagazine = true;
+                return top;
+            }
+        }
+        return TransformTools.FindTransformRecursive(gun.transform, "patron_in_weapon");
     }
 
     // Before the FPS camera renders, with the gun and the camera in their places for this frame.
@@ -152,9 +167,13 @@ internal static class MagazineCount
             return;
         }
 
-        Transform magazine = _round.parent;
-        Vector3 local = magazine.InverseTransformPoint(_round.position);
-        Vector3 place = magazine.TransformPoint(new Vector3(local.x, local.y, local.z * TowardTip));
+        Vector3 place = _round.position;
+        if (_inMagazine)
+        {
+            Transform magazine = _round.parent;
+            Vector3 local = magazine.InverseTransformPoint(place);
+            place = magazine.TransformPoint(new Vector3(local.x, local.y, local.z * TowardTip));
+        }
         Vector3 viewport = camera.WorldToViewportPoint(place);
         if (viewport.z <= 0f)
             return;
