@@ -160,8 +160,11 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             new ConfigDescription("按住时把头盔前沿往上抬（只转头盔和挂在上面的夜视仪，头和镜头不动）。每顶头盔各自记住自己的角度，像夜视仪支架一样。只在腰射（没有瞄准）时有效，瞄准时同样的键调瞄准距离。", null, new ConfigurationManagerAttributes { Order = -10 }));
         ConfigEntry<KeyboardShortcut> headwearDown = SettingsLayout.Bind(Config, "头戴式成像装备", "头部装备俯下", HeadwearTilt.Down,
             new ConfigDescription("按住时把头盔前沿往回放（最低回到原位）。", null, new ConfigurationManagerAttributes { Order = -11 }));
+        // Saved as "BRNVG", or by its full name with or without "[未安装]": the option as it is named now.
+        SettingsLayout.MapSaved(Config, "头戴式成像装备", "夜视画面来源", saved =>
+            OtherMods.IsChoice(saved, OtherMods.BrnvgGuid, OtherMods.BrnvgName, "BRNVG") ? NightVisionEyepieces.PictureBrnvg : null);
         ConfigEntry<string> picture = SettingsLayout.Bind(Config, "头戴式成像装备", "夜视画面来源", NightVisionEyepieces.PictureGame,
-            new ConfigDescription("头戴夜视仪和热成像只在自己的目镜里成像，目镜以外是不带夜视的原样画面，设备模型照常画出。支持 GPNVG-18、PNV-10T、PNV-57E、Armasight N-15、AN/PVS-14（单筒）、模组物品 PVS-31A 和 T-7 热成像；其他型号仍是游戏原样的全屏滤镜。这一项选目镜里的夜视画面用谁做。自动：装了 BRNVG 就用 BRNVG，没装就用游戏原版的夜视滤镜。BRNVG：用 BRNVG 的画面，它的 F12 设置（增益、颜色、噪点、泛光、近处虚焦等）都会作用到目镜里；没装 BRNVG 时按原版。原版：用游戏自己的夜视滤镜（绿色、噪点），装了 BRNVG 也不用它的画面。热成像设备不受这个选项影响。",
+            new ConfigDescription("头戴夜视仪和热成像只在自己的目镜里成像，目镜以外是不带夜视的原样画面，设备模型照常画出。支持 GPNVG-18、PNV-10T、PNV-57E、Armasight N-15、AN/PVS-14（单筒）、模组物品 PVS-31A 和 T-7 热成像；其他型号仍是游戏原样的全屏滤镜。这一项选目镜里的夜视画面用谁做。自动：装了 Borkel's Realistic NVGs（BRNVG）就用它，没装就用游戏原版的夜视滤镜。Borkel's Realistic NVGs：用它的画面，它的 F12 设置（增益、颜色、噪点、泛光、近处虚焦等）都会作用到目镜里；没装时这一项后面写着 [未安装]，选了也按原版。原版：用游戏自己的夜视滤镜（绿色、噪点），装了 BRNVG 也不用它的画面。热成像设备不受这个选项影响。",
                 new AcceptableValueList<string>(NightVisionEyepieces.PictureAuto, NightVisionEyepieces.PictureBrnvg, NightVisionEyepieces.PictureGame),
                 new ConfigurationManagerAttributes { Order = 3 }));
         ConfigEntry<bool> glow = SettingsLayout.Bind(Config, "头戴式成像装备", "目镜光晕", false,
@@ -377,8 +380,13 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     {
         RecoilMode.Find();
         ConfigEntry<bool> useRework = SettingsLayout.Bind(Config, "瞄准", "使用 Recoil Rework", false,
-            new ConfigDescription("关：原版后坐力，游戏自己的后坐力按原版第一人称的整套做法放到第三人称的枪和镜头上：枪往后顶、枪口上翻（腰射也翻，子弹跟着枪口），瞄准时镜头追着瞄具、跟着枪口转过去，再加上镜头自己的那一下，力度由下面的“后坐力力度”决定。开：别人的后坐力 mod SPTRecoilReworkLegacy，和不装本 mod、只装它时一样：枪和镜头按它调过的数值走，镜头不跟着枪口转（它把这一下关掉），它把视角往上拉、它给镜头的抖动都照常有，“后坐力力度”不起作用。装了它才有这一项；关着时它的改动全部撤下，打开时再装回去。它的服务端部分改了一些枪的后坐数值，那部分在这里关不掉，关着时也带着。局内可以随时切换，切换后换一次枪才完全生效。",
-                null, new ConfigurationManagerAttributes { Browsable = RecoilMode.ReworkInstalled }));
+            new ConfigDescription("关：原版后坐力，游戏自己的后坐力按原版第一人称的整套做法放到第三人称的枪和镜头上：枪往后顶、枪口上翻（腰射也翻，子弹跟着枪口），瞄准时镜头追着瞄具、跟着枪口转过去，再加上镜头自己的那一下，力度由下面的“后坐力力度”决定。开：别人的后坐力 mod SPTRecoilReworkLegacy，和不装本 mod、只装它时一样：枪和镜头按它调过的数值走，镜头不跟着枪口转（它把这一下关掉），它把视角往上拉、它给镜头的抖动都照常有，“后坐力力度”不起作用。没装它时这一项名字后面写着 [未安装]，不能打开；关着时它的改动全部撤下，打开时再装回去。它的服务端部分改了一些枪的后坐数值，那部分在这里关不掉，关着时也带着。局内可以随时切换，切换后换一次枪才完全生效。",
+                null, new ConfigurationManagerAttributes
+                {
+                    // Shown by the mod's full name; not installed, marked so and not changeable.
+                    DispName = OtherMods.Label(OtherMods.ReworkGuid, OtherMods.ReworkName),
+                    ReadOnly = !RecoilMode.ReworkInstalled,
+                }));
         useRework.SettingChanged += (_, _) => RecoilMode.Set(useRework.Value);
         RecoilMode.Set(useRework.Value);
         _aimDistance = SettingsLayout.Bind(Config, "瞄准", "前后距离", -0.05f,

@@ -7,4 +7,6 @@ internal sealed class ConfigurationManagerAttributes
     public int? Order;
     public System.Action<BepInEx.Configuration.ConfigEntryBase>? CustomDrawer;   // draws the setting's value itself
     public bool? Browsable;   // false: kept in the config file, not shown in F12
+    public string? DispName;  // the name shown in F12 in place of the key
+    public bool? ReadOnly;    // shown, not changeable
 }

@@ -76,11 +76,28 @@ internal static class SettingsLayout
             return config.Bind(section, key, defaultValue, description);
         }
         TakeOver(config, new ConfigDefinition(section, key), new ConfigDefinition(place.Section, key));
-        // The layout's order; whether it is shown at all as the caller has it.
-        bool? browsable = description.Tags is object[] tags && System.Array.Find(tags, t => t is ConfigurationManagerAttributes) is ConfigurationManagerAttributes given
-            ? given.Browsable : null;
+        // The layout's order; whether it is shown at all, the name shown and whether it can be changed, as the caller has it.
+        ConfigurationManagerAttributes? given = description.Tags is object[] tags
+            ? System.Array.Find(tags, t => t is ConfigurationManagerAttributes) as ConfigurationManagerAttributes : null;
         return config.Bind(place.Section, key, defaultValue,
-            new ConfigDescription(description.Description, description.AcceptableValues, new ConfigurationManagerAttributes { Order = place.Order, Browsable = browsable }));
+            new ConfigDescription(description.Description, description.AcceptableValues, new ConfigurationManagerAttributes
+            {
+                Order = place.Order, Browsable = given?.Browsable, DispName = given?.DispName, ReadOnly = given?.ReadOnly,
+            }));
+    }
+
+    // A value saved as the setting had it before (an option since renamed), given as it is now, before it is bound.
+    internal static void MapSaved(ConfigFile config, string section, string key, System.Func<string, string?> map)
+    {
+        PropertyInfo? property = typeof(ConfigFile).GetProperty("OrphanedEntries", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (property?.GetValue(config) is not Dictionary<ConfigDefinition, string> orphans)
+            return;
+        string placed = Places.TryGetValue(Id(section, key), out (string Section, int Order) place) ? place.Section : section;
+        foreach (ConfigDefinition definition in new[] { new ConfigDefinition(section, key), new ConfigDefinition(placed, key) })
+        {
+            if (orphans.TryGetValue(definition, out string value) && map(value) is string now)
+                orphans[definition] = now;
+        }
     }
 
     // The F12 window lists the groups in the order their first setting was bound, not by name: once everything is

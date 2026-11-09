@@ -20,7 +20,7 @@ namespace EFTNewCamera;
 // stays, whatever is chosen here.
 internal static class RecoilMode
 {
-    private const string ReworkGuid = "com.pein.camerarecoilmod";
+    private const string ReworkGuid = OtherMods.ReworkGuid;
 
     private static Assembly? _rework;
     private static bool _reworkIn = true;

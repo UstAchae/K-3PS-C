@@ -18,7 +18,9 @@ namespace EFTNewCamera;
 // screen (the picture stops). A camera without it keeps the game's own filter: the eyepieces do not take over.
 internal static partial class NightVisionEyepieces
 {
-    internal const string PictureAuto = "自动", PictureBrnvg = "BRNVG", PictureGame = "原版";
+    internal const string PictureAuto = "自动", PictureGame = "原版";
+    // BRNVG's picture, by its full name ("[未安装]" after it when it is not installed).
+    internal static readonly string PictureBrnvg = OtherMods.Label(OtherMods.BrnvgGuid, OtherMods.BrnvgName);
 
     internal static string Picture = PictureAuto;
 
