@@ -302,7 +302,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void BindVestibular()
     {
         ConfigEntry<bool> balance = SettingsLayout.Bind(Config, "前庭平衡", "总开关", true,
-            new ConfigDescription("像内耳前庭带着眼球那样，镜头位置不动，只把镜头转回玩家想看的方向，抵消走路、跑步时头的晃动。注视点取视线上实际看到的东西的距离；切枪、换弹、打药、翻背包、搜刮、开门等动作时，动画让头转去看手或包的部分会保留。开镜时也起作用。开枪时后坐力给镜头的转动不受影响。架枪、固定武器、翻越、攀爬时不起作用；中键自由看保留。关闭后镜头完全按头部原样晃动。",
+            new ConfigDescription("像内耳前庭带着眼球那样，镜头位置不动，只把镜头转回玩家想看的方向，抵消走路、跑步时头的晃动。注视点取视线上实际看到的东西的距离；切枪、换弹、打药、翻背包、搜刮、开门等动作时，动画让头转去看手或包的部分会保留。开枪时后坐力给镜头的转动不受影响。开镜（胸口抵肩除外）、架枪、固定武器、翻越、攀爬时不起作用；中键自由看保留。关闭后镜头完全按头部原样晃动。",
                 null, new ConfigurationManagerAttributes { Order = 3 }));
         ConfigEntry<float> strength = SettingsLayout.Bind(Config, "前庭平衡", "强度", 0.7f,
             new ConfigDescription("左右和上下平衡多少。0 是不平衡（原样），1 是完全平衡。",

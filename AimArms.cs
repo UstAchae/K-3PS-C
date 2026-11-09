@@ -178,6 +178,9 @@ internal static class AimArms
     // camera hangs on the same springs and steps with them, but ours follows the head every frame, so above 60 fps
     // the gun moved on every other frame against the view. Our player's springs are stepped every frame, by the
     // frame's own time, instead.
+    // Not the shot's recoil (RecoilStepPrefix): its springs take no account of the time a step stands for
+    // (RecoilProcessBase.CalculateRecoil), so stepped every frame they played the faster the higher the frame rate
+    // (2.4 times at 144 fps). They step as many times as the game's own physics ticks, as in 1.1.1.
     internal static void EveryFramePrefix(ProceduralWeaponAnimation __instance, ref float deltaTime, ref int nFixedFrames)
     {
         if (!NewCameraSwitch.Enabled || nFixedFrames < 0 || Time.deltaTime <= 0f)
@@ -185,9 +188,39 @@ internal static class AimArms
         Player? player = Singleton<GameWorld>.Instance?.MainPlayer;
         if (player == null || !ReferenceEquals(player.ProceduralWeaponAnimation, __instance))
             return;
+        _recoilStepFor = __instance.Shootingg?.CurrentRecoilEffect;
+        _recoilSteps = nFixedFrames;
+        _recoilStepTime = nFixedFrames > 0 ? deltaTime / nFixedFrames : 0f;
         deltaTime = Time.deltaTime;
         nFixedFrames = 1;
         CalibratedSight.EveryFrame(__instance);
+    }
+
+    private static object? _recoilStepFor;
+    private static int _recoilSteps;
+    private static float _recoilStepTime;
+    private static bool _steppingRecoil;
+
+    // NewRecoilShotEffect / OldRecoilShotEffect.FixedUpdate: the one step the frame's springs give the recoil is
+    // taken as the game's own steps of that frame (none on a frame without a physics tick).
+    internal static bool RecoilStepPrefix(object __instance)
+    {
+        if (_steppingRecoil || _recoilStepFor == null || !ReferenceEquals(__instance, _recoilStepFor))
+            return true;
+        _recoilStepFor = null;
+        if (__instance is not EFT.Animations.Recoil.IRecoilShotEffect effect)
+            return true;
+        _steppingRecoil = true;
+        try
+        {
+            for (int i = 0; i < _recoilSteps; i++)
+                effect.FixedUpdate(_recoilStepTime);
+        }
+        finally
+        {
+            _steppingRecoil = false;
+        }
+        return false;
     }
 
     // The third-person procedural animation leaves out the breath and the hands' shake that sway the gun in first

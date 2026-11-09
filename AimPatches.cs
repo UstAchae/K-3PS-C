@@ -64,6 +64,10 @@ internal static class AimPatches
             prefix: Hook(typeof(ChestStance), nameof(ChestStance.SlowdownPrefix)));
         Patch(harmony, AccessTools.Method(typeof(ProceduralWeaponAnimation), nameof(ProceduralWeaponAnimation.ProcessEffectors)),
             prefix: Hook(typeof(AimArms), nameof(AimArms.EveryFramePrefix)));
+        Patch(harmony, AccessTools.Method(typeof(NewRecoilShotEffect), nameof(NewRecoilShotEffect.FixedUpdate)),
+            prefix: Hook(typeof(AimArms), nameof(AimArms.RecoilStepPrefix)));
+        Patch(harmony, AccessTools.Method(typeof(OldRecoilShotEffect), nameof(OldRecoilShotEffect.FixedUpdate)),
+            prefix: Hook(typeof(AimArms), nameof(AimArms.RecoilStepPrefix)));
         Patch(harmony, AccessTools.Method(typeof(NewRecoilShotEffect), nameof(NewRecoilShotEffect.RecalculateRecoilParamsOnChangeWeapon)),
             postfix: Hook(typeof(RecoilMode), nameof(RecoilMode.RecalculatePostfix), Priority.First));
     }
