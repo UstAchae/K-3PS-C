@@ -104,6 +104,8 @@ Shader "Justachae/NVG/Direct" {
  // the pattern once all is lit (pass 4), that is the two eyes' lit pictures eased into each other, as the eyes' cameras were.
  bool pick (float2 pixel, float2 uv, float rawL, float rawR, out float toRight) {
   float c = coverage(uv, rawL, rawR, toRight);
+  if (c <= 0)
+   return false;
   if (toRight > 0 && toRight < 1) {
    toRight = kept(pixel, toRight) ? 1 : 0;
    return true;
