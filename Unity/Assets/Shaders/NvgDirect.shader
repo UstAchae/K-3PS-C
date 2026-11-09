@@ -9,6 +9,7 @@ Shader "Justachae/NVG/Direct" {
  sampler2D _DirectL0, _DirectL1, _DirectL2, _DirectL3, _DirectR0, _DirectR1, _DirectR2, _DirectR3, _DirectLens0, _DirectLens1;
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectLD);
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
+ UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
  float _DirectSplit, _DirectStrip, _DirectBehind;
  float _DirectNoEmission;   // temporary: a switch in F12
  float4x4 _EyeInvVP0, _EyeInvVP1;
@@ -110,6 +111,30 @@ Shader "Justachae/NVG/Direct" {
   }
   return kept(pixel, c);
  }
+ // The main camera's depth of this pixel's device.
+ float pickedDepth (float rawL, float rawR, float toRight) {
+  return mainDepth(lerp(inverseDepth(rawL), inverseDepth(rawR), toRight));
+ }
+
+ // Not behind what the main camera has there (the helmet's brim stands before the device), for what comes once the camera's depth
+ // texture is made. Either eye's: across the strip each pixel may be the one's or the other's.
+ bool notCovered (float2 uv, float rawL, float rawR) {
+  float scene = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
+  #if defined(UNITY_REVERSED_Z)
+  return max(mainDepth(inverseDepth(rawL)), mainDepth(inverseDepth(rawR))) >= scene - 0.001;
+  #else
+  return min(mainDepth(inverseDepth(rawL)), mainDepth(inverseDepth(rawR))) <= scene + 0.001;
+  #endif
+ }
+
+ // Temporary, for the layers over the game's own drawing: its depth and ours are worked out apart, a hair from each other.
+ float layerDepth (float d) {
+  #if defined(UNITY_REVERSED_Z)
+  return saturate(d + 0.0003);
+  #else
+  return saturate(d - 0.0003);
+  #endif
+ }
  ENDCG
  SubShader {
   Pass {
@@ -155,18 +180,21 @@ Shader "Justachae/NVG/Direct" {
   // 2: the device's surface again, once the game's decals are done: they are thrown on whatever the depth holds, and what is
   // put in after the G-buffer is not marked as what they leave alone. The dirt of the ground lay on it, other with each move.
   Pass {
-   Cull Off ZWrite Off ZTest Always
+   // By the depth the device was put in with: what stands before it keeps its own surface.
+   Cull Off ZWrite Off ZTest LEqual
    CGPROGRAM
    #pragma vertex vert
    #pragma fragment frag
    #pragma target 3.5
-   struct surface { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; };
+   struct surface { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; float depth : SV_Depth; };
    surface frag (v2f i) {
     float2 uv = i.screen.xy / i.screen.w;
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
     float toRight;
-    if (!pick(i.pos.xy, uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight))
+    if (!pick(i.pos.xy, uv, rawL, rawR, toRight))
      discard;
     surface o;
+    o.depth = pickedDepth(rawL, rawR, toRight);
     o.g0 = lerp(tex2D(_DirectL0, uv), tex2D(_DirectR0, uv), toRight);
     o.g1 = lerp(tex2D(_DirectL1, uv), tex2D(_DirectR1, uv), toRight);
     o.g2 = lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
@@ -193,9 +221,10 @@ Shader "Justachae/NVG/Direct" {
    float4 frag (v2f i) : SV_Target {
     float2 uv = i.screen.xy / i.screen.w;
     float toRight;
-    float c = coverage(uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight);
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
+    float c = coverage(uv, rawL, rawR, toRight);
     float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
-    if (c <= 0 || t <= 0 || t >= 1)
+    if (c <= 0 || t <= 0 || t >= 1 || !notCovered(uv, rawL, rawR))
      discard;
     float3 sum = 0;
     for (int y = -2; y < 2; y++)
@@ -227,7 +256,8 @@ Shader "Justachae/NVG/Direct" {
    float4 frag (m2f i) : SV_Target {
     float2 uv = i.screen.xy / i.screen.w;
     float toRight;
-    if (!pick(i.pos.xy, uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight) || (_DirectHalf < 0.5) != (toRight < 0.5))
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
+    if (!pick(i.pos.xy, uv, rawL, rawR, toRight) || (_DirectHalf < 0.5) != (toRight < 0.5) || !notCovered(uv, rawL, rawR))
      discard;
     float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
     // By the camera's own matrices, up being up: no turning over, as the game's motion goes the same way in both directions.
@@ -341,17 +371,19 @@ Shader "Justachae/NVG/Direct" {
   }
   // 14, temporary: one layer of what we drew, over what the game drew, to find which of them it is that differs.
   Pass {
-   Cull Off ZWrite Off ZTest Always
+   Cull Off ZWrite Off ZTest LEqual
    CGPROGRAM
    #pragma vertex vert
    #pragma fragment frag
    #pragma target 3.5
    float _DirectLayer;
-   float4 frag (v2f i) : SV_Target {
+   float4 frag (v2f i, out float depth : SV_Depth) : SV_Target {
     float2 uv = i.screen.xy / i.screen.w;
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
     float toRight;
-    if (!pick(i.pos.xy, uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight))
+    if (!pick(i.pos.xy, uv, rawL, rawR, toRight))
      discard;
+    depth = layerDepth(pickedDepth(rawL, rawR, toRight));
     if (_DirectLayer < 0.5) return lerp(tex2D(_DirectL0, uv), tex2D(_DirectR0, uv), toRight);
     if (_DirectLayer < 1.5) return lerp(tex2D(_DirectL1, uv), tex2D(_DirectR1, uv), toRight);
     if (_DirectLayer < 2.5) return lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
@@ -361,7 +393,7 @@ Shader "Justachae/NVG/Direct" {
   }
   // 15, temporary: our depth alone.
   Pass {
-   Cull Off ZWrite On ZTest Always
+   Cull Off ZWrite On ZTest LEqual
    ColorMask 0
    CGPROGRAM
    #pragma vertex vert
@@ -373,25 +405,26 @@ Shader "Justachae/NVG/Direct" {
     float toRight;
     if (!pick(i.pos.xy, uv, rawL, rawR, toRight))
      discard;
-    return mainDepth(lerp(inverseDepth(rawL), inverseDepth(rawR), toRight));
+    return layerDepth(pickedDepth(rawL, rawR, toRight));
    }
    ENDCG
   }
   // 16, temporary: our stencil alone.
   Pass {
-   Cull Off ZWrite Off ZTest Always
+   Cull Off ZWrite Off ZTest LEqual
    ColorMask 0
    Stencil { Ref [_DirectStencilRef] WriteMask 255 Comp Always Pass Replace }
    CGPROGRAM
    #pragma vertex vert
    #pragma fragment frag
    #pragma target 3.5
-   float4 frag (v2f i) : SV_Target {
+   float frag (v2f i) : SV_Depth {
     float2 uv = i.screen.xy / i.screen.w;
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
     float toRight;
-    if (!pick(i.pos.xy, uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight))
+    if (!pick(i.pos.xy, uv, rawL, rawR, toRight))
      discard;
-    return 0;
+    return layerDepth(pickedDepth(rawL, rawR, toRight));
    }
    ENDCG
   }
