@@ -58,6 +58,37 @@ internal static partial class NightVisionEyepieces
     private static int _arrangedCount = -1;
     private static bool _direct;
     private static bool? _drawNoted;
+    private static int _layersNoted = -1;
+    private const int LayerColourPass = 14, LayerDepthPass = 15, LayerStencilPass = 16;
+    private static readonly int DirectLayerId = Shader.PropertyToID("_DirectLayer");
+    private static readonly RenderTargetIdentifier[] _surfaceLayers = { BuiltinRenderTextureType.GBuffer0, BuiltinRenderTextureType.GBuffer1, BuiltinRenderTextureType.GBuffer2 };
+
+    // Temporary: each layer the switches name, over what the game drew. Depth and stencil once, as the device is put in; the surface
+    // both then and after the decals, as the device's is.
+    private static void DrawLayers(CommandBuffer buffer, bool afterDecals)
+    {
+        for (int l = NvgDump.LayerDiffuse; l <= NvgDump.LayerNormal; l++)
+        {
+            if (!NvgDump.Layer(l))
+                continue;
+            buffer.SetGlobalFloat(DirectLayerId, l);
+            buffer.SetRenderTarget(_surfaceLayers[l], BuiltinRenderTextureType.CameraTarget);
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial!, 0, LayerColourPass);
+        }
+        if (afterDecals)
+            return;
+        buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget, BuiltinRenderTextureType.CameraTarget);
+        if (NvgDump.Layer(NvgDump.LayerEmission))
+        {
+            buffer.SetGlobalFloat(DirectLayerId, 3f);
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial!, 0, LayerColourPass);
+        }
+        if (NvgDump.Layer(NvgDump.LayerDepth))
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial!, 0, LayerDepthPass);
+        if (NvgDump.Layer(NvgDump.LayerStencil))
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial!, 0, LayerStencilPass);
+        buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
+    }
 
     private static readonly List<Renderer> _slotRenderers = new List<Renderer>();
     private static readonly List<(Renderer renderer, ShadowCastingMode casting)> _hidden = new List<(Renderer, ShadowCastingMode)>();
@@ -72,10 +103,14 @@ internal static partial class NightVisionEyepieces
     {
         _pieces.Clear();
         DeviceSlot().GetComponentsInChildren(false, _slotRenderers);
+        bool hide = !NvgDump.Layered;
         foreach (Renderer r in _slotRenderers)
         {
-            _hidden.Add((r, r.shadowCastingMode));
-            r.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
+            if (hide)
+            {
+                _hidden.Add((r, r.shadowCastingMode));
+                r.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
+            }
             if (r is not MeshRenderer mesh || !r.enabled || !Opaque(r))
                 continue;
             PieceSource source = SourceOf(mesh);
@@ -87,7 +122,8 @@ internal static partial class NightVisionEyepieces
                 FromCamera = FromCamera(r.transform, Vector3.zero),
             });
         }
-        HideTwins();
+        if (hide)
+            HideTwins();
     }
 
     // Another copy of the same model on the player, outside the device's own slot: left to itself it was seen beside the device
@@ -429,6 +465,14 @@ internal static partial class NightVisionEyepieces
             _drawNoted = byRenderer;
             Log($"NVG draw: the device by {(byRenderer ? "DrawRenderer" : "DrawMesh")}, {_pieces.Count} pieces");
         }
+        int layers = NvgDump.Layered ? 256 : 0;
+        for (int l = 0; l < 8; l++)
+            layers |= NvgDump.Layer(l) ? 1 << l : 0;
+        if (layers != _layersNoted)
+        {
+            _layersNoted = layers;
+            Log($"NVG layers: game draws {NvgDump.Layered}, ours over it: diffuse {(layers & 1) != 0}, specular {(layers & 2) != 0}, normal {(layers & 4) != 0}, emission {(layers & 8) != 0}, depth {(layers & 16) != 0}, stencil {(layers & 32) != 0}, motion {(layers & 64) != 0}, even {(layers & 128) != 0}; stencil value {_stencilRef}");
+        }
         for (int half = 0; half < 2; half++)
         {
             int[] ids = half == 0 ? DirectLeft : DirectRight;
@@ -526,26 +570,35 @@ internal static partial class NightVisionEyepieces
         _directMaterial.SetFloat("_DirectNoEmission", NvgDump.NoEmission ? 1f : 0f);
         buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
         buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
-        buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 0);
+        if (NvgDump.Layered)
+            DrawLayers(buffer, false);
+        else
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 0);
 
         // After the decals, which are thrown on whatever the depth holds. The textures are let go only after this.
         buffer = _directAgain;
         buffer.SetRenderTarget(_mainSurface, BuiltinRenderTextureType.CameraTarget);
-        buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 2);
+        if (NvgDump.Layered)
+            DrawLayers(buffer, true);
+        else
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 2);
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         // The device's own motion on the screen: it goes with the head, and left to itself it had what lay behind it, so what is
         // carried from frame to frame by the motion (the reflections, the upscaler) drifted over it like mist.
-        if ((main.depthTextureMode & DepthTextureMode.MotionVectors) != 0)
+        if ((main.depthTextureMode & DepthTextureMode.MotionVectors) != 0 && (!NvgDump.Layered || NvgDump.Layer(NvgDump.LayerMotion)))
             DrawMotion(_directMotion, main, turned, projection, leftShift, rightShift);
         // Once all is lit: the fade. The textures are let go only after this.
         buffer = _directEnd;
         buffer.SetGlobalVector(DirectTexel, new Vector4(1f / Mathf.Max(width, 1), 1f / Mathf.Max(height, 1), 0f, 0f));
-        buffer.GetTemporaryRT(DirectLitNow, width, height, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
-        buffer.Blit(BuiltinRenderTextureType.CameraTarget, DirectLitNow);
-        buffer.SetGlobalTexture(DirectLitNow, DirectLitNow);
-        buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-        buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 4);
-        buffer.ReleaseTemporaryRT(DirectLitNow);
+        if (!NvgDump.Layered || NvgDump.Layer(NvgDump.LayerEven))
+        {
+            buffer.GetTemporaryRT(DirectLitNow, width, height, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
+            buffer.Blit(BuiltinRenderTextureType.CameraTarget, DirectLitNow);
+            buffer.SetGlobalTexture(DirectLitNow, DirectLitNow);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 4);
+            buffer.ReleaseTemporaryRT(DirectLitNow);
+        }
         for (int t = 0; t < 4; t++)
         {
             buffer.ReleaseTemporaryRT(DirectLeft[t]);

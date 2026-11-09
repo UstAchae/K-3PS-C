@@ -339,5 +339,61 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 0.50196078; }
    ENDCG
   }
+  // 14, temporary: one layer of what we drew, over what the game drew, to find which of them it is that differs.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   float _DirectLayer;
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    float toRight;
+    if (!pick(i.pos.xy, uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight))
+     discard;
+    if (_DirectLayer < 0.5) return lerp(tex2D(_DirectL0, uv), tex2D(_DirectR0, uv), toRight);
+    if (_DirectLayer < 1.5) return lerp(tex2D(_DirectL1, uv), tex2D(_DirectR1, uv), toRight);
+    if (_DirectLayer < 2.5) return lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
+    return lerp(tex2D(_DirectL3, uv), tex2D(_DirectR3, uv), toRight);
+   }
+   ENDCG
+  }
+  // 15, temporary: our depth alone.
+  Pass {
+   Cull Off ZWrite On ZTest Always
+   ColorMask 0
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   float frag (v2f i) : SV_Depth {
+    float2 uv = i.screen.xy / i.screen.w;
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
+    float toRight;
+    if (!pick(i.pos.xy, uv, rawL, rawR, toRight))
+     discard;
+    return mainDepth(lerp(inverseDepth(rawL), inverseDepth(rawR), toRight));
+   }
+   ENDCG
+  }
+  // 16, temporary: our stencil alone.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   ColorMask 0
+   Stencil { Ref [_DirectStencilRef] WriteMask 255 Comp Always Pass Replace }
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    float toRight;
+    if (!pick(i.pos.xy, uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight))
+     discard;
+    return 0;
+   }
+   ENDCG
+  }
  }
 }
