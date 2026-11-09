@@ -38,8 +38,6 @@ internal static class AimPatches
             postfix: Hook(typeof(AimStamina), nameof(AimStamina.HoldBreathPostfix)));
         Patch(harmony, AccessTools.Method(typeof(Player), "VisualPass"),
             postfix: Hook(typeof(AimArms), nameof(AimArms.VisualPassPostfix), Priority.Last));
-        Patch(harmony, AccessTools.Method(typeof(Player), nameof(Player.OnMakingShot)),
-            transpiler: Hook(typeof(AimArms), nameof(AimArms.SkipMountedBodyRecoil)));
         Patch(harmony, AccessTools.Method(typeof(Player), nameof(Player.MovementUpdate)),
             postfix: Hook(typeof(AimArms), nameof(AimArms.MovementUpdatePostfix)));
         Patch(harmony, AccessTools.Method(typeof(Player), nameof(Player.Look)),

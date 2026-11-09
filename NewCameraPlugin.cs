@@ -376,11 +376,11 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void BindAimDistance()
     {
         RecoilMode.Find();
-        ConfigEntry<string> recoil = SettingsLayout.Bind(Config, "瞄准", "后坐力", RecoilMode.Legacy,
-            new ConfigDescription("开枪时用谁的后坐力。原版后坐力：游戏自己的后坐力，按原版第一人称的整套做法放到第三人称的枪、身体和镜头上：枪往后顶、枪口上翻（腰射也翻，子弹跟着枪口），瞄准时镜头追着瞄具、跟着枪口转过去，镜头自己的那一下推到胸腔和头上，总量和原版一样。力度由下面的“后坐力力度”决定。Recoil Rework：别人的后坐力 mod SPTRecoilReworkLegacy，装了它才有这一项；不选它时它的改动全部撤下，选它时再装回去。选它时枪和镜头按它调过的数值走，镜头不再跟着枪口转（它在原版里也把这一下关掉），它自己把视角往上拉的那部分照常起作用。它的服务端部分改了一些枪的后坐数值，那部分在这里关不掉，选“原版后坐力”时也带着。局内可以随时切换；切到或切离 Recoil Rework 后，换一次枪才完全生效。",
-                new AcceptableValueList<string>(RecoilMode.Choices)));
-        recoil.SettingChanged += (_, _) => RecoilMode.Set(recoil.Value);
-        RecoilMode.Set(recoil.Value);
+        ConfigEntry<bool> useRework = SettingsLayout.Bind(Config, "瞄准", "使用 Recoil Rework", false,
+            new ConfigDescription("关：原版后坐力，游戏自己的后坐力按原版第一人称的整套做法放到第三人称的枪和镜头上：枪往后顶、枪口上翻（腰射也翻，子弹跟着枪口），瞄准时镜头追着瞄具、跟着枪口转过去，再加上镜头自己的那一下，力度由下面的“后坐力力度”决定。开：别人的后坐力 mod SPTRecoilReworkLegacy，和不装本 mod、只装它时一样：枪和镜头按它调过的数值走，镜头不跟着枪口转（它把这一下关掉），它把视角往上拉、它给镜头的抖动都照常有，“后坐力力度”不起作用。装了它才有这一项；关着时它的改动全部撤下，打开时再装回去。它的服务端部分改了一些枪的后坐数值，那部分在这里关不掉，关着时也带着。局内可以随时切换，切换后换一次枪才完全生效。",
+                null, new ConfigurationManagerAttributes { Browsable = RecoilMode.ReworkInstalled }));
+        useRework.SettingChanged += (_, _) => RecoilMode.Set(useRework.Value);
+        RecoilMode.Set(useRework.Value);
         _aimDistance = SettingsLayout.Bind(Config, "瞄准", "前后距离", -0.05f,
             new ConfigDescription("瞄准后沿镜头前方向移动枪，单位为米。负值让枪离镜头更近。",
                 new AcceptableValueRange<float>(AimDistanceMin, AimDistanceMax)));
@@ -389,7 +389,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         _aimDistanceCloser = SettingsLayout.Bind(Config, "瞄准", "前后距离调近快捷键", new KeyboardShortcut(KeyCode.Minus),
             "瞄准时按住，瞄准的前后距离慢慢变小，枪离镜头更近。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
         ConfigEntry<float> recoilStrength = SettingsLayout.Bind(Config, "瞄准", "后坐力力度", 1f,
-            new ConfigDescription("整套后坐力的力度：枪往后顶、枪口上翻、镜头跟着枪口转、镜头自己的那一下，一起按这个数放大或缩小。1 是原版第一人称，0 是都没有。子弹跟着枪口走。选 Recoil Rework 时同样起作用，但管不到它把视角往上拉的那部分（那部分在它自己的设置里调）。",
+            new ConfigDescription("原版后坐力的力度：枪往后顶、枪口上翻、镜头跟着枪口转、镜头自己的那一下，一起按这个数放大或缩小。1 是原版第一人称，0 是都没有。子弹跟着枪口走。打开“使用 Recoil Rework”时不起作用（那时按它自己的设置）。",
                 new AcceptableValueRange<float>(0f, 2f)));
         recoilStrength.SettingChanged += (_, _) => AimArms.RecoilStrength = recoilStrength.Value;
         AimArms.RecoilStrength = recoilStrength.Value;
@@ -785,14 +785,17 @@ internal static class NewCameraSwitch
                     _posePosition = CameraPosition.Resolve(head.position, _poseRotation);
                     PoseFromHead = CameraPosition.Offset(_poseRotation);
                 }
-                else
-                    _poseRotation = AimArms.KickView(_poseRotation);
                 _poseRotation = VestibularView.Stabilize(player, _posePosition, _poseRotation);
-                // Aimed, the view turns after the gun's flip, as the game's first-person camera does; the gun stays.
+                // The recoil on the view, in the order the game's first-person camera takes it (LerpCamera): its turn
+                // after the gun's flip (aimed), the camera recoil, then what Recoil Rework adds there when it is working.
                 _poseRotation = AimArms.FollowGun(player, _poseRotation);
-                Vector3 beforeRecoil = _posePosition;
-                AimArms.BodyRecoil(player, ref _posePosition, ref _poseRotation);
-                PoseFromHead += _posePosition - beforeRecoil;
+                _poseRotation = AimArms.CameraRecoil(player, _poseRotation);
+                if (RecoilMode.ReworkCameraShake(player, out Vector3 shakeMove, out Vector3 shakeTurn))
+                {
+                    _posePosition += _poseRotation * shakeMove;
+                    PoseFromHead += _poseRotation * shakeMove;
+                    _poseRotation *= Quaternion.Euler(shakeTurn);
+                }
                 PoseHead = head;
                 AimArms.LiftHead(head);
                 _poseFrame = Time.frameCount;

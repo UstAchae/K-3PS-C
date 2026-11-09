@@ -10,21 +10,21 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// Whose recoil the gun has (F12 「瞄准」 → 后坐力): the game's own, all of it as its first person has it, put on the
-// third-person gun, body and view (AimArms: Recoil, FollowGun, BodyRecoil), or SPTRecoilReworkLegacy's, when that mod is
-// installed (the same, on the springs it sets, less the view's turn after the gun, which it stops; its own pull of the
-// look works as it does without this mod).
+// Whose recoil the gun has (F12 「瞄准」 → 使用 Recoil Rework): the game's own, all of it as its first person has it, put on
+// the third-person gun and view (AimArms: Recoil, FollowGun, CameraRecoil), or the game's with SPTRecoilReworkLegacy, as
+// the game is with that mod installed: on the springs it sets, the view's turn after the gun stopped as it stops it,
+// its pull of the look, and its shake of the first-person camera put on ours (ReworkCameraShake), with no strength of
+// this mod on any of it.
 // It has no switch of its own (its patches are always in), so while it is not chosen its patches are taken out of the
 // game, and put back as they were when it is. Its server part changes some guns' recoil figures in the database; that
 // stays, whatever is chosen here.
 internal static class RecoilMode
 {
-    internal const string Legacy = "原版后坐力", Rework = "Recoil Rework";
     private const string ReworkGuid = "com.pein.camerarecoilmod";
 
     private static Assembly? _rework;
     private static bool _reworkIn = true;
-    private static string _mode = Legacy;
+    private static bool _useRework;
     private static readonly List<Removed> Taken = new();
 
     private readonly struct Removed
@@ -58,18 +58,88 @@ internal static class RecoilMode
             _rework = info.Instance.GetType().Assembly;
     }
 
-    internal static string[] Choices => ReworkInstalled ? new[] { Legacy, Rework } : new[] { Legacy };
-
-    internal static void Set(string mode)
+    internal static void Set(bool useRework)
     {
-        _mode = mode == Rework && ReworkInstalled ? Rework : Legacy;
+        _useRework = useRework && ReworkInstalled;
         Refresh();
     }
 
     // Also when the master switch changes: with the mod off, Recoil Rework works as it would without it.
     internal static void Refresh()
     {
-        SetRework(_mode == Rework || !NewCameraSwitch.Enabled);
+        SetRework(_useRework || !NewCameraSwitch.Enabled);
+    }
+
+    // Recoil Rework shakes the game's first-person camera after it is placed (its LerpCamera postfix: the slow and fast
+    // shake springs, a hundredth of them, on the position across and up; its camera spring on the turn). The game's
+    // third person never places that camera, so the shake is put on ours here, read from its springs as they are.
+    private static System.Type? _shakeType;
+    private static System.Func<Component, Vector3>? _slowShake, _fastShake, _cameraShake;
+    private static bool _shakeFailed;
+    private static Component? _shakeOn;
+    private static int _shakeOwner, _shakeRetryFrame = -1;
+
+    internal static bool ReworkCameraShake(Player player, out Vector3 move, out Vector3 turn)
+    {
+        move = turn = Vector3.zero;
+        if (!ReworkWorking || _shakeFailed || !NewCameraSwitch.Enabled)
+            return false;
+        if (_shakeType == null && !FindShake())
+            return false;
+        int owner = player.GetInstanceID();
+        if (owner != _shakeOwner || _shakeOn == null)
+        {
+            // Put on the player as the raid starts, or when Recoil Rework is chosen; looked for again now and then till then.
+            if (owner == _shakeOwner && Time.frameCount < _shakeRetryFrame)
+                return false;
+            _shakeOwner = owner;
+            _shakeOn = player.gameObject.GetComponent(_shakeType);
+            _shakeRetryFrame = Time.frameCount + 60;
+            if (_shakeOn == null)
+                return false;
+        }
+        try
+        {
+            Vector3 shake = _slowShake!(_shakeOn) + _fastShake!(_shakeOn);
+            move = new Vector3(shake.x * 0.01f, shake.y * 0.01f, 0f);
+            turn = _cameraShake!(_shakeOn);
+        }
+        catch (System.Exception e)
+        {
+            _shakeFailed = true;
+            NewCameraPlugin.Log?.LogWarning($"Recoil Rework: its camera shake was not read ({e.Message}); the view goes without it.");
+            return false;
+        }
+        return move.sqrMagnitude > 0f || turn.sqrMagnitude > 0f;
+    }
+
+    private static bool FindShake()
+    {
+        _shakeType = _rework?.GetType("SPTRecoilRework.Components.CameraOffsetComponent");
+        try
+        {
+            if (_shakeType == null)
+                throw new System.MissingMemberException("CameraOffsetComponent");
+            _slowShake = SpringPosition(_shakeType, "SlowShakeSpring");
+            _fastShake = SpringPosition(_shakeType, "FastShakeSpring");
+            _cameraShake = SpringPosition(_shakeType, "CameraSpring");
+            return true;
+        }
+        catch (System.Exception e)
+        {
+            _shakeFailed = true;
+            NewCameraPlugin.Log?.LogWarning($"Recoil Rework: its camera shake was not found ({e.Message}); the view goes without it.");
+            return false;
+        }
+    }
+
+    // component => ((CameraOffsetComponent)component).<spring>.Position, compiled once: nothing allocated per frame.
+    private static System.Func<Component, Vector3> SpringPosition(System.Type type, string spring)
+    {
+        var component = System.Linq.Expressions.Expression.Parameter(typeof(Component), "component");
+        var body = System.Linq.Expressions.Expression.Field(
+            System.Linq.Expressions.Expression.Field(System.Linq.Expressions.Expression.Convert(component, type), spring), "Position");
+        return System.Linq.Expressions.Expression.Lambda<System.Func<Component, Vector3>>(body, component).Compile();
     }
 
     private static void SetRework(bool on)
