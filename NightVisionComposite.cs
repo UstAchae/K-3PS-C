@@ -178,9 +178,22 @@ internal static partial class NightVisionEyepieces
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
         Material filter = nightVision.Material;
         filter.EnableKeyword("NIGHT_VISION_NOISE");
+        // The filter's own intensity, times the set brightness, for the lenses only; the game's value put back after.
+        bool brighter = !Mathf.Approximately(GameLensBrightness, 1f) && filter.HasProperty(FilterIntensityId);
+        float intensity = brighter ? filter.GetFloat(FilterIntensityId) : 0f;
+        if (brighter)
+            filter.SetFloat(FilterIntensityId, intensity * GameLensBrightness);
         Graphics.Blit(frame, made, filter);
+        if (brighter)
+            filter.SetFloat(FilterIntensityId, intensity);
         return made;
     }
+
+    // How much brighter the game's own night-vision picture is made in the lenses (F12 原版夜视目镜亮度): a multiple of
+    // the filter's intensity. The frame is the naked eye's, lit by the level's own ambient (NightVisionPreCullPostfix),
+    // so it lifts what is lit, not what is dark.
+    internal static float GameLensBrightness = 1f;
+    private static readonly int FilterIntensityId = Shader.PropertyToID("_Intensity");
 
     // The eyepieces put together over the frame (from) into to, with picture as what the lenses show.
     private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture)

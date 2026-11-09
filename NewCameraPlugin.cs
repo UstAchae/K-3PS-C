@@ -187,6 +187,11 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
                 new AcceptableValueRange<float>(0.00001f, 0.02f), new ConfigurationManagerAttributes { Order = 0 }));
         eyeNear.SettingChanged += (_, _) => NightVisionEyepieces.EyeNearPlane = eyeNear.Value;
         NightVisionEyepieces.EyeNearPlane = eyeNear.Value;
+        ConfigEntry<float> gameLensBrightness = SettingsLayout.Bind(Config, "头戴式成像装备", "原版夜视目镜亮度", 1f,
+            new ConfigDescription("目镜里用游戏原版夜视滤镜成像时（“夜视画面来源”是原版，或没装 Borkel's Realistic NVGs），画面亮度乘以这个数，只作用于目镜里。原版夜视打开时会把整个场景的环境光换成更亮的一套，本模组让目镜以外保持肉眼看到的样子，目镜里也就少了这份提亮；这一项用放大亮度来补，但它只能把有光的地方放大，原本全黑的地方还是黑的，太大时亮处会过曝。1 是不放大。热成像和 Borkel's Realistic NVGs 的画面不受影响。",
+                new AcceptableValueRange<float>(1f, 4f), new ConfigurationManagerAttributes { Order = 2 }));
+        gameLensBrightness.SettingChanged += (_, _) => NightVisionEyepieces.GameLensBrightness = gameLensBrightness.Value;
+        NightVisionEyepieces.GameLensBrightness = gameLensBrightness.Value;
         ConfigEntry<float> tritium = SettingsLayout.Bind(Config, "头戴式成像装备", "氚光亮度", 0.6f,
             new ConfigDescription("透过夜视仪看氚光机瞄（以及游戏里做了氚光的其他瞄具）：每个氚光点被物镜散成一个亮度均匀、边缘清楚的圆盘，离眼睛越近圆盘越大、越暗。这一项调这些圆盘有多亮，0 是不画。",
                 new AcceptableValueRange<float>(0f, 4f), new ConfigurationManagerAttributes { Order = 0 }));
