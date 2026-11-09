@@ -149,6 +149,8 @@ internal static class HeadwearTilt
         if (head == null || helmet == null)
             return;
         float degrees = Mathf.Clamp(SavedFor(helmet.Id.ToString()), 0f, Range);
+        // Temporary: which helmet a model shown elsewhere has, and what it was given.
+        NewCameraPlugin.Log?.LogInfo($"Helmet on a shown model: {model.name}, id {helmet.Id}, saved {(_saved != null && _saved.ContainsKey(helmet.Id.ToString()) ? "yes" : "no, the old default " + Default)}, tilted {degrees}, on {body.name}");
         if (degrees < 0.01f)
             return;
         Forget(model);
