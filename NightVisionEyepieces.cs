@@ -259,7 +259,9 @@ internal static partial class NightVisionEyepieces
 
         // Looked for again while none is worn, or the one found has been put away (a device swapped for another stays
         // in the scene, hidden).
-        if ((_body == null || !_body.gameObject.activeInHierarchy || _body.root != player.gameObject.transform.root || WornElsewhere(player)) && Time.frameCount - _searchedFrame >= 30)
+        bool wornAny = player.NightVisionObserver?.Component != null;
+        int searchEvery = wornAny && Time.time < _holdFilterUntil ? 1 : SearchFrames;
+        if ((_body == null || !_body.gameObject.activeInHierarchy || _body.root != player.gameObject.transform.root || WornElsewhere(player)) && Time.frameCount - _searchedFrame >= searchEvery)
         {
             Device was = _device;
             Transform? found = FindDevice(player);
@@ -279,6 +281,7 @@ internal static partial class NightVisionEyepieces
         }
 
         CameraManager? cameras = BodyVisibility.Cameras;
+        KeepFilterHeld(player, cameras, wornAny);
         bool thermal = _body != null && _device.Thermal;
         NightVisionDevice? device = _body != null && !thermal ? _body.GetComponentInParent<NightVisionDevice>() : null;
         // The game's own record of what is worn, not what a model was given when it was made: a model's went on saying off with
@@ -314,6 +317,25 @@ internal static partial class NightVisionEyepieces
 
         EnsureRendererPatch();
         RestoreMask(cameras);
+    }
+
+    // The gear changed with the device down (the helmet taken off, or another with its device down put on): the filter stays on for a
+    // moment with no device to take it over, and was seen over the whole frame. So it is held back from when the device goes: for as long
+    // as nothing is worn and the game has yet to turn it off, and a moment longer for the next device's model to be found. A device
+    // this mod has no eyepieces for shows its filter after that.
+    private const int SearchFrames = 30;
+    private const float HoldFilterSeconds = 1f;
+    private static float _holdFilterUntil = -1f;
+    private static bool _deviceThere;
+
+    private static bool HoldFilter => Time.time < _holdFilterUntil && (_body == null || !_body.gameObject.activeInHierarchy);
+
+    private static void KeepFilterHeld(Player player, CameraManager? cameras, bool wornAny)
+    {
+        bool there = _body != null && _body.gameObject.activeInHierarchy && !WornElsewhere(player);
+        if ((_deviceThere && !there) || (!there && !wornAny && Time.time < _holdFilterUntil && cameras?.NightVision != null && cameras.NightVision.On))
+            _holdFilterUntil = Time.time + HoldFilterSeconds;
+        _deviceThere = there;
     }
 
     internal static void Release()
@@ -520,7 +542,7 @@ internal static partial class NightVisionEyepieces
     // the device flips with the filter off, the eyes go in at the SSAA stage, through the filter's hook.
     private static void NightVisionPreCullPostfix(BSG.CameraEffects.NightVision __instance)
     {
-        if (!Active && !BinocularOn)
+        if (!Active && !BinocularOn && !HoldFilter)
             return;
 
         // Nothing at the SSAA stage: the eyepieces go in by our own image effect (EyepieceImage).
@@ -531,7 +553,7 @@ internal static partial class NightVisionEyepieces
         // IR lasers drawn into the IR layer only (NightVisionIr.cs), not into the naked eye's frame.
         if (IrWanted)
             Shader.SetGlobalFloat(NightVisionOnId, 0f);
-        if ((Active || BinocularOn) && __instance.TextureMask != null && __instance.TextureMask.enabled)
+        if ((Active || BinocularOn || HoldFilter) && __instance.TextureMask != null && __instance.TextureMask.enabled)
         {
             __instance.TextureMask.enabled = false;
             _hiddenMask = __instance.TextureMask;
@@ -543,7 +565,7 @@ internal static partial class NightVisionEyepieces
     {
         // Not while the eyes still show, the device flipping up with the game's filter yet to switch off: its mask
         // would black out all around them for that moment.
-        if (Active || BinocularOn || _hiddenMask == null)
+        if (Active || BinocularOn || HoldFilter || _hiddenMask == null)
             return;
 
         if (cameras?.NightVision != null && cameras.NightVision.On && !BodyVisibility.UsesNightPipeline(cameras.NightVision))
@@ -586,6 +608,11 @@ internal static partial class NightVisionEyepieces
     private static bool RenderImagePrefix(Behaviour __instance, RenderTexture source, RenderTexture destination)
     {
         CameraManager? cameras = BodyVisibility.Cameras;
+        if (HoldFilter && EyepieceImageReady(cameras) && __instance.gameObject == cameras!.NightVision.gameObject)
+        {
+            PassThrough(__instance, source, destination);
+            return false;
+        }
         if (_body == null || !EyepieceImageReady(cameras) || __instance.gameObject != cameras!.NightVision.gameObject)
             return true;
 
