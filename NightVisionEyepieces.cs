@@ -527,6 +527,8 @@ internal static partial class NightVisionEyepieces
                 _directShader = shader;
             else if (shader.name == "Justachae/NVG/Objective")
                 _objectiveShader = shader;
+            else if (shader.name == "Justachae/NVG/Tube")
+                _tubeShader = shader;
         }
 
         if (_binocularShader == null || _lensMaskShader == null || _glowShader == null)

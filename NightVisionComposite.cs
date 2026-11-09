@@ -178,22 +178,40 @@ internal static partial class NightVisionEyepieces
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
         Material filter = nightVision.Material;
         filter.EnableKeyword("NIGHT_VISION_NOISE");
-        // The filter's own intensity, times the set brightness, for the lenses only; the game's value put back after.
-        bool brighter = !Mathf.Approximately(GameLensBrightness, 1f) && filter.HasProperty(FilterIntensityId);
-        float intensity = brighter ? filter.GetFloat(FilterIntensityId) : 0f;
-        if (brighter)
-            filter.SetFloat(FilterIntensityId, intensity * GameLensBrightness);
-        Graphics.Blit(frame, made, filter);
-        if (brighter)
-            filter.SetFloat(FilterIntensityId, intensity);
+        // The tube's gain and its pressing of the bright end, before the game's filter (NvgTube.shader); only this
+        // picture, the game's: BRNVG's above is its own, set in its own settings.
+        Material? tube = TubeMaterial();
+        if (tube == null)
+        {
+            Graphics.Blit(frame, made, filter);
+            return made;
+        }
+        tube.SetFloat(TubeGainId, GameLensGain);
+        tube.SetFloat(TubeCompressId, GameLensCompress);
+        RenderTexture tubed = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
+        Graphics.Blit(frame, tubed, tube);
+        Graphics.Blit(tubed, made, filter);
+        RenderTexture.ReleaseTemporary(tubed);
         return made;
     }
 
-    // How much brighter the game's own night-vision picture is made in the lenses (F12 原版夜视目镜亮度): a multiple of
-    // the filter's intensity. The frame is the naked eye's, lit by the level's own ambient (NightVisionPreCullPostfix),
-    // so it lifts what is lit, not what is dark.
-    internal static float GameLensBrightness = 1f;
-    private static readonly int FilterIntensityId = Shader.PropertyToID("_Intensity");
+    // The game's own night-vision picture in the lenses (F12 原版夜视目镜增益, 原版夜视目镜亮处压缩): its light times the
+    // gain, the bright end pressed toward the tube's ceiling by the compression. The frame is the naked eye's, lit by the
+    // level's own ambient (NightVisionPreCullPostfix): what is dark stays dark.
+    internal static float GameLensGain = 1f;
+    internal static float GameLensCompress;
+    private static Shader? _tubeShader;
+    private static Material? _tubeMaterial;
+    private static readonly int TubeGainId = Shader.PropertyToID("_TubeGain");
+    private static readonly int TubeCompressId = Shader.PropertyToID("_TubeCompress");
+
+    // Null while there is nothing to change (gain 1, no compression), or without the shader.
+    private static Material? TubeMaterial()
+    {
+        if (Mathf.Approximately(GameLensGain, 1f) && GameLensCompress <= 0f || _tubeShader == null)
+            return null;
+        return _tubeMaterial ??= new Material(_tubeShader) { name = "Justachae NVG tube", hideFlags = HideFlags.DontSave };
+    }
 
     // The eyepieces put together over the frame (from) into to, with picture as what the lenses show.
     private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture)
