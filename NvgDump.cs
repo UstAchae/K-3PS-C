@@ -12,7 +12,7 @@ internal static class NvgDump
     private const string Section = "16 夜视仪直接绘制（测试）";
     private const int RecheckFrames = 30;
 
-    private static ConfigEntry<bool>? _near, _traceSix, _area, _post, _hbao, _sun, _game;
+    private static ConfigEntry<bool>? _near, _traceSix, _area, _post, _hbao, _sun, _game, _noEmission, _noSpecular, _noFace;
     private static Camera? _on;
     private static PostProcessLayer? _layer;
     private static Behaviour? _ambientOcclusion;
@@ -23,6 +23,9 @@ internal static class NvgDump
     private static readonly List<CommandBuffer> _traceTaken = new List<CommandBuffer>();
     private static readonly List<CommandBuffer> _areaTaken = new List<CommandBuffer>();
 
+    internal static bool NoEmission => _noEmission != null && _noEmission.Value;
+    internal static bool NoSpecular => _noSpecular != null && _noSpecular.Value;
+    internal static bool NoFaceLight => _noFace != null && _noFace.Value;
     internal static bool GameDraws => _game != null && _game.Value;
     internal static bool UseRenderer => false;
     internal static float TestNear => _near != null && _near.Value ? 0.005f : 0f;
@@ -42,6 +45,9 @@ internal static class NvgDump
         _hbao = Switch("6 关 HBAO", "开：关掉环境光遮蔽。");
         _sun = Switch("7 关太阳阴影", "开：太阳不再投影。");
         _game = Switch("8 游戏自己画外壳", "开：不画合并的外壳，翻下时看到的是游戏原样画的，会被近裁剪面切开。用来对比。");
+        _noEmission = Switch("9 外壳去掉材质自带的反射", "开：外壳不要它自己算进画面的反射和环境光。");
+        _noSpecular = Switch("10 外壳去掉高光", "开：外壳不接受灯光的高光。");
+        _noFace = Switch("11 关目镜照脸的灯", "开：关掉每个镜片往脸上打的那盏绿灯。");
     }
 
     // As the main camera culls.
