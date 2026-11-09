@@ -64,7 +64,7 @@ internal static partial class NightVisionEyepieces
     // As each camera culls: lit for the main camera and the eyes.
     private static void LightFace(Camera camera)
     {
-        bool lit = Active && _body != null && !_device.Thermal && (camera == Camera.main || camera == _eyeCameras[0] || camera == _eyeCameras[1]);
+        bool lit = Active && _body != null && !_device.Thermal && camera == Camera.main;
         Color color = lit ? PhosphorColor() : Color.black;
         if (lit)
             _phosphorOf[_device.Node] = color;    // the player's other models show it so (NightVisionPreviewMounts)

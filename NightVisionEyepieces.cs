@@ -28,15 +28,10 @@ namespace EFTNewCamera;
 // switched off, it goes out with only a brief phosphor afterglow. The four do not quite keep step: each switch
 // gives each tube its own small delay.
 //
-// The device itself is drawn by the eyes (see NightVisionEyes), not the main camera: what BRNVG works on must be
-// the scene beyond the device, which the lenses look out at. With one camera both eyes stay where it is.
-// Binocular view: one camera cannot sit behind both eyecups, so while the eyepieces show the camera splits in two
-// where it is, like two eyes, each drawing the device from its own place over its half of the main camera's view.
+// The device itself is drawn by the main camera, as the game has it.
 
 internal static partial class NightVisionEyepieces
 {
-    internal static bool Binocular = true;
-    internal static float EyeShift = 0.8f;      // how far each eye moves, as a share of the way to its centre lens
     internal static bool EyepieceGlow = true;   // the lenses' light spread over the glass and eyecups (F12)
     internal static bool LensReflections = true;    // the device's glass drawn at the eyes, with what it reflects (F12)
     internal static float MonocularSeeThrough = 0.5f;   // a monocular to the other eye: 0 not faded, 0.5 as it was, 1 faded fastest (F12)
@@ -199,7 +194,7 @@ internal static partial class NightVisionEyepieces
     private const float DistortionNear = 0.03f, DistortionFar = 0.15f;   // none at the eyecup; full well back from it
 
     private static bool _installed, _rendererPatched, _bundleTried;
-    private static Shader? _binocularShader, _lensMaskShader, _eyeOpticsShader, _glowShader, _meshReadShader, _fisheyeShader;
+    private static Shader? _binocularShader, _lensMaskShader, _glowShader, _meshReadShader, _fisheyeShader;
 
     // The fisheye lens's shader, which comes in the same bundle.
     internal static Shader? FisheyeShader
@@ -229,8 +224,7 @@ internal static partial class NightVisionEyepieces
     private static CurveRotator? _rotator;
     private static bool _rotatorReversed;
     private static readonly FieldInfo? RotatorProgress = AccessTools.Field(typeof(CurveRotator), "_t");
-    private static bool BinocularOn => _split > 0.001f && Binocular && _binocularMaterial != null && _body != null;
-    private static bool EyesOn => BinocularOn || Active && !Binocular && _binocularMaterial != null && _body != null;
+    private static bool BinocularOn => _split > 0.001f && _binocularMaterial != null && _body != null;
     private static NightVisionDevice? _darkened;
     private static Behaviour? _woken;
     private static readonly FieldInfo? DeviceComponent = AccessTools.Field(typeof(NightVisionDevice), "_nightVision");
@@ -309,10 +303,8 @@ internal static partial class NightVisionEyepieces
         HoldMainThermal(cameras, thermal && worn);
         KeepThermalGlow(thermalDevice);
         Active = on;
-        _split = Binocular ? _flip : 0f;
+        _split = _flip;
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
-        if (_body != null)
-            EnsureEyeCameras();
         KeepGlow(device);
         UpdateMountHeight(player);
 
@@ -338,9 +330,6 @@ internal static partial class NightVisionEyepieces
         _lensNodes = Array.Empty<Transform>();
         _lensFloors = Array.Empty<Vector4>();
         _faceLights = Array.Empty<Light?>();
-        if (_deviceHidden && _body != null)
-            ShowDevice(true);
-        _deviceHidden = false;
         _body = null;
         _rotator = null;
         _split = 0f;
@@ -453,14 +442,10 @@ internal static partial class NightVisionEyepieces
                 _binocularShader = shader;
             else if (shader.name == "Justachae/NVG/LensMask")
                 _lensMaskShader = shader;
-            else if (shader.name == "Justachae/NVG/EyeOptics")
-                _eyeOpticsShader = shader;
             else if (shader.name == "Justachae/NVG/Glow")
                 _glowShader = shader;
             else if (shader.name == "Justachae/NVG/Shade")
                 _shadeShader = shader;
-            else if (shader.name == "Justachae/NVG/StencilMark")
-                _stencilMarkShader = shader;
             else if (shader.name == "Justachae/NVG/MeshRead")
                 _meshReadShader = shader;
             else if (shader.name == "Justachae/NVG/IrLight")
@@ -471,11 +456,10 @@ internal static partial class NightVisionEyepieces
                 _objectiveShader = shader;
         }
 
-        if (_binocularShader == null || _lensMaskShader == null || _eyeOpticsShader == null || _glowShader == null)
+        if (_binocularShader == null || _lensMaskShader == null || _glowShader == null)
             return false;
         _glowMaterial = new Material(_glowShader) { name = "Justachae NVG eyepiece glow", hideFlags = HideFlags.DontSave };
         _binocularMaterial = new Material(_binocularShader) { name = "Justachae NVG eyepieces", hideFlags = HideFlags.DontSave };
-        _eyeOptics = new Material(_eyeOpticsShader) { name = "Justachae NVG eye optics", hideFlags = HideFlags.DontSave };
         if (_objectiveShader != null)
             _objective = new Material(_objectiveShader) { name = "Justachae NVG objective", hideFlags = HideFlags.DontSave };
         return true;

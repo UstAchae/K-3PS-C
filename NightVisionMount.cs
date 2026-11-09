@@ -188,7 +188,7 @@ internal static partial class NightVisionEyepieces
         _wornMount?.Release();
         _wornMount = null;
         _mountOf = null;
-        _deviceRenderersOf = _blockersOf = null;
+        _blockersOf = null;
     }
 
     private static bool HasMountSettings(string id)
@@ -1182,7 +1182,7 @@ internal static partial class NightVisionEyepieces
                 _lodGroup.SetLODs(lods);
             }
             if (Worn)
-                _deviceRenderersOf = _blockersOf = null;    // the pieces go with the device's renderers and blockers
+                _blockersOf = null;    // the pieces go with the device's renderers and blockers
             return pieces;
         }
 

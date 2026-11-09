@@ -39,31 +39,6 @@ internal static class BodyVisibility
     private static bool _headActive;
     private static int _headLayer;
     private static readonly List<(Renderer Renderer, int Layer, bool Offscreen)> HeadRenderers = new();
-    private static ShadowCastingMode[] _headCasting = System.Array.Empty<ShadowCastingMode>();
-    private static bool _headToShadow;
-
-    // The head left to its shadow for a while (the night-vision eyes, which are in it), and back as it was.
-    internal static void HeadToShadow(bool shadow)
-    {
-        if (shadow == _headToShadow)
-            return;
-        _headToShadow = shadow;
-        if (shadow && _headCasting.Length < HeadRenderers.Count)
-            _headCasting = new ShadowCastingMode[HeadRenderers.Count];
-        for (int i = 0; i < HeadRenderers.Count && i < _headCasting.Length; i++)
-        {
-            Renderer renderer = HeadRenderers[i].Renderer;
-            if (renderer == null)
-                continue;
-            if (shadow)
-            {
-                _headCasting[i] = renderer.shadowCastingMode;
-                renderer.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
-            }
-            else
-                renderer.shadowCastingMode = _headCasting[i];
-        }
-    }
     private static readonly Dictionary<int, Renderer[]> EquipmentRenderers = new();
     private static readonly Dictionary<int, bool> HeadDevices = new();   // by renderer: on a helmet's night-vision or thermal device
     private static Player? _trackedPlayer;

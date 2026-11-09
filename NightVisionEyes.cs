@@ -7,14 +7,8 @@ using UnityEngine.Rendering.PostProcessing;
 
 namespace EFTNewCamera;
 
-// The binocular view's two eyes (see NightVisionEyepieces). The main camera renders the scene once, with all its
-// effects, but not the device, which is hidden from it on the frames the eyes draw. Each eye is a camera at its
-// own place drawing what is within half a metre (the device, the helmet's edge) over its half of the main view,
-// with its coverage (NvgEyeOptics.shader). A lens map from the same place says where the eye looks through a lens
-// past the housing; there BRNVG's picture of the main camera's frame shows, in the direction of that line of sight.
-// The device goes over the main camera's half; elsewhere the scene is the main camera's. The scene a few metres
-// off looks the same from either eye (they are centimetres apart), so the main camera's single picture of it
-// serves both. With one camera both eyes stay where it is.
+// Where each pixel of the main frame looks through a lens, past the housing. There BRNVG's picture shows, in the direction of that
+// line of sight; the device itself is drawn by the main camera, as the game has it.
 internal static partial class NightVisionEyepieces
 {
     // The eyes' near plane, the eyes' own drawing and the lenses' picture alike (F12 「头戴式成像装备」 双眼近裁剪面). At a
@@ -23,32 +17,14 @@ internal static partial class NightVisionEyepieces
     // it can go far below the main camera's without the depth suffering.
     internal static float EyeNearPlane = 0.001f;
     private static float EyeNear => Mathf.Clamp(EyeNearPlane, 0.00001f, 0.05f);
-    private const float EyeFar = 0.5f;            // the eyes draw only what is close; the scene is the main camera's
-    // How deep the eyes' view is, past what they draw (EyeFar, their culling): a light is laid on in deferred shading by
-    // drawing its volume, and with the eye inside it, by the volume's far side, metres off. At a far plane of half a
-    // metre that side was cut away and no lamp lit what the eyes drew (only the game's ambient light did): the device
-    // stood black in the lit hideout, which has none. The view runs this deep; only what is within EyeFar is drawn.
-    private const float EyeLightFar = 100f;
-    // The eyes' own drawing kept to this ratio of depth: at a near plane of a hundredth of a millimetre against the
-    // hundred metres, the depth no longer told the lamps' light and shadow apart from frame to frame and the device
-    // flickered (steady from 0.3 mm). The device is never nearer the eye than the floor this gives (0.5 mm); the
-    // lenses' picture keeps the set near plane (its own, short projection: DrawLensMap).
-    private const float EyeDepthRatio = 2e5f;
-    private static float EyeDrawNear => Mathf.Max(EyeNear, EyeLightFar / EyeDepthRatio);
-    private const float BehindLens = 0.1f;        // through a lens, what is further from the eye than this is beyond it
-    private static readonly int LensMapId = Shader.PropertyToID("_LensMap");
-    private static readonly int BehindLensId = Shader.PropertyToID("_BehindLens");
     private const float LensMapScale = 1f;   // the lenses' edges are sharp: the map at the eye's own size
     private const float LensMapRange = 1f;
-    private const float HistoryWeight = 0.9f;
     private const float Overscan = 0.06f;         // each eye's view past the middle of the frame, as a share of it
     // A tube's field, as the half angle off its axis within which a line of sight through its lens finds the
     // picture: wide enough for the whole "8" from where the camera sits behind it, so the lenses go dark only when
     // seen from well off to the side.
     private const float TubeField = 30f, TubeFieldFade = 5f;
 
-    private static readonly int HistoryId = Shader.PropertyToID("_History");
-    private static readonly int HistoryWeightId = Shader.PropertyToID("_HistoryWeight");
     private static readonly int TubeFieldId = Shader.PropertyToID("_TubeField");
     private static readonly int[] TubeAxisIds =
     {
@@ -80,11 +56,6 @@ internal static partial class NightVisionEyepieces
     private static readonly int[] EyeInvVpIds = { Shader.PropertyToID("_EyeInvVP0"), Shader.PropertyToID("_EyeInvVP1") };
     private static readonly int[] EyePosIds = { Shader.PropertyToID("_EyePos0"), Shader.PropertyToID("_EyePos1") };
 
-    private static Material? _eyeOptics;
-    private static readonly Camera?[] _eyeCameras = new Camera?[2];   // left, right
-    private static readonly RenderTexture?[] _eyeViews = new RenderTexture?[2];
-    private static readonly RenderTexture?[] _eyeHistory = new RenderTexture?[2];
-    private static readonly int[] _historyFrame = { -100, -100 };
     private static readonly RenderTexture?[] _lensMaps = new RenderTexture?[2];
     // Each eye's glass: where it looks at a lens at all, whether or not light reaches it through the exit pupil (the
     // lens map's own value is the light, dark where the line of sight misses the pupil).
@@ -96,78 +67,10 @@ internal static partial class NightVisionEyepieces
     private static Renderer[] _blockers = System.Array.Empty<Renderer>();
     private static Transform? _blockersOf;
     private static int _eyesFrame = -100;
-    private static Renderer[] _deviceRenderers = System.Array.Empty<Renderer>();
-    private static Transform? _deviceRenderersOf;
-    private static bool _deviceHidden;
-
-    // Made outside any camera's rendering.
-    private static void EnsureEyeCameras()
+    private static bool LensesOn(Camera camera)
     {
-        for (int side = 0; side < 2; side++)
-        {
-            if (_eyeCameras[side] != null)
-                continue;
-            GameObject go = new GameObject(side == 0 ? "Justachae NVG left eye" : "Justachae NVG right eye");
-            Object.DontDestroyOnLoad(go);
-            Camera camera = go.AddComponent<Camera>();
-            camera.enabled = false;
-            go.AddComponent<EyeOptics>().Side = side;
-            _eyeCameras[side] = camera;
-        }
-    }
-
-    // The main camera leaves the device to the eyes on the frames they draw it: hidden from the main camera while
-    // it culls and renders, shown to each eye while it renders. Other cameras (a free camera, the inventory) and
-    // other frames see it as always. Hidden it still casts its shadow (the main camera draws what it falls on).
-    private static void ShowDevice(bool shown)
-    {
-        Renderer[] renderers = DeviceRenderers();
-        if (_deviceShadows.Length != renderers.Length)
-            _deviceShadows = new ShadowCastingMode[renderers.Length];
-        for (int i = 0; i < renderers.Length; i++)
-        {
-            Renderer renderer = renderers[i];
-            if (renderer == null)
-                continue;
-            if (!shown)
-            {
-                _deviceShadows[i] = renderer.shadowCastingMode;
-                renderer.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
-            }
-            else if (renderer.shadowCastingMode == ShadowCastingMode.ShadowsOnly)
-                renderer.shadowCastingMode = _deviceShadows[i];
-        }
-    }
-
-    private static ShadowCastingMode[] _deviceShadows = System.Array.Empty<ShadowCastingMode>();
-
-    private static Renderer[] DeviceRenderers()
-    {
-        if (_deviceRenderers.Length > 0 && _deviceRenderersOf == _body && System.Array.TrueForAll(_deviceRenderers, r => r != null))
-            return _deviceRenderers;
-        Transform root = DeviceSlot();
-        _deviceRenderers = root.GetComponentsInChildren<Renderer>(true);
-        _deviceRenderersOf = _body;
-        return _deviceRenderers;
-    }
-
-    // The device's glass (what is not opaque) left out of an eye's view: no reflections on it. The lenses' picture is
-    // laid on by the composite, not the glass.
-    private static void HideGlass()
-    {
-        foreach (Renderer renderer in DeviceRenderers())
-        {
-            if (renderer != null && !Opaque(renderer))
-                renderer.forceRenderingOff = true;
-        }
-    }
-
-    private static bool EyesDraw(Camera camera)
-    {
-        // Only while our image effect is on to lay the eyes' views over the frame: the device is hidden from the camera
-        // for them to draw it.
-        if (!EyesOn || _body == null || _lensNodes.Length == 0 || _eyeOptics == null || camera != Camera.main
-            || _eyeCameras[0] == null || _eyeCameras[1] == null || _eyepieceImage == null || !_eyepieceImage.enabled)
+        // Only while our image effect is on to lay the lenses' picture over the frame.
+        if ((!BinocularOn && !Active) || _body == null || _lensNodes.Length == 0 || camera != Camera.main || _eyepieceImage == null || !_eyepieceImage.enabled)
             return false;
         Vector3 mount = _rotator != null ? _rotator.transform.position : _body.position;
         return (mount - camera.transform.position).sqrMagnitude <= MaxEyeDistance * MaxEyeDistance;
@@ -181,20 +84,6 @@ internal static partial class NightVisionEyepieces
         HideIrLaserLights(camera);
         if (_body != null)
             AdjustMount(camera);
-        _deviceHidden = EyesDraw(camera);
-        if (_deviceHidden)
-            ShowDevice(false);
-    }
-
-    internal static void OnCameraPostRender(Camera camera)
-    {
-        if (camera != Camera.main)
-            return;
-        if (!_deviceHidden)
-            return;
-        _deviceHidden = false;
-        if (_body != null)
-            ShowDevice(true);
     }
 
     // Just before the main camera renders, when its pose for the frame is final: each eye, moved apart as far as the
@@ -211,86 +100,64 @@ internal static partial class NightVisionEyepieces
             binocular.SetVector(TubeAxisIds[i], -_lensNodes[i].forward);
         binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((TubeField + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(TubeField * Mathf.Deg2Rad), 0f, 0f));
 
-        ShadeMain(camera, !_deviceHidden);
-        if (!_deviceHidden)
+        ShadeMain(camera, true);
+        if (!LensesOn(camera))
             return;
 
-        // The headwear and the device as they truly stand from the camera, for the eyes (NightVisionPrecise.cs).
+        // The device as it truly stands from the camera (NightVisionPrecise.cs).
         PrepareRelative(camera);
-        RenderEyes(camera, binocular, view, position);
+        RenderLenses(camera, binocular, view, position);
         // Thermal goggles' picture, for the lenses (LensPicture).
         if (_device.Thermal && Active)
             RenderThermal(camera);
     }
 
-    private static void RenderEyes(Camera camera, Material binocular, Transform view, Vector3 position)
+    private static void RenderLenses(Camera camera, Material binocular, Transform view, Vector3 position)
     {
         Vector3 right = view.right;
         float a = Vector3.Dot(FromCamera(_lensNodes[CentreLensA], position).GetColumn(3), right);
-        float b = Vector3.Dot(FromCamera(_lensNodes[CentreLensB], position).GetColumn(3), right);
-        // A monocular is before one eye only: that eye's view covers the whole frame, the further over the further it
-        // moves to the eyepiece, and over the other eye's half the device fades out toward the edge, that eye seeing past it.
+        // A monocular is before one eye only: over the other eye's half the device fades out toward the edge.
         int monocular = _device.Monocular && BinocularOn ? (a >= 0f ? 1 : 0) : -1;
-        // The other eye's fade as an exponent: 0 none, 1 as the composite has it, up to 4 the fastest.
         float seeThrough = Mathf.Clamp01(MonocularSeeThrough);
         float fade = seeThrough <= 0.5f ? seeThrough * 2f : 1f + (seeThrough - 0.5f) * 6f;
         binocular.SetVector(MonocularId, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
         binocular.SetFloat(LensClearId, LensReflections ? 0f : 1f);
+        binocular.SetFloat(SplitId, 0.5f);
+        binocular.SetVector(EyeSpanId, new Vector4(1f, 1f, 0f, 0f));
+        binocular.SetFloat(OverscanId, Overscan);
         _eyesFrame = Time.frameCount;
-        // Each eye the set share of the way from the camera to its lens: the camera gone over to the aiming eye
-        // (CameraPosition) is that eye, its eyepiece straight ahead in the middle of the frame, the other off to its
-        // side. They stay back of the camera when it has come forward to a sight (NightVisionScope.cs).
-        Vector3 back = view.forward * ScopePullback;
-        Vector3 EyeShiftOf(float lens) => right * (lens * EyeShift * _split) - back;
-        Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
-        Transform leftLens = _lensNodes[a <= b ? CentreLensA : CentreLensB], rightLens = _lensNodes[a <= b ? CentreLensB : CentreLensA];
-        // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the
-        // camera over at one eye, its eyepiece is in the middle and the other's off to the side.
-        float split = monocular >= 0 ? 0.5f
-            : Mathf.Clamp(0.5f * (Across(camera, position, leftShift, leftLens) + Across(camera, position, rightShift, rightLens)), 0.2f, 0.8f);
-        float leftSpan = monocular >= 0 ? 1f : HeldSpan(0, split + 0.5f * Overscan), rightSpan = monocular >= 0 ? 1f : HeldSpan(1, 1f - split + 0.5f * Overscan);
-        binocular.SetFloat(SplitId, split);
-        binocular.SetVector(EyeSpanId, new Vector4(leftSpan, rightSpan, 0f, 0f));
-        // The eyes are in the head: shown (F12), its eyelids and brows millimetres before them hid the device's top.
-        // Left to its shadow while they draw, as when it is not shown.
-        BodyVisibility.HeadToShadow(true);
-        try
-        {
-            for (int side = 0; side < 2; side++)
-            {
-                if (monocular >= 0 && side != monocular)
-                    continue;
-                RenderEye(side, camera, position, side == 0 ? leftShift : rightShift, side == 0 ? leftLens : rightLens, side == 0 ? leftSpan : rightSpan);
-            }
-        }
-        finally
-        {
-            BodyVisibility.HeadToShadow(false);
-        }
-    }
 
-    // How much of the frame's width an eye draws: what it needs, rounded up to a step and kept while it still covers
-    // the need and is not much more, so that the split, which moves a little with every turn of the head against the
-    // view, does not change the eye's targets' size (each change makes them anew) frame after frame.
-    private const float SpanStep = 0.05f;
-    private static readonly float[] _heldSpans = { 0f, 0f };
-    private static float HeldSpan(int side, float needed)
-    {
-        float held = _heldSpans[side];
-        if (needed > held || needed < held - 2f * SpanStep)
-            held = _heldSpans[side] = Mathf.Min(1f, Mathf.Ceil(needed / SpanStep) * SpanStep);
-        return held;
-    }
-
-    // Where across the frame (0 left, 1 right) an eye standing at shift from the camera sees a lens straight on.
-    private static float Across(Camera camera, Vector3 cameraPlace, Vector3 shift, Transform lens)
-    {
-        Vector3 to = (Vector3)FromCamera(lens, cameraPlace).GetColumn(3) - shift;
-        Transform view = camera.transform;
-        float z = Vector3.Dot(to, view.forward);
-        if (z <= 1e-4f)
-            return 0.5f;
-        return 0.5f + 0.5f * camera.projectionMatrix.m00 * Vector3.Dot(to, view.right) / z;
+        int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
+        // 24-bit depth: with the near plane down to a hundredth of a millimetre a 16-bit one told the housing from the
+        // card before it only to some millimetres.
+        RenderTexture lensMap = Target(_lensMaps, 0, Mathf.Max((int)(width * LensMapScale), 8), Mathf.Max((int)(height * LensMapScale), 8), 24,
+            RenderTextureFormat.ARGB32, "Justachae NVG lens map");
+        RenderTexture glassMap = Target(_glassMaps, 0, lensMap.width, lensMap.height, 0, RenderTextureFormat.RG16, "Justachae NVG glass map");
+        // Each pixel's line of sight, by the view turned but not moved (as if at the world's origin): with the place in it, far
+        // out in a map, the inverse loses so much to rounding that the lines of sight, and the lenses' picture with them, jump
+        // about from frame to frame.
+        Matrix4x4 turned = camera.worldToCameraMatrix;
+        turned.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));
+        Matrix4x4 projection = Matrix4x4.Perspective(camera.fieldOfView, camera.aspect, EyeNear, LensMapRange);
+        Matrix4x4 inverse = (Matrix4x4.Perspective(camera.fieldOfView, camera.aspect, EyeNear, camera.farClipPlane) * turned).inverse;
+        // Until the device is on, no light comes through.
+        if (Active)
+            DrawLensMap(lensMap, glassMap, position, Vector3.zero, turned, projection);
+        else
+        {
+            ClearLensMap(lensMap);
+            ClearLensMap(glassMap);
+        }
+        Transform lens = _lensNodes[CentreLensA];
+        float back = Mathf.InverseLerp(DistortionNear, DistortionFar, (lens.position - position).magnitude / lens.lossyScale.x);
+        for (int side = 0; side < 2; side++)
+        {
+            binocular.SetTexture(EyeIds[side], Texture2D.blackTexture);
+            binocular.SetTexture(LensIds[side], lensMap);
+            binocular.SetTexture(GlassIds[side], glassMap);
+            binocular.SetMatrix(EyeInvVpIds[side], inverse);
+            binocular.SetVector(EyePosIds[side], new Vector4(position.x, position.y, position.z, back));
+        }
     }
 
     // Where a transform stands from the head along the world's axes, by the local offsets between them: up from each
@@ -319,133 +186,6 @@ internal static partial class NightVisionEyepieces
         return m;
     }
 
-    // cameraPlace: the main camera's; shift: this eye from it.
-    private static void RenderEye(int side, Camera main, Vector3 cameraPlace, Vector3 shift, Transform centreLens, float span)
-    {
-        Vector3 position = cameraPlace + shift;
-        // Half of the frame the game's SSAA stage puts it in, and a little past the middle (Overscan), where the
-        // composite eases from one eye to the other; or all of it (a monocular's eye).
-        float middle = span >= 1f ? 0f : side == 0 ? span - 1f : 1f - span;
-        int width = Mathf.Max(Mathf.CeilToInt(Screen.width * span), 1), height = Mathf.Max(Screen.height, 1);
-        RenderTexture view = Target(_eyeViews, side, width, height, 24, RenderTextureFormat.ARGBHalf, "Justachae NVG eye");
-        // 24-bit depth: with the near plane down to a hundredth of a millimetre a 16-bit one told the housing from the
-        // card before it only to some millimetres.
-        RenderTexture lensMap = Target(_lensMaps, side, Mathf.Max((int)(width * LensMapScale), 8), Mathf.Max((int)(height * LensMapScale), 8), 24,
-            RenderTextureFormat.ARGB32, "Justachae NVG lens map");
-        RenderTexture glassMap = Target(_glassMaps, side, lensMap.width, lensMap.height, 0, RenderTextureFormat.RG16, "Justachae NVG glass map");
-
-        Camera camera = _eyeCameras[side]!;
-
-        // The main camera's view cut to this eye's part (normalised device x of that part rescaled to fill it),
-        // with a near plane close enough for the eyecups.
-        Matrix4x4 crop = Matrix4x4.identity;
-        crop.m00 = 1f / span;
-        crop.m03 = -middle / span;
-        Matrix4x4 projection = crop * Matrix4x4.Perspective(main.fieldOfView, main.aspect, EyeDrawNear, EyeLightFar);
-
-        camera.CopyFrom(main);
-        camera.transform.position = position;
-        camera.rect = new Rect(0f, 0f, 1f, 1f);
-        camera.nearClipPlane = EyeDrawNear;
-        camera.farClipPlane = EyeLightFar;
-        camera.projectionMatrix = projection;
-        // Culled to what is within EyeFar, as before; shadows received only there too (the game's shadow distance
-        // would otherwise spread its cascades over the deeper view).
-        camera.cullingMatrix = crop * Matrix4x4.Perspective(main.fieldOfView, main.aspect, EyeDrawNear, EyeFar) * camera.worldToCameraMatrix;
-        camera.depthTextureMode |= DepthTextureMode.Depth;
-        camera.clearFlags = CameraClearFlags.SolidColor;
-        camera.backgroundColor = Color.clear;
-        // Each pixel's line of sight from this eye, by its view turned but not moved (as if at the world's origin):
-        // with the eye's place in it, far out in a map, the inverse loses so much to rounding that the lines of
-        // sight, and the lenses' picture with them, jump about from frame to frame.
-        Matrix4x4 turned = camera.worldToCameraMatrix;
-        turned.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));
-        Matrix4x4 inverse = (projection * turned).inverse;
-        // Not moved from frame to frame: the main camera's own frame is not either (no anti-aliasing), and the eye's
-        // shifting edges shimmered against it. The game's dithered glass still changes its pattern every frame and
-        // is evened out over frames (Optics).
-
-        // Which lens each pixel of this eye looks through, past the housing: the device's own meshes drawn as
-        // blockers and each lens into its own channel, from this eye. Until the device is on, no light comes through.
-        if (Active)
-            DrawLensMap(lensMap, glassMap, cameraPlace, shift, turned, crop * Matrix4x4.Perspective(main.fieldOfView, main.aspect, EyeNear, LensMapRange));
-        else
-        {
-            ClearLensMap(lensMap);
-            ClearLensMap(glassMap);
-        }
-
-        camera.targetTexture = view;
-        LightEye(camera);
-        // The eyecups as they stand from this eye: by the device's true offsets where they are known.
-        if (_precise)
-            ShadeCamera(side, camera, projection, t => (Vector3)FromCamera(t, cameraPlace).GetColumn(3) - shift);
-        else
-            ShadeCamera(side, camera, projection, t => t.position - position);
-        ShowDevice(true);
-        if (!LensReflections)
-            HideGlass();
-        if (_precise)
-            PutPieces(side, camera, shift, turned, projection);
-        // Which of its pixels are the device's: only those go over the frame (NightVisionSelf).
-        PutSelfMask(side, camera, width, height, shift, turned, projection);
-        float shadowDistance = QualitySettings.shadowDistance;
-        try
-        {
-            QualitySettings.shadowDistance = Mathf.Min(shadowDistance, EyeFar);
-            camera.Render();
-        }
-        finally
-        {
-            TakeSelfMask(side, camera);
-            if (_precise)
-                TakePieces(side, camera);
-            ShowDevice(false);
-            camera.ResetProjectionMatrix();
-            camera.ResetCullingMatrix();
-            QualitySettings.shadowDistance = shadowDistance;
-            camera.targetTexture = null;
-        }
-
-        Material binocular = _binocularMaterial!;
-        binocular.SetFloat(OverscanId, Overscan);
-        binocular.SetTexture(EyeIds[side], view);
-        binocular.SetTexture(LensIds[side], lensMap);
-        binocular.SetTexture(GlassIds[side], glassMap);
-        binocular.SetMatrix(EyeInvVpIds[side], inverse);
-        // w: how strongly this eye sees the eyepieces' distortion, growing as it stands further back from them.
-        float back = Mathf.InverseLerp(DistortionNear, DistortionFar, (centreLens.position - position).magnitude / centreLens.lossyScale.x);
-        binocular.SetVector(EyePosIds[side], new Vector4(position.x, position.y, position.z, back));
-    }
-
-    // The eye camera's image: the device alone, solid where it was drawn (premultiplied, its coverage in alpha),
-    // resolved over frames as the main camera resolves its own.
-    internal static void Optics(int side, RenderTexture source, RenderTexture destination)
-    {
-        if (_eyeOptics == null)
-        {
-            Graphics.Blit(source, destination);
-            return;
-        }
-
-        RenderTexture current = RenderTexture.GetTemporary(source.width, source.height, 0, RenderTextureFormat.ARGBHalf);
-        _eyeOptics.SetTexture(LensMapId, _lensMaps[side] != null ? _lensMaps[side] : Texture2D.blackTexture);
-        _eyeOptics.SetFloat(BehindLensId, BehindLens);
-        _eyeOptics.SetTexture(SelfMaskId, SelfMask(side));
-        Graphics.Blit(source, current, _eyeOptics, 0);
-        RenderTexture history = Target(_eyeHistory, side, source.width, source.height, 0, RenderTextureFormat.ARGBHalf, "Justachae NVG eye history");
-        bool continued = _historyFrame[side] == Time.frameCount - 1;
-        _eyeOptics.SetTexture(HistoryId, history);
-        _eyeOptics.SetFloat(HistoryWeightId, continued ? HistoryWeight : 0f);
-        RenderTexture resolved = RenderTexture.GetTemporary(source.width, source.height, 0, RenderTextureFormat.ARGBHalf);
-        Graphics.Blit(current, resolved, _eyeOptics, 1);
-        Graphics.Blit(resolved, history);
-        Graphics.Blit(resolved, destination);
-        _historyFrame[side] = Time.frameCount;
-        RenderTexture.ReleaseTemporary(current);
-        RenderTexture.ReleaseTemporary(resolved);
-    }
-
     // The game's ambient light, which it lays on through command buffers of each camera's own (the bulk of the light
     // in the dark): the eyes have them as the main camera has, or what they draw comes out near black.
     // Kept as the game makes and destroys them (it announces each), so they never have to be searched for.
@@ -463,16 +203,6 @@ internal static partial class NightVisionEyepieces
             if (connector is AmbientLight ambient)
                 _ambientLights.Remove(ambient);
         };
-    }
-
-    private static void LightEye(Camera camera)
-    {
-        foreach (AmbientLight ambient in _ambientLights)
-        {
-            if (ambient != null && ambient.isActiveAndEnabled)
-                ambient.ManualOnRenderObject(camera);
-        }
-        RedrawAmbient(camera);
     }
 
     private static readonly AccessTools.FieldRef<AmbientLight, Dictionary<Camera, AmbientLight.CamSettings>> AmbientCamerasOf =
@@ -636,11 +366,8 @@ internal static partial class NightVisionEyepieces
     {
         for (int i = 0; i < 2; i++)
         {
-            Drop(_eyeViews, i);
-            Drop(_eyeHistory, i);
             Drop(_lensMaps, i);
-            Drop(_selfMasks, i);
-            _heldSpans[i] = 0f;
+            Drop(_glassMaps, i);
         }
     }
 
@@ -652,11 +379,4 @@ internal static partial class NightVisionEyepieces
         Object.Destroy(targets[i]);
         targets[i] = null;
     }
-}
-
-internal sealed class EyeOptics : MonoBehaviour
-{
-    internal int Side;
-
-    private void OnRenderImage(RenderTexture source, RenderTexture destination) => NightVisionEyepieces.Optics(Side, source, destination);
 }

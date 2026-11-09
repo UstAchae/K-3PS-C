@@ -143,12 +143,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 
     private void BindNightVision()
     {
-        ConfigEntry<bool> binocular = SettingsLayout.Bind(Config, "头戴式成像装备", "双眼镜头", true,
-            new ConfigDescription("头戴夜视仪和热成像开着时，镜头在原地分成左右两个相机，像两只眼睛：各自横移到对准自己那一侧的目镜，随夜视仪翻下的动画逐渐分开。屏幕从中间分成左右两半，左半边是左眼看到的，右半边是右眼看到的，中间平滑过渡。两个相机只画离眼半米以内的东西（夜视仪、头盔边缘），远处的景物仍是主镜头的。镜头离夜视仪较远（比如自由镜头）时不分开。",
-                null, new ConfigurationManagerAttributes { Order = 2 }));
-        ConfigEntry<float> eyeShift = SettingsLayout.Bind(Config, "头戴式成像装备", "双眼平移比例", 0.8f,
-            new ConfigDescription("双眼镜头时，两个相机各自往外平移多少：1 是正好对准自己那一侧的中间镜片，0 是不平移。画面里的景物始终完整，平移只改变目镜的圆在画面里的位置和被镜片边缘挡掉多少。",
-                new AcceptableValueRange<float>(0f, 1.2f), new ConfigurationManagerAttributes { Order = 1 }));
         ConfigEntry<KeyboardShortcut> raiseMount = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架升高", new KeyboardShortcut(KeyCode.Equals, KeyCode.LeftAlt),
             new ConfigDescription("按住时把支架往上调（TATM 的滑块、G24 的托架）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。每个支架（每一件物品）各自记住自己调好的高度、仰俯和前后，存在配置文件夹里的 justachae.thirdpersoncamera.mounts.txt。", null, new ConfigurationManagerAttributes { Order = -1 }));
         ConfigEntry<KeyboardShortcut> lowerMount = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架降低", new KeyboardShortcut(KeyCode.Minus, KeyCode.LeftAlt),
@@ -214,8 +208,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             NightVisionEyepieces.TiltDown = tiltDown.Value;
             NightVisionEyepieces.SlideForward = slideForward.Value;
             NightVisionEyepieces.SlideBack = slideBack.Value;
-            NightVisionEyepieces.Binocular = binocular.Value;
-            NightVisionEyepieces.EyeShift = eyeShift.Value;
         }
 
         picture.SettingChanged += (_, _) => Refresh();
@@ -228,8 +220,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         glow.SettingChanged += (_, _) => Refresh();
         reflections.SettingChanged += (_, _) => Refresh();
         monocularSeeThrough.SettingChanged += (_, _) => Refresh();
-        binocular.SettingChanged += (_, _) => Refresh();
-        eyeShift.SettingChanged += (_, _) => Refresh();
         raiseMount.SettingChanged += (_, _) => Refresh();
         lowerMount.SettingChanged += (_, _) => Refresh();
         tiltUp.SettingChanged += (_, _) => Refresh();
@@ -560,7 +550,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     };
     private static readonly Camera.CameraCallback PostRender = camera =>
     {
-        Guarded(NightVisionEyepieces.OnCameraPostRender, camera, "post-render (eyepieces)");
         Guarded(NightVisionEyepieces.OnCameraPostRenderIr, camera, "post-render (IR)");
         Guarded(OpticElevation.Restore, camera, "post-render (optic)");
         Guarded(NightVisionEyepieces.OnOpticPostRenderIr, camera, "post-render (optic IR)");
