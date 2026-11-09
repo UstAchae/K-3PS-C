@@ -10,7 +10,7 @@ namespace EFTNewCamera;
 // camera's, so the lights, the shadows and the game's effects fall on it as on anything the camera draws.
 internal static partial class NightVisionEyepieces
 {
-    private const float DirectFar = 100f;
+    private const float DirectFar = 2f;           // m: past all of the device; with the ratio below, what lets the near plane come in
     private const float DirectDepthRatio = 2e5f;  // the device's own depth kept to this ratio: below it the lights flickered on it
     private const float DirectInsetPixels = 6f;   // of the screen: past a pixel of the upscaler's render and its jitter
     private static float DirectNear => Mathf.Max(EyeNear, DirectFar / DirectDepthRatio);

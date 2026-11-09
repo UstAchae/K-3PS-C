@@ -97,9 +97,20 @@ void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover, out fl
  eyeSide(uv, false, leftEye, leftLight, leftCover, leftDark);
  eyeSide(uv, true, rightEye, rightLight, rightCover, rightDark);
  eye = lerp(leftEye, rightEye, toRight);
- light = lerp(leftLight, rightLight, toRight);
- cover = lerp(leftCover, rightCover, toRight);
- dark = lerp(leftDark, rightDark, toRight);
+ // Where the lenses' pictures meet, neither gives way to dark: a lens the other eye has nothing of counts for nothing, each shows by
+ // how much light it has, and at the line's middle the brighter sets how bright it is. So no place shows where the two lenses cross.
+ float a = leftLight.w * (1 - toRight), b = rightLight.w * toRight;
+ if (a + b <= 0) {
+  light = lerp(leftLight, rightLight, toRight);
+  cover = lerp(leftCover, rightCover, toRight);
+  dark = lerp(leftDark, rightDark, toRight);
+  return;
+ }
+ float weighted = (a * leftLight.w + b * rightLight.w) / (a + b);
+ float shown = lerp(weighted, max(leftLight.w, rightLight.w), 4 * toRight * (1 - toRight));
+ light = float4(((1 - toRight) * leftLight.rgb + toRight * rightLight.rgb) / (a + b) * shown, shown);
+ cover = max(leftCover, rightCover);
+ dark = min(leftDark, rightDark);
 }
 
 void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover) {

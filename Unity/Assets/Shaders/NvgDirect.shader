@@ -82,7 +82,10 @@ Shader "Justachae/NVG/Direct" {
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
   float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
   toRight = t;
-  bool left = t < 1 && shown(rawL) && !within(_DirectLens0, uv, _EyeInvVP0), right = t > 0 && shown(rawR) && !within(_DirectLens1, uv, _EyeInvVP1);
+  // Through either eye's lens here, nothing of the device: the lenses' picture is made from this frame, and the composite shows the
+  // lens there whole.
+  if ((t < 1 && within(_DirectLens0, uv, _EyeInvVP0)) || (t > 0 && within(_DirectLens1, uv, _EyeInvVP1))) return 0;
+  bool left = t < 1 && shown(rawL), right = t > 0 && shown(rawR);
   if (left && right) return 1;
   if (left) { toRight = 0; return 1 - t; }
   if (right) { toRight = 1; return t; }
