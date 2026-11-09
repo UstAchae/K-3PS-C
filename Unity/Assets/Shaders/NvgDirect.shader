@@ -217,10 +217,7 @@ Shader "Justachae/NVG/Direct" {
     if (coverage(uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight) <= 0 || (_DirectHalf < 0.5) != (toRight < 0.5))
      discard;
     float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
-    #if UNITY_UV_STARTS_AT_TOP
-    now.y = 1 - now.y;
-    old.y = 1 - old.y;
-    #endif
+    // By the camera's own matrices, up being up: no turning over, as the game's motion goes the same way in both directions.
     return float4(now - old, 0, 1);
    }
    ENDCG
