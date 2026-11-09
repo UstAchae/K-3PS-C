@@ -518,7 +518,7 @@ internal static partial class NightVisionEyepieces
 
         _directMaterial.SetFloat(DirectStencilRefId, _stencilRef);
         _directMaterial.SetFloat("_DirectNoEmission", NvgDump.NoEmission ? 1f : 0f);
-        _directMaterial.SetFloat("_DirectNoSpecular", NvgDump.NoSpecular ? 1f : 0f);
+        _directMaterial.SetFloat("_DirectSpecular", Mathf.Lerp(1f, NvgDump.Specular, _split));
         buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
         buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 0);

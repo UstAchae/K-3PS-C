@@ -10,7 +10,8 @@ Shader "Justachae/NVG/Direct" {
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectLD);
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
  float _DirectSplit, _DirectStrip, _DirectBehind;
- float _DirectNoEmission, _DirectNoSpecular;   // temporary: switches in F12
+ float _DirectNoEmission;   // temporary: a switch in F12
+ float _DirectSpecular;     // how much of its highlights the device keeps: the lights take it for nearer than it is
  float4x4 _EyeInvVP0, _EyeInvVP1;
  float4 _TubeField, _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;
  float4 _DirectInset;    // how far past the lens's edge the device goes, as a share of the frame
@@ -75,19 +76,16 @@ Shader "Justachae/NVG/Direct" {
   #endif
  }
 
- // How much of the device is here, and how far over to the right eye's it is. As the composite takes the eyes' views: the left eye's
- // on the left of the line, the right's on the right, and across the strip about it the one gives way to the other. All that goes
- // past the line is gone. Through a lens the device is left out, however near (the tube behind the glass is within a hand of the
- // eye), so the scene stays there for the picture; but where the other eye still has the housing that goes on over it, or
- // what is under the lens's fading picture would be the bare scene.
+ // How much of the device is here, and how far over to the right eye's it is. As the eyes' pictures were eased into each other:
+ // the left eye's on the left of the line, the right's on the right, each by its share across the strip about it, and through a
+ // lens that eye has nothing of the device. All that goes past the line is gone.
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
   float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
   toRight = t;
-  bool holeL = t < 1 && within(_DirectLens0, uv, _EyeInvVP0), holeR = t > 0 && within(_DirectLens1, uv, _EyeInvVP1);
-  bool left = t < 1 && shown(rawL) && !holeL, right = t > 0 && shown(rawR) && !holeR;
+  bool left = t < 1 && shown(rawL) && !within(_DirectLens0, uv, _EyeInvVP0), right = t > 0 && shown(rawR) && !within(_DirectLens1, uv, _EyeInvVP1);
   if (left && right) return 1;
-  if (left) { toRight = 0; return holeR ? 1 : 1 - t; }
-  if (right) { toRight = 1; return holeL ? 1 : t; }
+  if (left) { toRight = 0; return 1 - t; }
+  if (right) { toRight = 1; return t; }
   return 0;
  }
 
@@ -143,7 +141,7 @@ Shader "Justachae/NVG/Direct" {
     o.g2 = lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
     o.g3 = lerp(tex2D(_DirectL3, uv), tex2D(_DirectR3, uv), toRight);
     if (_DirectNoEmission > 0.5) o.g3.rgb = 0;
-    if (_DirectNoSpecular > 0.5) o.g1 = 0;
+    o.g1.rgb *= _DirectSpecular;
     o.depth = mainDepth(lerp(inverseDepth(rawL), inverseDepth(rawR), toRight));
     return o;
    }
@@ -174,7 +172,7 @@ Shader "Justachae/NVG/Direct" {
     o.g0 = lerp(tex2D(_DirectL0, uv), tex2D(_DirectR0, uv), toRight);
     o.g1 = lerp(tex2D(_DirectL1, uv), tex2D(_DirectR1, uv), toRight);
     o.g2 = lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
-    if (_DirectNoSpecular > 0.5) o.g1 = 0;
+    o.g1.rgb *= _DirectSpecular;
     return o;
    }
    ENDCG
