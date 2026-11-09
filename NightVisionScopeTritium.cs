@@ -9,8 +9,8 @@ namespace EFTNewCamera;
 // the objective's radius over the vial's distance; the sight then magnifies the picture with the disc in it, and the
 // goggle, focused at infinity as the sight's picture is, sees that disc sharp. So the discs are drawn into the sight
 // camera's own picture (passes 8 and 9 of NvgObjective.shader, as for the frame, with the sight camera's view, its
-// depth, and its objective for the aperture), before the light through the sight is counted (pass 11), which dims
-// them with the rest. Hidden where something nearer stands in the way, from the sight camera's depth.
+// depth, and its objective for the aperture); the light through the sight, counted where the tube sees it (NightVisionScope.cs),
+// dims them with the rest. Hidden where something nearer stands in the way, from the sight camera's depth.
 internal static partial class NightVisionEyepieces
 {
     private const float ScopeFocus = 100f;               // where a sight is focused (m): the game has no figure for it
@@ -155,8 +155,7 @@ internal static partial class NightVisionEyepieces
         }
     }
 
-    // The sight camera's steps after it has rendered: the vials' occlusion and discs, then the light through the
-    // sight that reaches the goggle.
+    // The sight camera's steps after it has rendered: the vials' occlusion and discs.
     private static CommandBuffer MakeScopeBuffer()
     {
         _scopeTritium ??= new Material(_objectiveShader!) { name = "Justachae NVG sight tritium", hideFlags = HideFlags.DontSave };
@@ -172,8 +171,7 @@ internal static partial class NightVisionEyepieces
             _opticDiscs.MarkDynamic();
         }
         // The sight's picture, its near blurred by the sight's own objective (passes 0 to 5 and 3, as for the frame,
-        // with the sight's defocus for the blur: Blur in NvgObjective.shader), its vials' discs laid on (8, 9), and
-        // the light through it that reaches the goggle counted (11).
+        // with the sight's defocus for the blur: Blur in NvgObjective.shader), its vials' discs laid on (8, 9).
         var buffer = new CommandBuffer { name = "Justachae NVG sight picture" };
         buffer.GetTemporaryRT(ScopeSharpId, -1, -1, 0, FilterMode.Bilinear, RenderTextureFormat.DefaultHDR);
         buffer.Blit(BuiltinRenderTextureType.CameraTarget, ScopeSharpId);
@@ -196,7 +194,7 @@ internal static partial class NightVisionEyepieces
         buffer.SetRenderTarget(ScopeTempId);
         buffer.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.Ortho(0f, 1f, 0f, 1f, -1f, 1f));  // the buffer makes it the GPUs own
         buffer.DrawMesh(_opticDiscs, Matrix4x4.identity, _scopeTritium, 0, 9);
-        buffer.Blit(ScopeTempId, BuiltinRenderTextureType.CameraTarget, _scopeLight, 11);
+        buffer.Blit(ScopeTempId, BuiltinRenderTextureType.CameraTarget);
         buffer.ReleaseTemporaryRT(ScopeTempId);
         return buffer;
     }

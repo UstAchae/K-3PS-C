@@ -15,8 +15,7 @@
 // Pass 6: how blurred each part of the frame is (0 to 1), at a quarter of the size.
 // Pass 8: tritium vials' occlusion over their discs, an atlas tile each. Pass 9: their discs, added
 //         (NightVisionTritium.cs, NightVisionTrace.cs).
-// Pass 10: a magnified sight's lens into a mask. Pass 11: the light through it, on the sight camera's picture
-//         (NightVisionScope.cs).
+// Pass 10: a magnified sight's lens into a mask (NightVisionScope.cs).
 // Pass 7: the lenses' picture once the game's or BRNVG's filter has made it, its grain eased where the frame was
 //         blurred (_Mask): the filter's noise, one pixel fine, made a blurred thing look textured and its edge hard.
 Shader "Justachae/NVG/Objective" {
@@ -41,6 +40,7 @@ Shader "Justachae/NVG/Objective" {
   // the sight) blurred over its edge as anything near is over what lies behind.
   Texture2D _ScopeLens;
   float _ScopeOn;
+  float _ScopeLight;   // the share of the sight's light that reaches the tube
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
   }
@@ -135,7 +135,8 @@ Shader "Justachae/NVG/Objective" {
     float4 widest = Level(max(radius, 3) * 2, n0, n1, n2, n3, n4);
     still = lerp(still, a0.rgb, 0.5 * saturate(widest.a * 3));
     float3 under = Level(max(radius, 3), a0, _All1.Sample(sampler_linear_clamp, i.uv), _All2.Sample(sampler_linear_clamp, i.uv), _All3.Sample(sampler_linear_clamp, i.uv), _All4.Sample(sampler_linear_clamp, i.uv)).rgb;
-    float3 behind = InLens(i.uv) ? frame.rgb : lerp(still, under, saturate(near.a));
+    // What of the sight's light the objective takes in: here, in what the tube sees alone, so the bare eye past the lens sees it whole.
+    float3 behind = InLens(i.uv) ? frame.rgb * _ScopeLight : lerp(still, under, saturate(near.a));
     // An out-of-focus edge fades over the whole of its disc: how much the near covers is taken from a blur twice as
     // wide as its light, so that its outline goes soft without its inside getting any blurrier.
     float4 wide = Level(max(radius, 3) * 2, n0, n1, n2, n3, n4);
@@ -419,42 +420,6 @@ Shader "Justachae/NVG/Objective" {
     if (sceneAlong < along - 0.004)
      discard;
     return 1;
-   }
-   ENDCG
-  }
-  // Pass 11, on the sight camera's own picture: the light of it that reaches the goggle's objective. Each direction
-  // of the picture leaves the eyepiece as a beam as wide as the sight's exit pupil, at the magnification times its
-  // angle off the axis; on the objective's plane the beam is the pupil moved along by how far the plane is from it,
-  // that far times its slope; the objective takes in what of it falls on its aperture, and the picture there is as
-  // bright as that over the aperture.
-  Pass {
-   CGPROGRAM
-   #pragma vertex vert_img
-   #pragma fragment frag
-   float4 _ScopePupil;    // xy the objective's centre off the pupil's across the axis, z along it (m); w the pupil's radius
-   float4 _OpticTan;      // xy the sight camera's half-field tangents across and up, z the magnification
-   float _ApertureRadius;
-   // The area two discs of radius r and R, their centres d apart, have in common.
-   float Overlap(float r, float R, float d) {
-    if (d >= r + R)
-     return 0;
-    if (d <= abs(R - r)) {
-     float m = min(r, R);
-     return UNITY_PI * m * m;
-    }
-    float a = r * r * acos(clamp((d * d + r * r - R * R) / (2 * d * r), -1, 1));
-    float b = R * R * acos(clamp((d * d + R * R - r * r) / (2 * d * R), -1, 1));
-    float c = 0.5 * sqrt(max((-d + r + R) * (d + r - R) * (d - r + R) * (d + r + R), 0));
-    return a + b - c;
-   }
-   float4 frag (v2f_img i) : SV_Target {
-    float4 c = tex2D(_MainTex, i.uv);
-    if (_ScopePupil.w <= 0)
-     return c;
-    float2 slope = (i.uv * 2 - 1) * _OpticTan.xy * _OpticTan.z;
-    float apart = length(_ScopePupil.z * slope - _ScopePupil.xy);
-    float R = _ApertureRadius;
-    return float4(c.rgb * (Overlap(_ScopePupil.w, R, apart) / (UNITY_PI * R * R)), c.a);
    }
    ENDCG
   }

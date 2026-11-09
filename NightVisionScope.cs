@@ -12,12 +12,12 @@ namespace EFTNewCamera;
 // eye point, where the game puts the camera). The camera, which makes the goggle's picture, goes there with it, the
 // eyes and the device a hand's breadth behind (NightVisionEyes: each eye's shift).
 // The sight's picture is at infinity, as the goggle is focused, so it is sharp (no objective blur over the lens). Its
-// light leaves the eyepiece through the sight's exit pupil (objective diameter over magnification) and only what of
-// it the goggle's objective takes in reaches the tube: each direction of the sight's picture as bright as the overlap
-// of the pupil's beam for it and the goggle's aperture, over the aperture. That is worked into the sight camera's own
-// picture (pass 12 of NvgObjective.shader, after it has rendered), so it goes wherever the lens shows it. At high
-// power the pupil is a few millimetres across and the picture dim, and the tube's noise, laid on later at its usual
-// strength, stands out the more; with the objective off the eye point the beams slide off the aperture.
+// light leaves the eyepiece through the sight's exit pupil (objective diameter over magnification) and only what of it the
+// goggle's objective takes in reaches the tube: the sight's picture as bright as the overlap of the pupil's beam and the
+// goggle's aperture, over the aperture. That is worked into what the tube sees alone (pass 3 of NvgObjective.shader, over
+// the sight's lens): seen past the goggle's lens, by the bare eye, the sight keeps its light. At high power the pupil is a
+// few millimetres across and the picture dim, and the tube's noise, laid on later at its usual strength, stands out the
+// more; with the objective off the eye point the beam slides off the aperture.
 internal static partial class NightVisionEyepieces
 {
     internal static float ScopePullback;                 // how far the camera is ahead of the eyes now (m)
@@ -25,15 +25,14 @@ internal static partial class NightVisionEyepieces
     private const float DefaultScopeObjective = 0.032f;  // a sight's objective when its name gives none (m)
     private static readonly Regex ObjectiveInName = new Regex(@"\d+(?:[.,]\d+)?[x×](\d+)", RegexOptions.Compiled);
 
-    private static Material? _scopeMask, _scopeLight;
+    private static Material? _scopeMask;
+    private static float _scopeLight = 1f;              // the share of the sight's light that reaches the tube
     private static RenderTexture? _scopeLens;           // where the sight's lens is in the frame
     private static CommandBuffer? _scopeBuffer, _scopeLensBuffer;
     private static Camera? _scopeBufferOn;
     private static readonly int ScopeLensId = Shader.PropertyToID("_ScopeLens");
     private static readonly int ScopeOnId = Shader.PropertyToID("_ScopeOn");
-    private static readonly int ScopePupilId = Shader.PropertyToID("_ScopePupil");
-    private static readonly int OpticTanId = Shader.PropertyToID("_OpticTan");
-    private static readonly int ApertureRadiusId = Shader.PropertyToID("_ApertureRadius");
+    private static readonly int ScopeLightId = Shader.PropertyToID("_ScopeLight");
     private static readonly int ScopeTempId = Shader.PropertyToID("_JustachaeScopeLight");
 
     // The sight's lens as the camera renders it: by the time the frame is worked on the gun may have moved on.
@@ -66,8 +65,8 @@ internal static partial class NightVisionEyepieces
         return Mathf.Abs(Vector3.Dot(_lensNodes[CentreLensA].position - cameraPlace, cameraTurn * Vector3.right)) <= BeforeEyeWithin;
     }
 
-    // As the main camera begins to render: the lens's place noted, and the sight camera's picture given the light that
-    // reaches the objective (its command buffer on while there is a sight to look through, off otherwise).
+    // As the main camera begins to render: the lens's place noted, and the light of the sight that reaches the objective
+    // worked out (the sight camera's command buffer on while there is a sight to look through, off otherwise).
     private static void NoteScope()
     {
         Camera? optic = null;
@@ -104,12 +103,9 @@ internal static partial class NightVisionEyepieces
                 float magnification = MagnificationOf(scope.Mod, sight!, optic);
                 float objective = ObjectiveOf(scope.Mod);
                 _scopeObjectiveRadius = 0.5f * objective;
-                float tanUp = Mathf.Tan(optic.fieldOfView * 0.5f * Mathf.Deg2Rad);
-                _scopeLight ??= new Material(_objectiveShader) { name = "Justachae NVG sight light", hideFlags = HideFlags.DontSave };
-                var pupil = new Vector4(Vector3.Dot(off, view.right), Vector3.Dot(off, view.up), 0f, 0.5f * objective / magnification);
-                _scopeLight.SetVector(ScopePupilId, pupil);
-                _scopeLight.SetVector(OpticTanId, new Vector4(tanUp * optic.aspect, tanUp, magnification, 0f));
-                _scopeLight.SetFloat(ApertureRadiusId, 0.5f * Aperture);
+                float apart = new Vector2(Vector3.Dot(off, view.right), Vector3.Dot(off, view.up)).magnitude;
+                float aperture = 0.5f * Aperture;
+                _scopeLight = DiscsOverlap(0.5f * objective / magnification, aperture, apart) / (Mathf.PI * aperture * aperture);
             }
         }
         if (on && _scopeBufferOn != optic)
@@ -125,6 +121,23 @@ internal static partial class NightVisionEyepieces
         else if (!on)
             RemoveScopeBuffer();
     }
+
+    // The area two discs of radius r and R, their centres d apart, have in common.
+    private static float DiscsOverlap(float r, float R, float d)
+    {
+        if (d >= r + R)
+            return 0f;
+        if (d <= Mathf.Abs(R - r))
+        {
+            float least = Mathf.Min(r, R);
+            return Mathf.PI * least * least;
+        }
+        float a = r * r * Mathf.Acos(Mathf.Clamp((d * d + r * r - R * R) / (2f * d * r), -1f, 1f));
+        float b = R * R * Mathf.Acos(Mathf.Clamp((d * d + R * R - r * r) / (2f * d * R), -1f, 1f));
+        float c = 0.5f * Mathf.Sqrt(Mathf.Max((-d + r + R) * (d + r - R) * (d - r + R) * (d + r + R), 0f));
+        return a + b - c;
+    }
+
     private static void RemoveScopeBuffer()
     {
         if (_scopeBufferOn != null && _scopeBuffer != null)
@@ -162,6 +175,7 @@ internal static partial class NightVisionEyepieces
         Graphics.ExecuteCommandBuffer(buffer);
         _objective.SetTexture(ScopeLensId, _scopeLens);
         _objective.SetFloat(ScopeOnId, 1f);
+        _objective.SetFloat(ScopeLightId, _scopeLight);
     }
     // The sight's power now. The game's own figure (GetCurrentOpticZoom) is its table of powers by mode, which for a
     // variable sight turned smoothly with the wheel holds one end only. What the wheel turns is the sight camera's
