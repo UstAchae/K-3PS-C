@@ -57,6 +57,7 @@ internal static partial class NightVisionEyepieces
     private static Camera? _directCamera;
     private static int _arrangedCount = -1;
     private static bool _direct;
+    private static bool? _drawNoted;
 
     private static readonly List<Renderer> _slotRenderers = new List<Renderer>();
     private static readonly List<(Renderer renderer, ShadowCastingMode casting)> _hidden = new List<(Renderer, ShadowCastingMode)>();
@@ -423,6 +424,11 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalVector(DirectPlanes, new Vector4(1f / near, 1f / DirectFar, 1f / main.nearClipPlane, 1f / main.farClipPlane));
 
         bool byRenderer = NvgDump.UseRenderer;
+        if (byRenderer != _drawNoted)
+        {
+            _drawNoted = byRenderer;
+            Log($"NVG draw: the device by {(byRenderer ? "DrawRenderer" : "DrawMesh")}, {_pieces.Count} pieces");
+        }
         for (int half = 0; half < 2; half++)
         {
             int[] ids = half == 0 ? DirectLeft : DirectRight;

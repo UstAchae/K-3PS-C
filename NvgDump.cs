@@ -13,7 +13,7 @@ internal static class NvgDump
     private const int RecheckFrames = 30;
 
     private static ConfigEntry<bool>? _near, _traceSix, _area, _post, _hbao, _sun, _game, _noEmission, _noFace;
-    private static ConfigEntry<bool>? _upToo;
+    private static ConfigEntry<bool>? _upToo, _byRenderer;
     private static Camera? _on;
     private static PostProcessLayer? _layer;
     private static Behaviour? _ambientOcclusion;
@@ -28,7 +28,7 @@ internal static class NvgDump
     internal static bool UpToo => _upToo != null && _upToo.Value;
     internal static bool NoFaceLight => _noFace != null && _noFace.Value;
     internal static bool GameDraws => _game != null && _game.Value;
-    internal static bool UseRenderer => false;
+    internal static bool UseRenderer => _byRenderer != null && _byRenderer.Value;
     internal static float TestNear => _near != null && _near.Value ? 0.005f : 0f;
 
     internal static void Install(ConfigFile config)
@@ -49,6 +49,7 @@ internal static class NvgDump
         _noEmission = Switch("9 外壳去掉材质自带的反射", "开：外壳不要它自己算进画面的反射和环境光。");
         _upToo = Switch("10 翻上时也由我们画", "开：夜视仪翻上时也用合并的画法（翻上时没有平移，也不会贴到近裁剪面）。站着别动，来回开关它和开关 8，比两种画法同一姿势下的差别。");
         _noFace = Switch("11 关目镜照脸的灯", "开：关掉每个镜片往脸上打的那盏绿灯。");
+        _byRenderer = Switch("12 外壳用 DrawRenderer 画", "开：我们画外壳时由渲染器自己画（DrawRenderer）；关：取出网格来画（DrawMesh）。开着开关 10 站着不动来回切，看反光和颜色。大地图远处可能会抖。");
     }
 
     // As the main camera culls.
