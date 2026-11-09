@@ -47,12 +47,23 @@ internal static partial class NightVisionEyepieces
     {
         float target = 0f;
         if (Active && !_device.Thermal && _body != null && player.HandsController != null && player.HandsController.IsAiming
-            && Scopes.Current(player.ProceduralWeaponAnimation) is { IsOptic: true } && ChestStance.Weight <= 0f)
-            target = Mathf.Clamp(Vector3.Dot(_body.TransformPoint(_objectiveFront) - cameraPlace, cameraTurn * Vector3.forward), 0f, MaxEyeDistance);
+            && Scopes.Current(player.ProceduralWeaponAnimation) is { IsOptic: true } && ChestStance.Weight <= 0f && GoggleBeforeAimingEye(cameraPlace, cameraTurn))
+            target =Mathf.Clamp(Vector3.Dot(_body.TransformPoint(_objectiveFront) - cameraPlace, cameraTurn * Vector3.forward), 0f, MaxEyeDistance);
         ScopePullback = Mathf.Lerp(target, ScopePullback, Mathf.Exp(-Time.deltaTime / ScopePullbackSeconds));
         if (ScopePullback < 1e-4f)
             ScopePullback = 0f;
         return ScopePullback;
+    }
+
+    // A monocular before the other eye: the aiming eye looks through the sight bare, as without the goggle. Taken for the goggle's, the
+    // sight's beam missed its objective altogether and the sight was black.
+    private const float BeforeEyeWithin = 0.03f;   // m across, half the way to the other eye
+
+    private static bool GoggleBeforeAimingEye(Vector3 cameraPlace, Quaternion cameraTurn)
+    {
+        if (!_device.Monocular || _lensNodes.Length == 0)
+            return true;
+        return Mathf.Abs(Vector3.Dot(_lensNodes[CentreLensA].position - cameraPlace, cameraTurn * Vector3.right)) <= BeforeEyeWithin;
     }
 
     // As the main camera begins to render: the lens's place noted, and the sight camera's picture given the light that
