@@ -14,19 +14,47 @@ namespace EFTNewCamera;
 // The sight's picture is at infinity, as the goggle is focused, so it is sharp (no objective blur over the lens). Its
 // light leaves the eyepiece through the sight's exit pupil (objective diameter over magnification) and only what of it the
 // goggle's objective takes in reaches the tube: the sight's picture as bright as the overlap of the pupil's beam and the
-// goggle's aperture, over the aperture. That is worked into what the tube sees alone (pass 3 of NvgObjective.shader, over
-// the sight's lens): seen past the goggle's lens, by the bare eye, the sight keeps its light. At high power the pupil is a
-// few millimetres across and the picture dim, and the tube's noise, laid on later at its usual strength, stands out the
-// more; with the objective off the eye point the beam slides off the aperture.
+// goggle's aperture, over the aperture, the same over its whole field. At high power the pupil is a few millimetres
+// across and the picture dim, and the tube's noise, laid on later at its usual strength, stands out the more; with the
+// objective off the eye point the beam slides off the aperture. The sight's picture shows only within its own field: the
+// eyepiece's rim, as near as the rest of the sight, is blurred over its edge (the vignette), and nothing of the picture
+// is spread out past it.
+//
+// 倍镜状态 (_scope) is the one record of all this, made once a frame and read by every step (the steps themselves are
+// listed at the head of NightVisionComposite.cs):
+//   Through   ScopePull, before any camera renders: the goggle's picture is made through the sight (ThroughScope).
+//   Lens      NoteScope, as the main camera begins to render: where the sight's lens is, the light that reaches the
+//             tube from the pupil's place (Light), the sight's objective (ObjectiveRadius).
+//   Mask      DrawScopeLens, first of the image effect's steps: the lens drawn into a mask of the frame (_scopeLens),
+//             less where the eyepiece's rim stands before it; BindScope hands it, with Light, to a step's material.
+// Whether the sight's own picture is a night-vision one follows from it too (OpticSeesNightVision, NightVisionIr.cs).
 internal static partial class NightVisionEyepieces
 {
     internal static float ScopePullback;                 // how far the camera is ahead of the eyes now (m)
     private const float ScopePullbackSeconds = 0.15f;
+    private const float ThroughScopeFrom = 0.005f;       // the pull from which the goggle's picture is the sight's (m)
     private const float DefaultScopeObjective = 0.032f;  // a sight's objective when its name gives none (m)
     private static readonly Regex ObjectiveInName = new Regex(@"\d+(?:[.,]\d+)?[x×](\d+)", RegexOptions.Compiled);
 
+    private struct ScopeState
+    {
+        internal bool Through;              // the goggle's picture is made through the sight (eased in or out too)
+        internal int LensFrame;             // the frame the lens below was noted for, as the main camera began to render
+        internal Mesh? LensMesh;            // the sight's lens as the camera renders it: by the time the frame is
+        internal Matrix4x4 LensMatrix;      // worked on the gun may have moved on
+        internal float Light;               // the share of the sight's light that reaches the tube
+        internal float ObjectiveRadius;     // the sight's objective's (m), while its camera has our buffer
+        internal int MaskFrame;             // the frame the lens's mask (_scopeLens) was drawn for
+    }
+
+    private static ScopeState _scope = new ScopeState { LensFrame = -1, MaskFrame = -1, Light = 1f };
+
+    // The goggle's picture is the sight's this frame.
+    internal static bool ThroughScope => _scope.Through;
+    private static bool ScopeLensNoted => _scope.Through && _scope.LensMesh != null && _scope.LensFrame == Time.frameCount;
+    private static bool ScopeMasked => _scope.MaskFrame == Time.frameCount && _scopeLens != null;
+
     private static Material? _scopeMask;
-    private static float _scopeLight = 1f;              // the share of the sight's light that reaches the tube
     private static RenderTexture? _scopeLens;           // where the sight's lens is in the frame
     private static CommandBuffer? _scopeBuffer, _scopeLensBuffer;
     private static Camera? _scopeBufferOn;
@@ -34,11 +62,6 @@ internal static partial class NightVisionEyepieces
     private static readonly int ScopeOnId = Shader.PropertyToID("_ScopeOn");
     private static readonly int ScopeLightId = Shader.PropertyToID("_ScopeLight");
     private static readonly int ScopeTempId = Shader.PropertyToID("_JustachaeScopeLight");
-
-    // The sight's lens as the camera renders it: by the time the frame is worked on the gun may have moved on.
-    private static Mesh? _lensMesh;
-    private static Matrix4x4 _lensMatrix;
-    private static int _lensFrame = -1;
 
     // How far ahead of the head's camera place the camera goes this frame (eased in and out): to the objective, while
     // aiming a magnified sight with the goggle down.
@@ -51,6 +74,7 @@ internal static partial class NightVisionEyepieces
         ScopePullback = Mathf.Lerp(target, ScopePullback, Mathf.Exp(-Time.deltaTime / ScopePullbackSeconds));
         if (ScopePullback < 1e-4f)
             ScopePullback = 0f;
+        _scope.Through = ScopePullback > ThroughScopeFrom;
         return ScopePullback;
     }
 
@@ -78,7 +102,7 @@ internal static partial class NightVisionEyepieces
         {
         }
         bool on = false;
-        if (ScopePullback > 0.005f && optic != null && LoadShaders() && _objectiveShader != null)
+        if (_scope.Through && optic != null && LoadShaders() && _objectiveShader != null)
         {
             Player? player = Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer;
             var scope = Scopes.Current(player?.ProceduralWeaponAnimation);
@@ -87,25 +111,25 @@ internal static partial class NightVisionEyepieces
             Mesh? mesh = lens != null && lens.TryGetComponent(out MeshFilter filter) ? filter.sharedMesh : null;
             if (scope?.Mod != null && lens != null && lens.enabled && mesh != null)
             {
-                _lensMesh = mesh;
-                _lensMatrix = lens.localToWorldMatrix;
-                _lensFrame = Time.frameCount;
+                _scope.LensMesh = mesh;
+                _scope.LensMatrix = lens.localToWorldMatrix;
+                _scope.LensFrame = Time.frameCount;
                 on = true;
 
                 // The pupil: on the sight camera's axis, at the eye point, where the game holds the eye and the
                 // objective (the camera now) has come to; how far off it the objective is, across in the sight camera's
                 // right and up, and along.
                 Transform view = optic.transform;
-                Vector3 lensCentre = _lensMatrix.MultiplyPoint3x4(mesh.bounds.center);
+                Vector3 lensCentre = _scope.LensMatrix.MultiplyPoint3x4(mesh.bounds.center);
                 Vector3 axis = view.forward;
                 float relief = Vector3.Dot(lensCentre - _renderedFrom, axis);
                 Vector3 off = _renderedFrom - (lensCentre - axis * relief);
                 float magnification = MagnificationOf(scope.Mod, sight!, optic);
                 float objective = ObjectiveOf(scope.Mod);
-                _scopeObjectiveRadius = 0.5f * objective;
+                _scope.ObjectiveRadius = 0.5f * objective;
                 float apart = new Vector2(Vector3.Dot(off, view.right), Vector3.Dot(off, view.up)).magnitude;
                 float aperture = 0.5f * Aperture;
-                _scopeLight = DiscsOverlap(0.5f * objective / magnification, aperture, apart) / (Mathf.PI * aperture * aperture);
+                _scope.Light = DiscsOverlap(0.5f * objective / magnification, aperture, apart) / (Mathf.PI * aperture * aperture);
             }
         }
         if (on && _scopeBufferOn != optic)
@@ -145,19 +169,18 @@ internal static partial class NightVisionEyepieces
             _scopeBufferOn.RemoveCommandBuffer(CameraEvent.AfterEverything, _scopeBuffer);
             _scopeBufferOn.depthTextureMode = _opticDepthBefore;
         }
-        _scopeObjectiveRadius = 0f;
+        _scope.ObjectiveRadius = 0f;
         _scopeBufferOn = null;
     }
 
-    // The sight's lens drawn into a mask of the frame, where the objective's blur leaves the picture sharp; or none.
-    private static void PrepareScope(Camera view, RenderTexture frame)
+    // The sight's lens drawn into a mask of the frame (pass 10 of NvgObjective.shader), as the camera saw it: the first of
+    // the image effect's steps, so that every later one finds it, whatever is switched on. tanHalf: the frame's field.
+    private static void DrawScopeLens(RenderTexture frame, Vector2 tanHalf)
     {
-        _objective!.SetTexture(ScopeLensId, Texture2D.blackTexture);
-        _objective.SetFloat(ScopeOnId, 0f);
-        _scopeMaskFrame = -1;
-        if (ScopePullback <= 0.005f || _lensMesh == null || _lensFrame != Time.frameCount)
+        _scope.MaskFrame = -1;
+        if (!ScopeLensNoted || _objectiveShader == null)
             return;
-        _scopeMask ??= new Material(_objectiveShader!) { hideFlags = HideFlags.DontSave };
+        _scopeMask ??= new Material(_objectiveShader) { hideFlags = HideFlags.DontSave };
         if (_scopeLens == null || _scopeLens.width != frame.width || _scopeLens.height != frame.height)
         {
             if (_scopeLens != null)
@@ -165,23 +188,29 @@ internal static partial class NightVisionEyepieces
             _scopeLens = new RenderTexture(frame.width, frame.height, 0, RenderTextureFormat.R8) { name = "Justachae NVG sight lens", filterMode = FilterMode.Bilinear };
             _scopeLens.Create();
         }
-        _scopeMask.SetVector(TanHalfId, _objective.GetVector(TanHalfId));
+        _scopeMask.SetVector(TanHalfId, tanHalf);
         CommandBuffer buffer = _scopeLensBuffer ??= new CommandBuffer { name = "Justachae NVG sight lens" };
         buffer.Clear();
         buffer.SetRenderTarget(_scopeLens);
         buffer.ClearRenderTarget(false, true, Color.clear);
         buffer.SetViewProjectionMatrices(_renderedView, _renderedProjection);  // the buffer makes it the GPUs own
-        for (int i = 0; i < _lensMesh.subMeshCount; i++)
-            buffer.DrawMesh(_lensMesh, _lensMatrix, _scopeMask, i, 10);
+        Mesh mesh = _scope.LensMesh!;
+        for (int i = 0; i < mesh.subMeshCount; i++)
+            buffer.DrawMesh(mesh, _scope.LensMatrix, _scopeMask, i, 10);
         Graphics.ExecuteCommandBuffer(buffer);
-        _objective.SetTexture(ScopeLensId, _scopeLens);
-        _objective.SetFloat(ScopeOnId, 1f);
-        _objective.SetFloat(ScopeLightId, _scopeLight);
-        _scopeMaskFrame = Time.frameCount;
+        _scope.MaskFrame = Time.frameCount;
     }
 
-    // The frame the sight's lens mask (_scopeLens) was drawn for, or -1.
-    private static int _scopeMaskFrame = -1;
+    // The lens's mask and the light through it, for a step's material (_ScopeLens, _ScopeOn, _ScopeLight): none
+    // without a mask this frame.
+    private static void BindScope(Material material)
+    {
+        bool on = ScopeMasked;
+        material.SetTexture(ScopeLensId, on ? _scopeLens! : Texture2D.blackTexture);
+        material.SetFloat(ScopeOnId, on ? 1f : 0f);
+        material.SetFloat(ScopeLightId, on ? _scope.Light : 1f);
+    }
+
     // The sight's power now. The game's own figure (GetCurrentOpticZoom) is its table of powers by mode, which for a
     // variable sight turned smoothly with the wheel holds one end only. What the wheel turns is the sight camera's
     // field: SightComponent.ScopeZoomValue, between MinMaxFov.x, the widest, at the least power, and MinMaxFov.y, the

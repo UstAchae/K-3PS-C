@@ -2,6 +2,7 @@
 // greens it: the light at each pixel (its luminance; the colour's mix kept) times _TubeGain, and, by _TubeCompress, the
 // bright end pressed toward the tube's ceiling as its output saturates (1 - e^-x, which keeps the gain where it is dark)
 // instead of going on straight. _TubeGain 1 with _TubeCompress 0 gives the frame unchanged.
+// Step 4 of the eyepieces' picture (NightVisionComposite.cs), on the light that reaches the tube (step 2).
 Shader "Justachae/NVG/Tube" {
  Properties { _MainTex ("", 2D) = "black" {} }
  SubShader {

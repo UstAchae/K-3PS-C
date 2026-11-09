@@ -11,6 +11,7 @@ namespace EFTNewCamera;
 // camera's own picture (passes 8 and 9 of NvgObjective.shader, as for the frame, with the sight camera's view, its
 // depth, and its objective for the aperture); the light through the sight, counted where the tube sees it (NightVisionScope.cs),
 // dims them with the rest. Hidden where something nearer stands in the way, from the sight camera's depth.
+// The sight's camera's part of the eyepieces' picture (the steps are listed at the head of NightVisionComposite.cs).
 internal static partial class NightVisionEyepieces
 {
     private const float ScopeFocus = 100f;               // where a sight is focused (m): the game has no figure for it
@@ -30,7 +31,6 @@ internal static partial class NightVisionEyepieces
     }
     private static RenderTexture? _opticOcclusion;
     private static Mesh? _opticDiscs;
-    private static float _scopeObjectiveRadius;           // the sight's objective's (m), while one is looked through
     private static DepthTextureMode _opticDepthBefore;
     private static readonly List<VialSeen> _opticSeen = new();
     private static readonly Vector4[] _opticShape = new Vector4[MaxVials], _opticTint = new Vector4[MaxVials], _opticMasks = new Vector4[MaxVials];
@@ -43,7 +43,7 @@ internal static partial class NightVisionEyepieces
     // As the sight camera begins to render: the vials it sees, for its picture's discs.
     private static void NoteOptic(Camera optic)
     {
-        if (_scopeBufferOn != optic || _scopeTritium == null || _opticDiscs == null || _scopeObjectiveRadius <= 0f)
+        if (_scopeBufferOn != optic || _scopeTritium == null || _opticDiscs == null || _scope.ObjectiveRadius <= 0f)
             return;
         Vector3 from = optic.transform.position;
         Matrix4x4 view = optic.worldToCameraMatrix, viewProjection = optic.nonJitteredProjectionMatrix * view;
@@ -75,7 +75,7 @@ internal static partial class NightVisionEyepieces
                         if (facing <= 0f || clip.w <= 0f || depth <= 0f)
                             continue;
                         Vector2 uv = new Vector2(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f);
-                        float radius = _scopeObjectiveRadius / distance * pixelsPerRadian;
+                        float radius = _scope.ObjectiveRadius / distance * pixelsPerRadian;
                         if (uv.x < -radius * 3f / width || uv.x > 1f + radius * 3f / width || uv.y < -radius * 3f / height || uv.y > 1f + radius * 3f / height)
                             continue;
                         float glow = VialGlow * TritiumBrightness * facing;
@@ -123,12 +123,12 @@ internal static partial class NightVisionEyepieces
         _scopeTritium.SetVectorArray(VialMasksId, _opticMasks);
         _scopeTritium.SetFloatArray(VialTraceId, _opticTrace);
         _scopeTritium.SetFloat(VialCountId, count);
-        _scopeTritium.SetVector(TargetId, new Vector4(width, height, _scopeObjectiveRadius, 0f));
+        _scopeTritium.SetVector(TargetId, new Vector4(width, height, _scope.ObjectiveRadius, 0f));
         _scopeTritium.SetVector(TanHalfShaderId, new Vector2(tanUp * width / height, tanUp));
         // The aperture at the sight camera; its own blur of what is near: focused at ScopeFocus, its objective's radius
         // in quarter-size pixels per radian of the defocus, at most ScopeBlurLimit.
         float quarterPerRadian = height / 4f / (2f * tanUp);
-        _scopeTritium.SetVector(LensShaderId, new Vector4(ScopeFocus, _scopeObjectiveRadius * quarterPerRadian, 0f, ScopeBlurLimit));
+        _scopeTritium.SetVector(LensShaderId, new Vector4(ScopeFocus, _scope.ObjectiveRadius * quarterPerRadian, 0f, ScopeBlurLimit));
         _scopeTritium.SetTexture(OcclusionId, _opticOcclusion);
     }
 

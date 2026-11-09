@@ -6,8 +6,9 @@
 // by pixel, so nothing shows as noise or blocks), in two layers: what is near (blurred by more than a quarter-size
 // pixel and a half) is cut out with how much of each pixel it covers and blurred as wide as it is spread, and laid
 // over the rest, which is blurred by its own small amount: a near thing's blur covers what lies behind it softly, and
-// leaves it sharp.
-// Pass 0: the frame at a quarter of its size, its blur radius in alpha (in quarter-size pixels).
+// leaves it sharp. Step 3 of the eyepieces' picture (the steps are at the head of NightVisionComposite.cs), on the
+// light that reaches the tube (step 2: NvgIrLight.shader pass 1).
+// Pass 0: the frame at a quarter of its size, premultiplied by what of it is out of a magnified sight's lens (alpha).
 // Pass 1: a Gaussian across (_Step: one texel across), its spread a texel and a half. Pass 2: the same, up.
 // Pass 3: the frame, with what is near laid over it.
 // Pass 4: what is near, at a quarter of the size, premultiplied by how much of each of the sixteen pixels under it it
@@ -35,20 +36,21 @@ Shader "Justachae/NVG/Objective" {
   float4 _Lens;
   float2 _TanHalf;   // the tangents of half the frame's field across and up
 
-  // Where a magnified sight's lens is (NightVisionScope.cs). Its picture is at infinity and sharp: it is taken out
-  // of what is near and blurred, and laid back sharp behind it, its rim (the eyepiece's edge, as near as the rest of
-  // the sight) blurred over its edge as anything near is over what lies behind.
+  // Where a magnified sight's lens is (_scope, NightVisionScope.cs), its light already cut to what reaches the tube
+  // (NvgIrLight.shader pass 1). Its picture is at infinity and sharp: it is no part of what is near (its blur 0), it is
+  // laid back sharp, and its rim (the eyepiece's edge, as near as the rest of the sight) is blurred over its edge as
+  // anything near is over what lies behind. The picture shows only within the sight's own field, so it is kept out of
+  // the layers of everything blurred (pass 0) too: what lies behind the rim's soft edge, out of the lens, is the rim and
+  // the scene about it, not the sight's picture spread out (a bright laser in it glowed as a bulge over the rim).
   Texture2D _ScopeLens;
   float _ScopeOn;
-  float _ScopeLight;   // the share of the sight's light that reaches the tube
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
   }
-  // How much of the light at a point of the frame reaches the tube: the sight's lens only its share, in every layer
-  // made from the frame, not only where it is laid back sharp: spread at full strength, a bright laser in the sight's
-  // picture (its beam under night vision is many times the rest) glowed over the eyepiece's blurred rim and the lens.
-  float Reaching(float2 uv) {
-   return InLens(uv) ? _ScopeLight : 1;
+  // A layer of everything blurred (pass 0's, premultiplied by what of it is out of the lens) as the light out of the
+  // lens; otherwise where none of it is.
+  float3 OutOfLens(float4 c, float3 otherwise) {
+   return c.a > 1e-3 ? c.rgb / c.a : otherwise;
   }
 
   float Blur(float2 uv) {
@@ -99,7 +101,8 @@ Shader "Justachae/NVG/Objective" {
     for (int y = 0; y < 2; y++)
      for (int x = 0; x < 2; x++) {
       float2 uv = i.uv + (float2(x, y) * 2 - 1) * texel;
-      sum += float4(tex2D(_MainTex, uv).rgb * Reaching(uv), Blur(uv));
+      float outside = InLens(uv) ? 0 : 1;
+      sum += float4(tex2D(_MainTex, uv).rgb * outside, outside);
      }
     return sum / 4;
    }
@@ -135,14 +138,15 @@ Shader "Justachae/NVG/Objective" {
     // What lies behind: what is not near blurred by its own small amount; under what is near, everything blurred as
     // that is. The one eases into the other as smoothly as the near's blurred cover does, not pixel by pixel: a sharp
     // step from blurred to sharp along a near thing's outline would show through its soft edge as a line.
-    float4 a0 = _All0.Sample(sampler_linear_clamp, i.uv);
-    float3 still = lerp(frame.rgb, a0.rgb, saturate(min(own, 3) / 3));
+    float4 all0 = _All0.Sample(sampler_linear_clamp, i.uv);
+    float3 a0 = OutOfLens(all0, frame.rgb);
+    float3 still = lerp(frame.rgb, a0, saturate(min(own, 3) / 3));
     // Beside what is near, the scene goes a little soft too, so that the near's soft edge does not stand out against it.
     float4 widest = Level(max(radius, 3) * 2, n0, n1, n2, n3, n4);
-    still = lerp(still, a0.rgb, 0.5 * saturate(widest.a * 3));
-    float3 under = Level(max(radius, 3), a0, _All1.Sample(sampler_linear_clamp, i.uv), _All2.Sample(sampler_linear_clamp, i.uv), _All3.Sample(sampler_linear_clamp, i.uv), _All4.Sample(sampler_linear_clamp, i.uv)).rgb;
-    // What of the sight's light the objective takes in: here, in what the tube sees alone, so the bare eye past the lens sees it whole.
-    float3 behind = InLens(i.uv) ? frame.rgb * _ScopeLight : lerp(still, under, saturate(near.a));
+    still = lerp(still, a0, 0.5 * saturate(widest.a * 3));
+    float3 under = OutOfLens(Level(max(radius, 3), all0, _All1.Sample(sampler_linear_clamp, i.uv), _All2.Sample(sampler_linear_clamp, i.uv), _All3.Sample(sampler_linear_clamp, i.uv), _All4.Sample(sampler_linear_clamp, i.uv)), a0);
+    // A magnified sight's lens: its own picture, sharp.
+    float3 behind = InLens(i.uv) ? frame.rgb : lerp(still, under, saturate(near.a));
     // An out-of-focus edge fades over the whole of its disc: how much the near covers is taken from a blur twice as
     // wide as its light, so that its outline goes soft without its inside getting any blurrier.
     float4 wide = Level(max(radius, 3) * 2, n0, n1, n2, n3, n4);
@@ -163,7 +167,7 @@ Shader "Justachae/NVG/Objective" {
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
       float2 uv = i.uv + (float2(x, y) - 1.5) * _MainTex_TexelSize.xy;
-      sum += float4(tex2D(_MainTex, uv).rgb * Reaching(uv), 1) * Near(Blur(uv));
+      sum += float4(tex2D(_MainTex, uv).rgb, 1) * Near(Blur(uv));
      }
     return sum / 16;
    }

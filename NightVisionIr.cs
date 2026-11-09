@@ -8,7 +8,7 @@ namespace EFTNewCamera;
 
 // IR seen only through the lenses. The game lights IR for the FPS camera's whole frame while night vision is on; with
 // the eyepieces in, the frame (the naked eye's scene around them) is drawn with none, and what IR adds is drawn into
-// a layer of its own that only the lenses' picture is made with (LensPicture).
+// a layer of its own that only the lenses' picture is made with (ForTube, step 2 at the head of NightVisionComposite.cs).
 // IR lights: left in the frame at their intensity but through a blank cookie, so the game still draws their shadow maps
 // and they light nothing (at a mere trace of intensity the game leaves them out, shadows and all); each is drawn into
 // the layer as the game's deferred pass would light it, a shadowed one right after its shadow map (that map, and the
@@ -121,7 +121,6 @@ internal static partial class NightVisionEyepieces
     private static readonly int IrShadowMapId = Shader.PropertyToID("_IrShadowMap");
     private static readonly int IrLayerId = Shader.PropertyToID("_IrLayer");
     private static readonly int IrNakedId = Shader.PropertyToID("_IrNaked");
-    private static readonly int IrScopeLensId = Shader.PropertyToID("_IrScopeLens"), IrScopeOnId = Shader.PropertyToID("_IrScopeOn");
     private static readonly int IrHistoryId = Shader.PropertyToID("_IrHistory");
     private static readonly int IrJitterId = Shader.PropertyToID("_IrJitter");
     private const float IrHeld = 0.1f;               // how much of this frame's layer goes into the held one
@@ -242,7 +241,7 @@ internal static partial class NightVisionEyepieces
         if (dim >= 0.999f || !IrWanted)
             return;
         Camera? camera = LaserReplay.DrawCamera;
-        if (camera != null && OpticPicture.IsCamera(camera) && ScopePullback > 0.005f)
+        if (camera != null && OpticPicture.IsCamera(camera) && OpticSeesNightVision())
             return;
         __instance.IntensityFactor = was;
         if (__instance.BeamMaterial.HasProperty(LaserColorId) && LaserBeamBlock(__instance) is MaterialPropertyBlock block)
@@ -446,7 +445,7 @@ internal static partial class NightVisionEyepieces
             if (lifted)
                 _irLasers.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.nonJitteredProjectionMatrix);
             // As the frame shows them (night vision as it is for it): lifted, all of them, added after the upscale
-            // (LasersAfterUpscale); for the lenses, taken back out of their picture (WithIr).
+            // (LasersAfterUpscale); for the lenses, taken back out of their picture (ForTube).
             if (lifted || ir && _irSeenMeshes.Count > 0)
             {
                 _irLasers.SetRenderTarget(_irNaked, BuiltinRenderTextureType.CameraTarget);
@@ -543,15 +542,16 @@ internal static partial class NightVisionEyepieces
         _opticIr = true;
     }
 
-    // Whether the scope's picture is a night-vision one: the sight's own night vision, or the goggle's, but the goggle's only when it is
-    // before the aiming eye (the sight looked through with it, ScopePull). A monocular before the other eye leaves the aiming eye to look
-    // through the sight bare: no IR there, and lasers as the naked eye sees them.
+    // Whether the scope's picture is a night-vision one: the sight's own night vision, or the goggle's, but the goggle's only when the
+    // sight is looked through with it (倍镜状态, ThroughScope). A monocular before the other eye leaves the aiming eye to look through
+    // the sight bare: no IR there, and lasers as the naked eye sees them. The one test for the sight's camera: its IR lights, its
+    // _NightVisionOn, its lasers' dimming.
     private static bool OpticSeesNightVision()
     {
         var manager = EFT.CameraControl.CameraManager.Instance;
         if (manager?.OpticCameraManager?.NightVision != null && manager.OpticCameraManager.NightVision.On)
             return true;
-        return manager?.NightVision != null && manager.NightVision.On && ScopePullback > 0.005f;
+        return manager?.NightVision != null && manager.NightVision.On && ThroughScope;
     }
 
     internal static void OnOpticPostRenderIr(Camera camera)
@@ -612,24 +612,25 @@ internal static partial class NightVisionEyepieces
         _irHard.EnableKeyword("IR_SHADOWS");
         _irSoft = new Material(_irLightShader) { name = "Justachae NVG IR light, soft shadows", hideFlags = HideFlags.DontSave };
         _irSoft.EnableKeyword("IR_SOFT_SHADOWS");
-        _irAdd = new Material(_irLightShader) { name = "Justachae NVG IR layer added", hideFlags = HideFlags.DontSave };
+        _irAdd ??= new Material(_irLightShader) { name = "Justachae NVG IR layer added", hideFlags = HideFlags.DontSave };
         return true;
     }
 
-    // The frame with this frame's IR added, for the lenses' picture; the frame itself when there is none.
-    private static RenderTexture WithIr(RenderTexture frame, ref RenderTexture? made)
+    // Step 2 of the eyepieces' picture (NightVisionComposite.cs): the light that reaches the tube, made into a temporary
+    // (made); the frame itself when nothing changes it. This frame's IR added, the naked eye's lasers taken out; a
+    // magnified sight's lens (倍镜状态) at the share of its light that reaches the tube, with the sight's own picture
+    // only: IR and lasers as its camera sees them, not the layer's, which is what lies past the sight from the eye.
+    private static RenderTexture ForTube(RenderTexture frame, ref RenderTexture? made)
     {
-        if (_irDrawnFrame != Time.frameCount || _irLayer == null || _irAdd == null)
+        bool ir = _irDrawnFrame == Time.frameCount && _irLayer != null;
+        if (!ir && !ScopeMasked || _irLightShader == null)
             return frame;
+        Material add = _irAdd ??= new Material(_irLightShader) { name = "Justachae NVG IR layer added", hideFlags = HideFlags.DontSave };
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
-        _irAdd.SetTexture(IrLayerId, HoldIr(_irLayer, _irAdd));
-        _irAdd.SetTexture(IrNakedId, _nakedFrame == Time.frameCount && _irNaked != null ? _irNaked : Texture2D.blackTexture);
-        // A magnified sight looked through: its lens shows the sight's own picture, IR and lasers as its camera sees them;
-        // what the layer has there is what lies past the sight, seen from the eye, which the sight hides.
-        bool lens = _scopeMaskFrame == Time.frameCount && _scopeLens != null;
-        _irAdd.SetTexture(IrScopeLensId, lens ? _scopeLens! : Texture2D.blackTexture);
-        _irAdd.SetFloat(IrScopeOnId, lens ? 1f : 0f);
-        Graphics.Blit(frame, made, _irAdd, 1);
+        add.SetTexture(IrLayerId, ir ? HoldIr(_irLayer!, add) : Texture2D.blackTexture);
+        add.SetTexture(IrNakedId, ir && _nakedFrame == Time.frameCount && _irNaked != null ? _irNaked : Texture2D.blackTexture);
+        BindScope(add);
+        Graphics.Blit(frame, made, add, 1);
         return made;
     }
 

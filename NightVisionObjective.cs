@@ -8,6 +8,7 @@ namespace EFTNewCamera;
 // distance from the lens; here half of NearBlurLimit at NearBlurDistance, more nearer, less further: the hands and
 // the gun are soft, iron sights cannot be used, and a few metres off all is sharp. Done to the frame the lenses' picture is made from, before the game's or BRNVG's
 // filter, so it holds for either (NvgObjective.shader: smooth Gaussians at a few sizes, as Call of Duty 4 does).
+// Steps 1 and 3 of the eyepieces' picture (the steps are listed at the head of NightVisionComposite.cs).
 internal static partial class NightVisionEyepieces
 {
     internal static float NearBlurDistance = 1f;        // from the lens, where the blur is half its limit (m)
@@ -64,43 +65,47 @@ internal static partial class NightVisionEyepieces
         _objectiveFront = new Vector3(across.x, front, across.z);
     }
 
-    // The magnified sight's lens mask, ahead of the IR layer, which leaves the lens to the sight's own picture (WithIr):
-    // as ThroughObjective would make it, once a frame.
-    private static int _scopePreparedFrame = -1;
-
-    private static void PrepareScopeEarly(Component camera, RenderTexture frame)
+    // The camera rendered from the eyes this frame, through the device's objective: a free camera elsewhere does not.
+    private static bool AtObjective(Component camera, out Camera view)
     {
-        Camera? view = camera.GetComponent<Camera>();
-        // Whatever the objective's blur is set to: the lens is the sight's own picture in any case.
-        if (_objective == null || view == null || _body == null || _device.Thermal || !Active)
-            return;
-        if (_renderedFrame != Time.frameCount || (_body.TransformPoint(_objectiveFront) - _renderedFrom).magnitude > MaxEyeDistance)
-            return;
-        float tanUp = Mathf.Tan(view.fieldOfView * 0.5f * Mathf.Deg2Rad);
-        _objective.SetVector(TanHalfId, new Vector2(tanUp * frame.width / frame.height, tanUp));
-        PrepareScope(view, frame);
-        _scopePreparedFrame = Time.frameCount;
+        view = camera.GetComponent<Camera>();
+        return view != null && _objective != null && _body != null && !_device.Thermal && Active && _renderedFrame == Time.frameCount
+            && (_body.TransformPoint(_objectiveFront) - _renderedFrom).magnitude <= MaxEyeDistance;
     }
 
-    // The frame as the objective lays it on the tube: made into a temporary (made) when there is a lens to do it.
+    // The tangents of half the frame's field across and up.
+    private static Vector2 TanHalf(Camera view, RenderTexture frame)
+    {
+        float tanUp = Mathf.Tan(view.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        return new Vector2(tanUp * frame.width / frame.height, tanUp);
+    }
+
+    // Step 1 of the eyepieces' picture: the magnified sight's lens mask, whatever the objective's blur is set to, for
+    // every step after (倍镜状态, NightVisionScope.cs).
+    private static void ScopeLensStep(Component camera, RenderTexture frame)
+    {
+        _scope.MaskFrame = -1;
+        if (AtObjective(camera, out Camera view))
+            DrawScopeLens(frame, TanHalf(view, frame));
+    }
+
+    // Step 3: the frame as the objective lays it on the tube, made into a temporary (made) when there is a lens to do it.
+    // A magnified sight's lens is left sharp, its rim blurred over its edge, and its picture kept out of what lies behind
+    // the rim (NvgObjective.shader); its light was cut to what reaches the tube in step 2 (ForTube).
     private static RenderTexture ThroughObjective(Component camera, RenderTexture frame, ref RenderTexture? made)
     {
-        Camera? view = camera.GetComponent<Camera>();
-        if (_objective == null || view == null || _body == null || _device.Thermal || !Active || NearBlurDistance <= 0f || NearBlurLimit <= 0f)
-            return frame;
-        // Only while the camera rendered from the eyes: a free camera elsewhere does not look through the objective.
-        if (_renderedFrame != Time.frameCount || (_body.TransformPoint(_objectiveFront) - _renderedFrom).magnitude > MaxEyeDistance)
+        if (NearBlurDistance <= 0f || NearBlurLimit <= 0f || !AtObjective(camera, out Camera view))
             return frame;
 
         float tanUp = Mathf.Tan(view.fieldOfView * 0.5f * Mathf.Deg2Rad);
         int width = Mathf.Max(frame.width / Scale, 1), height = Mathf.Max(frame.height / Scale, 1);
         float pixelsPerRadian = height / (2f * tanUp);
-        float ahead = Mathf.Clamp(Vector3.Dot(_body.TransformPoint(_objectiveFront) - _renderedFrom, _renderedForward), 0f, MaxEyeDistance);
-        _objective.SetVector(LensId, new Vector4(NearBlurDistance, 0f, ahead,
+        float ahead = Mathf.Clamp(Vector3.Dot(_body!.TransformPoint(_objectiveFront) - _renderedFrom, _renderedForward), 0f, MaxEyeDistance);
+        Material objective = _objective!;
+        objective.SetVector(LensId, new Vector4(NearBlurDistance, 0f, ahead,
             NearBlurLimit * Mathf.Deg2Rad * pixelsPerRadian));
-        _objective.SetVector(TanHalfId, new Vector2(tanUp * frame.width / frame.height, tanUp));
-        if (_scopePreparedFrame != Time.frameCount)
-            PrepareScope(view, frame);
+        objective.SetVector(TanHalfId, TanHalf(view, frame));
+        BindScope(objective);
 
         // Everything, blurred at each size; what is near, cut out (premultiplied), the same; and how far what is near
         // is spread, blurred so that it reaches past its edge.
@@ -109,22 +114,22 @@ internal static partial class NightVisionEyepieces
         RenderTexture[] nearBlur = Blurred(frame, 5, width, height, _nearBlurLevels);
         for (int i = 0; i < Levels; i++)
         {
-            _objective.SetTexture(AllIds[i], all[i]);
-            _objective.SetTexture(NearIds[i], near[i]);
+            objective.SetTexture(AllIds[i], all[i]);
+            objective.SetTexture(NearIds[i], near[i]);
         }
-        _objective.SetTexture(NearBlurId, nearBlur[2]);
+        objective.SetTexture(NearBlurId, nearBlur[2]);
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
-        Graphics.Blit(frame, made, _objective, 3);
+        Graphics.Blit(frame, made, objective, 3);
         AddTritium(view, made);
         ReleaseMask();
         _blurMask = Temporary(width, height);
-        Graphics.Blit(frame, _blurMask, _objective, 6);
+        Graphics.Blit(frame, _blurMask, objective, 6);
         for (int i = 0; i < Levels; i++)
         {
-            _objective.SetTexture(AllIds[i], Texture2D.blackTexture);
-            _objective.SetTexture(NearIds[i], Texture2D.blackTexture);
+            objective.SetTexture(AllIds[i], Texture2D.blackTexture);
+            objective.SetTexture(NearIds[i], Texture2D.blackTexture);
         }
-        _objective.SetTexture(NearBlurId, Texture2D.blackTexture);
+        objective.SetTexture(NearBlurId, Texture2D.blackTexture);
         Release(all);
         Release(near);
         Release(nearBlur);

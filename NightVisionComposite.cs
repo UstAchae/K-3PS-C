@@ -16,6 +16,27 @@ namespace EFTNewCamera;
 // The image effect is put on as the camera wakes, so that it comes in the camera's chain of image effects before the
 // SSAA stage hands the frame to the screen; one put on later comes after that, and what it draws never reaches the
 // screen (the picture stops). A camera without it keeps the game's own filter: the eyepieces do not take over.
+//
+// 目镜成像流水线, each frame (with a magnified sight looked through with the goggle down, its lens's part in each step;
+// 倍镜状态 _scope, NightVisionScope.cs, is the only place that says whether, where and how bright):
+//   Before any camera renders  ScopePull: _scope.Through, the camera to the goggle's objective.
+//   The sight's camera         its picture a night-vision one or not (OpticSeesNightVision: IR lights, _NightVisionOn,
+//                              lasers, NightVisionIr.cs); what is near in it blurred by its own objective and its
+//                              vials' discs laid on (NightVisionScopeTritium.cs). The game lays it on the sight's lens.
+//   The main camera, before    NoteScope: _scope's lens and Light. The IR layer and the naked eye's lasers, drawn from
+//                              the eyes, sight or no sight (NightVisionIr.cs).
+//   Its image effect (here, EyepieceRenderImage):
+//     1 ScopeLensStep          the lens's mask (NightVisionObjective.cs, DrawScopeLens).
+//     2 ForTube                the light that reaches the tube (NvgIrLight.shader pass 1): out of the lens, the frame
+//                              with the IR layer added and the naked eye's lasers taken out; in it, the sight's picture
+//                              (the naked eye's lasers taken out) at _scope.Light, and nothing past the sight. The one
+//                              place the sight's light is cut, whatever else is switched on.
+//     3 ThroughObjective       the objective's blur of what is near (NvgObjective.shader): the lens sharp, the
+//                              eyepiece's rim blurred over its edge, the lens's picture kept out of what lies behind
+//                              the rim; the frame's vials' discs (pass 8: none through the sight's tube).
+//     4 LensPicture            the tube: BRNVG's, the game's (NvgTube.shader's gain first), or the thermal camera's.
+//     5 EaseGrain              the tube's grain eased where the frame was blurred.
+//     6 Compose                the eyepieces laid over the naked eye's frame (NvgBinocular.shader).
 internal static partial class NightVisionEyepieces
 {
     internal const string PictureAuto = "自动", PictureGame = "原版";
@@ -126,17 +147,17 @@ internal static partial class NightVisionEyepieces
             Graphics.Blit(from, into);
         else
         {
-            RenderTexture? made = null, withIr = null, focused = null;
-            PrepareScopeEarly(camera, from);
-            // The lenses see IR, the naked eye around them does not; and they see it through the objective.
-            Texture picture = LensPicture(camera, ThroughObjective(camera, WithIr(from, ref withIr), ref focused), ref made);
+            RenderTexture? made = null, tubed = null, focused = null;
+            // The steps at the head of this file, in order.
+            ScopeLensStep(camera, from);
+            Texture picture = LensPicture(camera, ThroughObjective(camera, ForTube(from, ref tubed), ref focused), ref made);
             picture = EaseGrain(picture, ref made);
             ReleaseMask();
             Compose(composite, glow, from, into, picture);
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
-            if (withIr != null)
-                RenderTexture.ReleaseTemporary(withIr);
+            if (tubed != null)
+                RenderTexture.ReleaseTemporary(tubed);
             if (focused != null)
                 RenderTexture.ReleaseTemporary(focused);
         }
