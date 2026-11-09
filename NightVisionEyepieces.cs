@@ -259,7 +259,7 @@ internal static partial class NightVisionEyepieces
 
         // Looked for again while none is worn, or the one found has been put away (a device swapped for another stays
         // in the scene, hidden).
-        if ((_body == null || !_body.gameObject.activeInHierarchy || _body.root != player.gameObject.transform.root) && Time.frameCount - _searchedFrame >= 30)
+        if ((_body == null || !_body.gameObject.activeInHierarchy || _body.root != player.gameObject.transform.root || WornElsewhere(player)) && Time.frameCount - _searchedFrame >= 30)
         {
             Device was = _device;
             Transform? found = FindDevice(player);
@@ -281,6 +281,9 @@ internal static partial class NightVisionEyepieces
         CameraManager? cameras = BodyVisibility.Cameras;
         bool thermal = _body != null && _device.Thermal;
         NightVisionDevice? device = _body != null && !thermal ? _body.GetComponentInParent<NightVisionDevice>() : null;
+        // The game's own record of what is worn, not what a model was given when it was made: a model's went on saying off with
+        // the filter on, the device worn since its last change or on a raid's first model.
+        NightVisionComponent? nightItem = !thermal ? player.NightVisionObserver?.Component : null;
         ThermalVisionDevice? thermalDevice = thermal ? _body!.GetComponentInParent<ThermalVisionDevice>() : null;
         ThermalVisionComponent? thermalItem = thermal ? player.ThermalVisionObserver?.Component : null;
         Behaviour? renderer = !thermal && UseBrnvg ? NightRenderer(cameras?.NightVision) : null;
@@ -289,7 +292,7 @@ internal static partial class NightVisionEyepieces
         bool brnvg = !thermal && UseBrnvg && (renderer != null || Picture == PictureBrnvg || player is not HideoutPlayer);
         bool present = _body != null && _body.gameObject.activeInHierarchy;
         bool worn = present && EyepieceImageReady(cameras) && (thermal ? EnsureThermalCamera() : !brnvg || renderer != null);
-        bool switchedOn = worn && (thermal ? thermalItem?.Togglable != null && thermalItem.Togglable.On : device != null && SwitchedOn(device));
+        bool switchedOn = worn && (thermal ? thermalItem?.Togglable != null && thermalItem.Togglable.On : nightItem?.Togglable != null ? nightItem.Togglable.On : device != null && SwitchedOn(device));
         // The tubes come on once the device is all the way down and the game has done switching its own filter on
         // (its switch dims the filter for a moment, the picture the lenses show), and go off before it flips up:
         // flipping down is flipping up the other way round. BRNVG is woken as soon as it is switched on.
@@ -337,6 +340,11 @@ internal static partial class NightVisionEyepieces
         _faceLights = Array.Empty<Light?>();
         _body = null;
         _rotator = null;
+        // What was learned of one device's rotator is not the next's.
+        _rotatorReversed = false;
+        _flipTarget = -1f;
+        _flipWasOn = false;
+        _flipSeenMoving = false;
         _split = 0f;
         _searchedFrame = -100;
         ReleaseEyes();
@@ -352,9 +360,42 @@ internal static partial class NightVisionEyepieces
             return on ? 1f : 0f;
 
         float eased = Mathf.Clamp01(_rotator.AnimationCurve != null ? _rotator.AnimationCurve.Evaluate(t) : t);
-        if (on && !_rotator.ShouldRotate())
+        // Which end is down: by where the game sets it going as it is switched. Not by where it stands when switched on: between
+        // the switch and the hand reaching the device it has not started, and it read as down already. Only a device on for a
+        // good while and never seen moving is taken by where it stands.
+        float target = RotatorTarget?.GetValue(_rotator) is float set ? set : -1f;
+        if (on != _flipWasOn)
+        {
+            _flipWasOn = on;
+            _flipOnSince = Time.time;
+        }
+        if (target != _flipTarget)
+        {
+            if (_flipTarget >= 0f)
+            {
+                _rotatorReversed = on == target < 0.5f;
+                _flipSeenMoving = true;
+            }
+            _flipTarget = target;
+        }
+        else if (on && !_flipSeenMoving && !_rotator.ShouldRotate() && Time.time - _flipOnSince > FlipSettleSeconds)
             _rotatorReversed = eased < 0.5f;
         return _rotatorReversed ? 1f - eased : eased;
+    }
+
+    private const float FlipSettleSeconds = 3f;
+    private static readonly FieldInfo? RotatorTarget = AccessTools.Field(typeof(CurveRotator), "_targetT");
+    private static float _flipTarget = -1f, _flipOnSince;
+    private static bool _flipWasOn, _flipSeenMoving;
+
+    // The model found belongs to another item than the one the game says is worn.
+    private static bool WornElsewhere(Player player)
+    {
+        if (_body == null || _device.Thermal)
+            return false;
+        NightVisionComponent? worn = player.NightVisionObserver?.Component;
+        NightVisionDevice? device = _body.GetComponentInParent<NightVisionDevice>();
+        return worn != null && device != null && !ReferenceEquals(DeviceComponent?.GetValue(device), worn);
     }
 
     private static Transform? FindDevice(Player player)
@@ -362,6 +403,7 @@ internal static partial class NightVisionEyepieces
         PlayerBody? body = player.PlayerBody;
         if (body == null)
             return null;
+        NightVisionComponent? wornItem = player.NightVisionObserver?.Component;
 
         foreach (EquipmentSlot slot in new[] { EquipmentSlot.Headwear, EquipmentSlot.FaceCover, EquipmentSlot.Eyewear })
         {
@@ -370,6 +412,9 @@ internal static partial class NightVisionEyepieces
 
             foreach (NightVisionDevice device in view.Model.GetComponentsInChildren<NightVisionDevice>(true))
             {
+                // Only the model of the item worn: more than one may be there.
+                if (wornItem != null && !ReferenceEquals(DeviceComponent?.GetValue(device), wornItem))
+                    continue;
                 foreach (Transform node in device.GetComponentsInChildren<Transform>(true))
                 {
                     foreach (Device known in Devices)
