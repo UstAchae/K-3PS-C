@@ -115,6 +115,8 @@ internal static partial class NightVisionEyepieces
         binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((TubeField + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(TubeField * Mathf.Deg2Rad), 0f, 0f));
 
         ShadeMain(camera, !_direct);
+        if (!_direct)
+            ProbeStencil(camera);
         if (!LensesOn(camera))
             return;
 

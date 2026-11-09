@@ -99,12 +99,23 @@ Shader "Justachae/NVG/Direct" {
   int x = (int)fmod(pixel.x, 4), y = (int)fmod(pixel.y, 4);
   return c * 16 > grid[y * 4 + x];
  }
+
+ // Whether this pixel has the device, and whose: each pixel one eye's whole, more of them the other's across the strip. Evened over
+ // the pattern once all is lit (pass 4), that is the two eyes' lit pictures eased into each other, as the eyes' cameras were.
+ bool pick (float2 pixel, float2 uv, float rawL, float rawR, out float toRight) {
+  float c = coverage(uv, rawL, rawR, toRight);
+  if (toRight > 0 && toRight < 1) {
+   toRight = kept(pixel, toRight) ? 1 : 0;
+   return true;
+  }
+  return kept(pixel, c);
+ }
  ENDCG
  SubShader {
   Pass {
    Cull Off ZWrite On ZTest LEqual
    // Lit as anything the main camera draws, as the device is when it is up. All of the stencil: the other bits are what lay behind it (the gun, the hands), and the light passes go by them.
-   Stencil { Ref [_StencilNonBackground] WriteMask 255 Comp Always Pass Replace }
+   Stencil { Ref [_DirectStencilRef] WriteMask 255 Comp Always Pass Replace }
    CGPROGRAM
    #pragma vertex vert
    #pragma fragment frag
@@ -121,7 +132,7 @@ Shader "Justachae/NVG/Direct" {
     float2 uv = i.screen.xy / i.screen.w;
     float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
     float toRight;
-    if (!kept(i.pos.xy, coverage(uv, rawL, rawR, toRight)))
+    if (!pick(i.pos.xy, uv, rawL, rawR, toRight))
      discard;
     output o;
     o.g0 = lerp(tex2D(_DirectL0, uv), tex2D(_DirectR0, uv), toRight);
@@ -152,7 +163,7 @@ Shader "Justachae/NVG/Direct" {
    surface frag (v2f i) {
     float2 uv = i.screen.xy / i.screen.w;
     float toRight;
-    if (!kept(i.pos.xy, coverage(uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight)))
+    if (!pick(i.pos.xy, uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight))
      discard;
     surface o;
     o.g0 = lerp(tex2D(_DirectL0, uv), tex2D(_DirectR0, uv), toRight);
@@ -182,7 +193,8 @@ Shader "Justachae/NVG/Direct" {
     float2 uv = i.screen.xy / i.screen.w;
     float toRight;
     float c = coverage(uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight);
-    if (c <= 0 || c >= 1)
+    float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
+    if (c <= 0 || t <= 0 || t >= 1)
      discard;
     float3 sum = 0;
     for (int y = -2; y < 2; y++)
@@ -214,12 +226,116 @@ Shader "Justachae/NVG/Direct" {
    float4 frag (m2f i) : SV_Target {
     float2 uv = i.screen.xy / i.screen.w;
     float toRight;
-    if (coverage(uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight) <= 0 || (_DirectHalf < 0.5) != (toRight < 0.5))
+    if (!pick(i.pos.xy, uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight) || (_DirectHalf < 0.5) != (toRight < 0.5))
      discard;
     float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
     // By the camera's own matrices, up being up: no turning over, as the game's motion goes the same way in both directions.
     return float4(now - old, 0, 1);
    }
+   ENDCG
+  }
+  // 6: bit 0 of the stencil the game left under its own drawing of the device.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
+   Blend One One
+   ColorMask R
+   Stencil { Ref 255 ReadMask 1 Comp Equal Pass Keep Fail Keep ZFail Keep }
+   CGPROGRAM
+   #pragma vertex stencilVert
+   #pragma fragment frag
+   float4 stencilVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 0.00392157; }
+   ENDCG
+  }
+  // 7: bit 1 of the stencil the game left under its own drawing of the device.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
+   Blend One One
+   ColorMask R
+   Stencil { Ref 255 ReadMask 2 Comp Equal Pass Keep Fail Keep ZFail Keep }
+   CGPROGRAM
+   #pragma vertex stencilVert
+   #pragma fragment frag
+   float4 stencilVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 0.00784314; }
+   ENDCG
+  }
+  // 8: bit 2 of the stencil the game left under its own drawing of the device.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
+   Blend One One
+   ColorMask R
+   Stencil { Ref 255 ReadMask 4 Comp Equal Pass Keep Fail Keep ZFail Keep }
+   CGPROGRAM
+   #pragma vertex stencilVert
+   #pragma fragment frag
+   float4 stencilVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 0.01568627; }
+   ENDCG
+  }
+  // 9: bit 3 of the stencil the game left under its own drawing of the device.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
+   Blend One One
+   ColorMask R
+   Stencil { Ref 255 ReadMask 8 Comp Equal Pass Keep Fail Keep ZFail Keep }
+   CGPROGRAM
+   #pragma vertex stencilVert
+   #pragma fragment frag
+   float4 stencilVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 0.03137255; }
+   ENDCG
+  }
+  // 10: bit 4 of the stencil the game left under its own drawing of the device.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
+   Blend One One
+   ColorMask R
+   Stencil { Ref 255 ReadMask 16 Comp Equal Pass Keep Fail Keep ZFail Keep }
+   CGPROGRAM
+   #pragma vertex stencilVert
+   #pragma fragment frag
+   float4 stencilVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 0.06274510; }
+   ENDCG
+  }
+  // 11: bit 5 of the stencil the game left under its own drawing of the device.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
+   Blend One One
+   ColorMask R
+   Stencil { Ref 255 ReadMask 32 Comp Equal Pass Keep Fail Keep ZFail Keep }
+   CGPROGRAM
+   #pragma vertex stencilVert
+   #pragma fragment frag
+   float4 stencilVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 0.12549020; }
+   ENDCG
+  }
+  // 12: bit 6 of the stencil the game left under its own drawing of the device.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
+   Blend One One
+   ColorMask R
+   Stencil { Ref 255 ReadMask 64 Comp Equal Pass Keep Fail Keep ZFail Keep }
+   CGPROGRAM
+   #pragma vertex stencilVert
+   #pragma fragment frag
+   float4 stencilVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 0.25098039; }
+   ENDCG
+  }
+  // 13: bit 7 of the stencil the game left under its own drawing of the device.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
+   Blend One One
+   ColorMask R
+   Stencil { Ref 255 ReadMask 128 Comp Equal Pass Keep Fail Keep ZFail Keep }
+   CGPROGRAM
+   #pragma vertex stencilVert
+   #pragma fragment frag
+   float4 stencilVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 0.50196078; }
    ENDCG
   }
  }

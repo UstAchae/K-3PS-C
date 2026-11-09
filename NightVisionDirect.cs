@@ -257,6 +257,97 @@ internal static partial class NightVisionEyepieces
         _oldShifts[1] = rightShift;
     }
 
+    // Unity's deferred lights go by the stencil: its low bits say which lamps leave a thing out, by its layer. All of it written as one
+    // value, the device had every lamp in the map on it, and glinted as nothing else did. So the value the game itself leaves under
+    // the device is read while the game draws it (device up), once for each device, and written where the device is put in.
+    private const int StencilBitsPass = 6;
+    private const int StencilRetryFrames = 60;
+    private static readonly int DirectStencilRefId = Shader.PropertyToID("_DirectStencilRef");
+    private static CommandBuffer? _stencilProbe;
+    private static RenderTexture? _stencilSeen;
+    private static Camera? _stencilCamera;
+    private static Transform? _stencilOf;
+    private static int _stencilAt = -1000;
+    private static bool _stencilWaiting;
+    private static float _stencilRef = 128f;
+
+    private static void ProbeStencil(Camera main)
+    {
+        if (_body == null || _directShader == null || ReferenceEquals(_stencilOf, _body))
+            return;
+        if (_stencilWaiting)
+        {
+            _stencilWaiting = false;
+            _stencilCamera?.RemoveCommandBuffer(CameraEvent.AfterGBuffer, _stencilProbe);
+            ReadStencil();
+            return;
+        }
+        if (Time.frameCount - _stencilAt < StencilRetryFrames)
+            return;
+        _stencilAt = Time.frameCount;
+        int width = main.pixelWidth, height = main.pixelHeight;
+        if (_stencilSeen == null || _stencilSeen.width != width || _stencilSeen.height != height)
+        {
+            if (_stencilSeen != null)
+            {
+                _stencilSeen.Release();
+                Object.Destroy(_stencilSeen);
+            }
+            _stencilSeen = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) { name = "Justachae NVG stencil seen", filterMode = FilterMode.Point };
+        }
+        _directMaterial ??= new Material(_directShader) { name = "Justachae NVG device in the main camera", hideFlags = HideFlags.DontSave };
+        _stencilProbe ??= new CommandBuffer { name = "Justachae NVG stencil of the device" };
+        _stencilProbe.Clear();
+        _stencilProbe.SetRenderTarget(_stencilSeen, BuiltinRenderTextureType.CameraTarget);
+        _stencilProbe.ClearRenderTarget(false, true, Color.clear);
+        DeviceSlot().GetComponentsInChildren(false, _slotRenderers);
+        for (int bit = 0; bit < 8; bit++)
+        {
+            foreach (Renderer r in _slotRenderers)
+            {
+                if (r is not MeshRenderer || !r.enabled || !Opaque(r) || !FinestLevel(r) || !r.TryGetComponent(out MeshFilter filter) || filter.sharedMesh == null)
+                    continue;
+                for (int s = 0; s < filter.sharedMesh.subMeshCount; s++)
+                    _stencilProbe.DrawRenderer(r, _directMaterial, s, StencilBitsPass + bit);
+            }
+        }
+        _stencilProbe.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        main.AddCommandBuffer(CameraEvent.AfterGBuffer, _stencilProbe);
+        _stencilCamera = main;
+        _stencilWaiting = true;
+    }
+
+    private static void ReadStencil()
+    {
+        RenderTexture? active = RenderTexture.active;
+        var read = new Texture2D(_stencilSeen!.width, _stencilSeen.height, TextureFormat.RGBA32, false, true);
+        RenderTexture.active = _stencilSeen;
+        read.ReadPixels(new Rect(0, 0, _stencilSeen.width, _stencilSeen.height), 0, 0);
+        RenderTexture.active = active;
+        var counts = new int[256];
+        foreach (Color32 c in read.GetPixels32())
+            counts[c.r]++;
+        Object.Destroy(read);
+        int best = 0;
+        for (int v = 1; v < 256; v++)
+        {
+            if (counts[v] > counts[best] || best == 0)
+                best = v;
+        }
+        // Not in view this time: looked for again.
+        if (counts[best] < 16)
+            return;
+        var text = new System.Text.StringBuilder();
+        for (int v = 1; v < 256; v++)
+        {
+            if (counts[v] > 0)
+                text.Append(v).Append(':').Append(counts[v]).Append(' ');
+        }
+        _stencilOf = _body;
+        _stencilRef = best;
+        Log($"NVG stencil: {_body!.name} has {best} under the game's own drawing (all seen, value:pixels: {text}); the global non-background is {Shader.GetGlobalInt("_StencilNonBackground")}");
+    }
+
     private static void ClearDirect()
     {
         _directBuffer?.Clear();
@@ -425,6 +516,7 @@ internal static partial class NightVisionEyepieces
             }
         }
 
+        _directMaterial.SetFloat(DirectStencilRefId, _stencilRef);
         buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
         buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 0);
