@@ -99,96 +99,98 @@ internal static partial class NightVisionEyepieces
 
     // The renderers as they are this frame, not as they were found once: a device whose renderers had been made anew was
     // not hidden, and four eyepieces were seen.
-    // Temporary: with the game drawing the device and nothing of ours over it, one frame of the surface the game wrote and the one we
-    // wrote, kept as they are for working out what differs; and all that the materials are made of.
-    private const int ProbeFrames = 30;
-    private static int _probeWait;
-    private static readonly string[] ProbeNames = { "game0", "game1", "game2", "game1_after_decals", "ours0", "ours1", "ours2" };
-    private static readonly RenderTexture?[] _probes = new RenderTexture?[7];
+    // Temporary: the game drawing the device for a moment, then us, from one place; the frame kept at each step of the lighting, to
+    // work out at which of them the two part.
+    private const int CompareFrames = 30;
+    private static int _compareFrame;
+    private static bool _compareNow, _compareDone, _compareTaken;
+    private static CommandBuffer? _compareLit0, _compareLit1;
+    private static Camera? _compareCamera;
 
-    private static bool ProbeDue()
+    private static void StepCompare()
     {
-        bool plain = NvgDump.Layered;
-        for (int l = 0; l < 8; l++)
-            plain &= !NvgDump.Layer(l);
-        if (!plain || _pieces.Count == 0)
+        if (_compareTaken)
         {
-            _probeWait = 0;
-            return false;
-        }
-        if (++_probeWait != ProbeFrames)
-            return false;
-        NoteMaterials();
-        return true;
-    }
-
-    private static void ProbeCopy(CommandBuffer buffer, RenderTargetIdentifier from, int which, int width, int height)
-    {
-        RenderTexture? target = _probes[which];
-        if (target == null || target.width != width || target.height != height)
-        {
-            if (target != null)
+            // The buffers of the frame just kept.
+            _compareTaken = false;
+            if (_compareCamera != null)
             {
-                target.Release();
-                Object.Destroy(target);
+                _compareCamera.RemoveCommandBuffer(CameraEvent.AfterLighting, _compareLit0);
+                _compareCamera.RemoveCommandBuffer(CameraEvent.AfterLighting, _compareLit1);
             }
-            target = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear) { name = "Justachae NVG probe " + ProbeNames[which], filterMode = FilterMode.Point };
-            _probes[which] = target;
         }
-        buffer.Blit(from, target);
+        _compareNow = false;
+        if (!NvgDump.CompareWanted)
+        {
+            _compareDone = false;
+            NvgDump.ComparePhase = 0;
+            return;
+        }
+        if (_compareDone || (_flip > 0.001f && _flip < 0.999f))
+        {
+            NvgDump.ComparePhase = 0;
+            return;
+        }
+        if (NvgDump.ComparePhase == 0)
+        {
+            NvgDump.ComparePhase = 1;
+            _compareFrame = 0;
+        }
+        if (_compareFrame > CompareFrames)
+        {
+            _compareFrame = 0;
+            if (NvgDump.ComparePhase == 2)
+            {
+                NvgDump.ComparePhase = 0;
+                _compareDone = true;
+                Log("NVG compare: done");
+                return;
+            }
+            NvgDump.ComparePhase = 2;
+        }
+        _compareFrame++;
+        _compareNow = _compareFrame == CompareFrames;
     }
 
-    private static void ProbeRead(CommandBuffer buffer, int width, int height)
+    private static string ComparePrefix => (_flip <= 0.001f ? "up_" : "down_") + (NvgDump.ComparePhase == 1 ? "game_" : "ours_");
+
+    private static void CompareCopy(CommandBuffer buffer, RenderTargetIdentifier from, string name, int width, int height, RenderTextureFormat format = RenderTextureFormat.ARGBHalf)
     {
         string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgprobe");
         System.IO.Directory.CreateDirectory(folder);
-        for (int i = 0; i < _probes.Length; i++)
+        string file = System.IO.Path.Combine(folder, $"{ComparePrefix}{name}_{width}_{height}.bin");
+        var target = new RenderTexture(width, height, 0, format, RenderTextureReadWrite.Linear) { name = "Justachae NVG compare " + name, filterMode = FilterMode.Point };
+        buffer.Blit(from, target);
+        buffer.RequestAsyncReadback(target, request =>
         {
-            string file = System.IO.Path.Combine(folder, $"{ProbeNames[i]}_{width}_{height}.bin");
-            buffer.RequestAsyncReadback(_probes[i]!, request =>
-            {
-                if (request.hasError)
-                {
-                    Log($"NVG probe: reading {file} failed");
-                    return;
-                }
+            if (request.hasError)
+                Log($"NVG compare: reading {file} failed");
+            else
                 System.IO.File.WriteAllBytes(file, request.GetData<byte>().ToArray());
-                Log($"NVG probe: wrote {file}");
-            });
-        }
+            target.Release();
+            Object.Destroy(target);
+        });
     }
 
-    private static void NoteMaterials()
+    // The light as it comes from Unity's own lighting, before the rest laid on after it, and with all of that.
+    private static void CompareLit(Camera main, int width, int height)
     {
-        foreach (Piece piece in _pieces)
-        {
-            Renderer r = piece.Renderer;
-            r.GetPropertyBlock(_pieceBlock);
-            Log($"NVG probe: renderer {r.name}, mesh {piece.Mesh.name} with {piece.Mesh.subMeshCount} parts, layer {r.gameObject.layer}, rendering layers {r.renderingLayerMask}, light probes {r.lightProbeUsage}, reflection probes {r.reflectionProbeUsage}, lightmap {r.lightmapIndex}, property block empty {_pieceBlock.isEmpty}, motion {r.motionVectorGenerationMode}, priority {r.rendererPriority}");
-            for (int m = 0; m < piece.Materials.Length; m++)
-            {
-                Material material = piece.Materials[m];
-                if (material == null)
-                    continue;
-                var text = new System.Text.StringBuilder();
-                text.Append($"NVG probe: material {m} {material.name}, shader {material.shader.name}, queue {material.renderQueue}, used pass {piece.Passes[m]}, keywords [{string.Join(" ", material.shaderKeywords)}], passes:");
-                for (int p = 0; p < material.passCount; p++)
-                    text.Append($" {p}={material.GetPassName(p)}/{material.shader.FindPassTagValue(p, new ShaderTagId("LightMode")).name}/{(material.GetShaderPassEnabled(material.GetPassName(p)) ? "on" : "off")}");
-                text.Append("; floats:");
-                foreach (string name in material.GetPropertyNames(MaterialPropertyType.Float))
-                    text.Append($" {name}={material.GetFloat(name):G5}");
-                text.Append("; colours:");
-                foreach (string name in material.GetPropertyNames(MaterialPropertyType.Vector))
-                    text.Append($" {name}={material.GetVector(name)}");
-                text.Append("; textures:");
-                foreach (string name in material.GetTexturePropertyNames())
-                {
-                    Texture? texture = material.GetTexture(name);
-                    text.Append($" {name}={(texture != null ? texture.name : "none")}");
-                }
-                Log(text.ToString());
-            }
-        }
+        _compareLit0 ??= new CommandBuffer { name = "Justachae NVG compare, lit" };
+        _compareLit1 ??= new CommandBuffer { name = "Justachae NVG compare, lit with the rest" };
+        _compareLit0.Clear();
+        _compareLit1.Clear();
+        CompareCopy(_compareLit0, BuiltinRenderTextureType.CameraTarget, "lit0", width, height);
+        _compareLit0.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        CompareCopy(_compareLit1, BuiltinRenderTextureType.CameraTarget, "lit1", width, height);
+        _compareLit1.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        CommandBuffer[] others = main.GetCommandBuffers(CameraEvent.AfterLighting);
+        main.RemoveCommandBuffers(CameraEvent.AfterLighting);
+        main.AddCommandBuffer(CameraEvent.AfterLighting, _compareLit0);
+        foreach (CommandBuffer b in others)
+            main.AddCommandBuffer(CameraEvent.AfterLighting, b);
+        main.AddCommandBuffer(CameraEvent.AfterLighting, _compareLit1);
+        _compareCamera = main;
+        _compareTaken = true;
     }
 
     private static void HideDevice(Camera camera)
@@ -658,16 +660,6 @@ internal static partial class NightVisionEyepieces
             }
         }
 
-        bool probing = ProbeDue();
-        if (probing)
-        {
-            ProbeCopy(buffer, BuiltinRenderTextureType.GBuffer0, 0, width, height);
-            ProbeCopy(buffer, BuiltinRenderTextureType.GBuffer1, 1, width, height);
-            ProbeCopy(buffer, BuiltinRenderTextureType.GBuffer2, 2, width, height);
-            ProbeCopy(buffer, DirectLeft[0], 4, width, height);
-            ProbeCopy(buffer, DirectLeft[1], 5, width, height);
-            ProbeCopy(buffer, DirectLeft[2], 6, width, height);
-        }
         _directMaterial.SetFloat(DirectStencilRefId, _stencilRef);
         _directMaterial.SetFloat("_DirectNoEmission", NvgDump.NoEmission ? 1f : 0f);
         buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
@@ -679,16 +671,20 @@ internal static partial class NightVisionEyepieces
 
         // After the decals, which are thrown on whatever the depth holds. The textures are let go only after this.
         buffer = _directAgain;
-        if (probing)
-        {
-            ProbeCopy(buffer, BuiltinRenderTextureType.GBuffer1, 3, width, height);
-            ProbeRead(buffer, width, height);
-        }
         buffer.SetRenderTarget(_mainSurface, BuiltinRenderTextureType.CameraTarget);
         if (NvgDump.Layered)
             DrawLayers(buffer, true);
         else
             buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 2);
+        if (_compareNow)
+        {
+            CompareCopy(buffer, BuiltinRenderTextureType.GBuffer0, "g0", width, height);
+            CompareCopy(buffer, BuiltinRenderTextureType.GBuffer1, "g1", width, height);
+            CompareCopy(buffer, BuiltinRenderTextureType.GBuffer2, "g2", width, height);
+            CompareCopy(buffer, BuiltinRenderTextureType.CameraTarget, "e", width, height);
+            CompareLit(main, width, height);
+            Log($"NVG compare: {ComparePrefix} flip {_flip:F2}, shifts {leftShift} {rightShift}, split {split:F3}, stencil {_stencilRef}");
+        }
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         // The device's own motion on the screen: it goes with the head, and left to itself it had what lay behind it, so what is
         // carried from frame to frame by the motion (the reflections, the upscaler) drifted over it like mist.
@@ -710,6 +706,13 @@ internal static partial class NightVisionEyepieces
         {
             buffer.ReleaseTemporaryRT(DirectLeft[t]);
             buffer.ReleaseTemporaryRT(DirectRight[t]);
+        }
+        if (_compareNow)
+        {
+            CompareCopy(buffer, BuiltinRenderTextureType.CameraTarget, "opaque", width, height);
+            CompareCopy(buffer, new RenderTargetIdentifier("_CameraDepthTexture"), "depth", width, height, RenderTextureFormat.RFloat);
+            CompareCopy(buffer, BuiltinRenderTextureType.MotionVectors, "motion", width, height);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         }
         buffer.ReleaseTemporaryRT(DirectLeftDepth);
         buffer.ReleaseTemporaryRT(DirectRightDepth);

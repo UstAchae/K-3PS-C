@@ -14,7 +14,10 @@ internal static class NvgDump
     internal const int LayerDiffuse = 0, LayerSpecular = 1, LayerNormal = 2, LayerEmission = 3, LayerDepth = 4, LayerStencil = 5, LayerMotion = 6, LayerEven = 7;
 
     private static ConfigEntry<bool>? _near, _traceSix, _area, _post, _hbao, _sun, _game, _noEmission, _noFace;
-    private static ConfigEntry<bool>? _upToo, _byRenderer, _layered;
+    private static ConfigEntry<bool>? _upToo, _byRenderer, _layered, _compare;
+    // The automatic comparison under way: 1 the game drawing the device, 2 us; neither shifted, so both stand in one place.
+    internal static int ComparePhase;
+    internal static bool CompareWanted => _compare != null && _compare.Value;
     private static readonly ConfigEntry<bool>?[] _layers = new ConfigEntry<bool>?[8];
     private static Camera? _on;
     private static PostProcessLayer? _layer;
@@ -27,14 +30,16 @@ internal static class NvgDump
     private static readonly List<CommandBuffer> _areaTaken = new List<CommandBuffer>();
 
     internal static bool NoEmission => _noEmission != null && _noEmission.Value;
-    internal static bool UpToo => Layered || (_upToo != null && _upToo.Value);
+    internal static bool UpToo => ComparePhase != 0 || Layered || (_upToo != null && _upToo.Value);
     // Only with the device all the way up: down, it stands shifted from where the game draws it, and a layer over it means nothing.
     internal static bool DeviceUp;
-    internal static bool Layer(int which) => DeviceUp && _layers[which] != null && _layers[which]!.Value;
+    internal static bool Layer(int which) => ComparePhase == 0 && DeviceUp && _layers[which] != null && _layers[which]!.Value;
     internal static bool Layered
     {
         get
         {
+            if (ComparePhase != 0)
+                return ComparePhase == 1;
             if (!DeviceUp)
                 return false;
             if (_layered != null && _layered.Value)
@@ -48,7 +53,7 @@ internal static class NvgDump
         }
     }
     internal static bool NoFaceLight => _noFace != null && _noFace.Value;
-    internal static bool GameDraws => !Layered && _game != null && _game.Value;
+    internal static bool GameDraws => ComparePhase == 0 && !Layered && _game != null && _game.Value;
     internal static bool UseRenderer => _byRenderer != null && _byRenderer.Value;
     internal static float TestNear => _near != null && _near.Value ? 0.005f : 0f;
 
@@ -79,6 +84,7 @@ internal static class NvgDump
         _layers[LayerDepth] = Switch("18 只换深度", "只在夜视仪完全翻上时起作用，不用先开 13。");
         _layers[LayerStencil] = Switch("19 只换模板", "只在夜视仪完全翻上时起作用，不用先开 13。");
         _layers[LayerMotion] = Switch("20 只换运动矢量", "只在夜视仪完全翻上时起作用，不用先开 13。");
+        _compare = Switch("22 自动对比（翻上、翻下各开一次）", "站着不动打开，等 2 秒再关。游戏画一次、我们画一次，都不平移，把每个光照阶段存下来。翻上和翻下各做一次。");
         _layers[LayerEven] = Switch("21 只开中间带的平滑", "只在夜视仪完全翻上时起作用，不用先开 13。");
     }
 
