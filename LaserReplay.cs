@@ -58,6 +58,9 @@ internal static class LaserReplay
         }
     }
 
+    // The camera a laser is being drawn for now (null: drawn by the game for all of them).
+    internal static Camera? DrawCamera => _drawCamera;
+
     public static Camera? GetDrawCamera()
     {
         // Under an upscaler the FPS camera's lasers are drawn apart and put in after the upscale (NightVisionIr.cs).

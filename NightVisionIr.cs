@@ -30,6 +30,8 @@ internal static partial class NightVisionEyepieces
         internal Matrix4x4 Matrix;
         internal Material Material;
         internal MaterialPropertyBlock Block;
+        internal float Dim;                 // the share a visible laser is given in the night-vision picture
+        internal bool IsBeam;
     }
 
     private struct IrLaser
@@ -146,7 +148,11 @@ internal static partial class NightVisionEyepieces
         if (preCull != null)
             harmony.Patch(preCull, prefix: new HarmonyMethod(typeof(NightVisionEyepieces), nameof(IkLightPreCullPrefix)));
         if (lateUpdate != null)
+        {
+            harmony.Patch(lateUpdate, prefix: new HarmonyMethod(typeof(NightVisionEyepieces), nameof(LaserAsItIsPrefix)) { priority = Priority.First });
+            harmony.Patch(lateUpdate, prefix: new HarmonyMethod(typeof(NightVisionEyepieces), nameof(LaserToNakedEyePrefix)) { priority = Priority.Last });
             harmony.Patch(lateUpdate, postfix: new HarmonyMethod(typeof(NightVisionEyepieces), nameof(LaserLateUpdatePostfix)) { priority = Priority.Last });
+        }
         var fill = AccessTools.Method(typeof(SSAAPropagator), nameof(SSAAPropagator.FillCommandBuffer));
         if (fill != null)
             harmony.Patch(fill, postfix: new HarmonyMethod(typeof(NightVisionEyepieces), nameof(FillCommandBufferPostfix)));
@@ -195,6 +201,69 @@ internal static partial class NightVisionEyepieces
         _irAttached.Add(light);
     }
 
+    // Something else may dim visible lasers while night vision is on (BRNVG: its "Visible laser intensity with NVGs"), for the whole
+    // frame. With the eyepieces in, the frame is the naked eye's: the laser is drawn there as it was, and only the night-vision picture
+    // keeps the dimming (Dim, for the lenses' layer). A sight looked through with the goggle is the night-vision picture too.
+    private static float _laserAsItWas = -1f;
+    private static int _laserDimFrame = -1;
+    private static readonly Dictionary<LaserBeam, float> _laserDim = new Dictionary<LaserBeam, float>();
+    private static readonly int LaserColorId = Shader.PropertyToID("_Color"), LaserIntensityId = Shader.PropertyToID("_Intensity");
+
+    private static void LaserAsItIsPrefix(LaserBeam __instance)
+    {
+        _laserAsItWas = __instance != null && __instance.BeamMaterial != null ? __instance.IntensityFactor : -1f;
+    }
+
+    private static void LaserToNakedEyePrefix(LaserBeam __instance)
+    {
+        float was = _laserAsItWas;
+        _laserAsItWas = -1f;
+        if (was <= 0f || __instance == null || __instance.BeamMaterial == null || __instance.BeamMaterial.name == "LaserBeamIk")
+            return;
+        // Lasers come and go: what was noted is let go each frame.
+        if (_laserDimFrame != Time.frameCount)
+        {
+            _laserDim.Clear();
+            _laserDimFrame = Time.frameCount;
+        }
+        float dim = Mathf.Clamp01(__instance.IntensityFactor / was);
+        _laserDim[__instance] = dim;
+        if (dim >= 0.999f || !IrWanted)
+            return;
+        Camera? camera = LaserReplay.DrawCamera;
+        if (camera != null && OpticPicture.IsCamera(camera) && ScopePullback > 0.005f)
+            return;
+        __instance.IntensityFactor = was;
+        if (__instance.BeamMaterial.HasProperty(LaserColorId) && LaserBeamBlock(__instance) is MaterialPropertyBlock block)
+            block.SetColor(LaserColorId, __instance.BeamMaterial.GetColor(LaserColorId));
+    }
+
+    // A visible laser for the lenses' layer at the share the night-vision picture gives it: its own block's values, scaled, in a block of
+    // ours (kept, one for each laser drawn this frame).
+    private static readonly List<MaterialPropertyBlock> _dimmedBlocks = new List<MaterialPropertyBlock>();
+    private static readonly int LaserDistanceId = Shader.PropertyToID("_Distance"), LaserSizeId = Shader.PropertyToID("_Size"), LaserMaxDistId = Shader.PropertyToID("_MaxDist");
+
+    private static MaterialPropertyBlock Dimmed(IrMesh m, int index)
+    {
+        while (_dimmedBlocks.Count <= index)
+            _dimmedBlocks.Add(new MaterialPropertyBlock());
+        MaterialPropertyBlock block = _dimmedBlocks[index];
+        block.Clear();
+        block.SetFloat(LaserIntensityId, m.Block.GetFloat(LaserIntensityId) * m.Dim);
+        if (m.IsBeam)
+        {
+            block.SetFloat(LaserDistanceId, m.Block.GetFloat(LaserDistanceId));
+            if (m.Material.HasProperty(LaserColorId))
+                block.SetColor(LaserColorId, m.Material.GetColor(LaserColorId) * m.Dim);
+        }
+        else
+        {
+            block.SetFloat(LaserSizeId, m.Block.GetFloat(LaserSizeId));
+            block.SetFloat(LaserMaxDistId, m.Block.GetFloat(LaserMaxDistId));
+        }
+        return block;
+    }
+
     // A laser as it was just drawn (the last time this frame counts): its beam, its point where it hits, and an IR
     // one's impact light. Visible ones too: the game draws every laser brighter while night vision is on, which the
     // frame (the naked eye's) is not.
@@ -211,12 +280,13 @@ internal static partial class NightVisionEyepieces
         Transform t = __instance.transform;
         Vector3 forward = t.forward;
         var record = new IrLaser { Seen = seen };
+        float dim = seen && _laserDim.TryGetValue(__instance, out float d) ? d : 1f;
         Mesh beam = LaserBeamMesh(__instance), point = LaserPointMesh(__instance);
         if (beam != null)
-            record.Beam = new IrMesh { Mesh = beam, Matrix = Matrix4x4.TRS(t.position, t.rotation, Vector3.one), Material = __instance.BeamMaterial, Block = LaserBeamBlock(__instance) };
+            record.Beam = new IrMesh { Mesh = beam, Matrix = Matrix4x4.TRS(t.position, t.rotation, Vector3.one), Material = __instance.BeamMaterial, Block = LaserBeamBlock(__instance), Dim = dim, IsBeam = true };
         if (point != null && __instance.PointMaterial != null
             && Physics.Raycast(t.position + forward * __instance.RayStart, forward, out RaycastHit hit, __instance.MaxDistance, __instance.Mask))
-            record.Point = new IrMesh { Mesh = point, Matrix = Matrix4x4.TRS(hit.point, Quaternion.LookRotation(hit.normal), Vector3.one), Material = __instance.PointMaterial, Block = LaserPointBlock(__instance) };
+            record.Point = new IrMesh { Mesh = point, Matrix = Matrix4x4.TRS(hit.point, Quaternion.LookRotation(hit.normal), Vector3.one), Material = __instance.PointMaterial, Block = LaserPointBlock(__instance), Dim = dim };
         Light light = LaserLight(__instance);
         if (!seen && light != null && light.isActiveAndEnabled && light.intensity > 0f)
             record.Light = new IrLight { Light = light, Intensity = light.intensity };
@@ -381,10 +451,11 @@ internal static partial class NightVisionEyepieces
             {
                 _irLasers.SetRenderTarget(_irLayer, BuiltinRenderTextureType.CameraTarget);
                 _irLasers.SetGlobalFloat(NightVisionOnId, 1f);
+                int dimmed = 0;
                 foreach (IrMesh m in _irMeshes)
                 {
                     if (m.Mesh != null && m.Material != null)
-                        _irLasers.DrawMesh(m.Mesh, m.Matrix, m.Material, 0, 0, m.Block);
+                        _irLasers.DrawMesh(m.Mesh, m.Matrix, m.Material, 0, 0, m.Dim < 0.999f && m.Block != null ? Dimmed(m, dimmed++) : m.Block);
                 }
                 _irLasers.SetGlobalFloat(NightVisionOnId, 0f);
             }
