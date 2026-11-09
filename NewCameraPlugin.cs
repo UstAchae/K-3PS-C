@@ -155,10 +155,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             new ConfigDescription("按住时把夜视仪沿支架往前推（离眼睛远；G24 一格一格地走）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -7 }));
         ConfigEntry<KeyboardShortcut> slideBack = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架往后", new KeyboardShortcut(KeyCode.Minus, KeyCode.LeftControl),
             new ConfigDescription("按住时把夜视仪沿支架往后拉（离眼睛近）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -8 }));
-        // The old single tilt, now only where a helmet never set starts (each helmet keeps its own: HeadwearTilt).
-        ConfigEntry<float> headwearPitch = SettingsLayout.Bind(Config, "头戴式成像装备", "头部装备仰俯", 0f,
-            new ConfigDescription("（旧设置）还没单独调过的头盔从这个角度开始。每顶头盔的仰俯用下面两个快捷键调，各自记住。",
-                new AcceptableValueRange<float>(0f, HeadwearTilt.Range), new ConfigurationManagerAttributes { Order = -9, Browsable = false }));
         ConfigEntry<KeyboardShortcut> headwearUp = SettingsLayout.Bind(Config, "头戴式成像装备", "头部装备仰起", HeadwearTilt.Up,
             new ConfigDescription("按住时把头盔前沿往上抬（只转头盔和挂在上面的夜视仪，头和镜头不动）。每顶头盔各自记住自己的角度，像夜视仪支架一样。只在腰射（没有瞄准）时有效，瞄准时同样的键调瞄准距离。", null, new ConfigurationManagerAttributes { Order = -10 }));
         ConfigEntry<KeyboardShortcut> headwearDown = SettingsLayout.Bind(Config, "头戴式成像装备", "头部装备俯下", HeadwearTilt.Down,
@@ -199,7 +195,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             NightVisionEyepieces.TritiumBrightness = tritium.Value;
             NightVisionEyepieces.NearBlurDistance = nearBlur.Value;
             NightVisionEyepieces.NearBlurLimit = nearBlurLimit.Value;
-            HeadwearTilt.Default = headwearPitch.Value;
             HeadwearTilt.Up = headwearUp.Value;
             HeadwearTilt.Down = headwearDown.Value;
             NightVisionEyepieces.EyepieceGlow = glow.Value;
@@ -220,7 +215,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         nearBlur.SettingChanged += (_, _) => Refresh();
         tritium.SettingChanged += (_, _) => Refresh();
         nearBlurLimit.SettingChanged += (_, _) => Refresh();
-        headwearPitch.SettingChanged += (_, _) => Refresh();
         headwearUp.SettingChanged += (_, _) => Refresh();
         headwearDown.SettingChanged += (_, _) => Refresh();
         glow.SettingChanged += (_, _) => Refresh();

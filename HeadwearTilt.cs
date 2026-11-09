@@ -11,14 +11,13 @@ namespace EFTNewCamera;
 // The helmet tilted on the head, apart from the head: its brim lifted (never lowered) about the skull's middle, the camera's right
 // axis, as the bones are posed each frame (after the head model's lift); what hangs from it (the night vision) goes
 // with it. Set by hotkeys held (F12), kept for each helmet (the worn item, as each mount keeps its own: NightVisionMount)
-// in its own file; a helmet never set starts from the old single setting (F12, hidden).
+// in its own file; a helmet never set sits as the game has it.
 internal static class HeadwearTilt
 {
     private const float Speed = 2.5f;         // degrees per second while a key is held
     internal const float Range = 5f;          // up only, degrees
     private const float SkullMiddle = 0.09f;  // the pivot above the head bone, along the camera's up (m)
 
-    internal static float Default;               // a helmet never set (the old single setting)
     internal static float Degrees;               // the brim up, the worn helmet's
     internal static KeyboardShortcut Up = new KeyboardShortcut(KeyCode.Equals);
     internal static KeyboardShortcut Down = new KeyboardShortcut(KeyCode.Minus);
@@ -55,7 +54,7 @@ internal static class HeadwearTilt
                 NewCameraPlugin.Log?.LogWarning("Helmet tilts not read: " + e.Message);
             }
         }
-        return id != null && _saved.TryGetValue(id, out float degrees) ? degrees : Default;
+        return id != null && _saved.TryGetValue(id, out float degrees) ? degrees : 0f;
     }
 
     private static void Save()
@@ -149,8 +148,6 @@ internal static class HeadwearTilt
         if (head == null || helmet == null)
             return;
         float degrees = Mathf.Clamp(SavedFor(helmet.Id.ToString()), 0f, Range);
-        // Temporary: which helmet a model shown elsewhere has, and what it was given.
-        NewCameraPlugin.Log?.LogInfo($"Helmet on a shown model: {model.name}, id {helmet.Id}, saved {(_saved != null && _saved.ContainsKey(helmet.Id.ToString()) ? "yes" : "no, the old default " + Default)}, tilted {degrees}, on {body.name}");
         if (degrees < 0.01f)
             return;
         Forget(model);
