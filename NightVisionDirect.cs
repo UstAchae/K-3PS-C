@@ -99,7 +99,7 @@ internal static partial class NightVisionEyepieces
 
     // The renderers as they are this frame, not as they were found once: a device whose renderers had been made anew was
     // not hidden, and four eyepieces were seen.
-    private static void HideDevice()
+    private static void HideDevice(Camera camera)
     {
         _pieces.Clear();
         DeviceSlot().GetComponentsInChildren(false, _slotRenderers);
@@ -119,7 +119,7 @@ internal static partial class NightVisionEyepieces
             _pieces.Add(new Piece
             {
                 Renderer = r, Mesh = source.Filter.sharedMesh, Materials = source.Materials, Passes = source.Passes,
-                FromCamera = FromCamera(r.transform, Vector3.zero),
+                FromCamera = FromCamera(r.transform, camera.transform.position),
             });
         }
         if (hide)
@@ -471,7 +471,7 @@ internal static partial class NightVisionEyepieces
         if (layers != _layersNoted)
         {
             _layersNoted = layers;
-            Log($"NVG layers: game draws {NvgDump.Layered}, ours over it: diffuse {(layers & 1) != 0}, specular {(layers & 2) != 0}, normal {(layers & 4) != 0}, emission {(layers & 8) != 0}, depth {(layers & 16) != 0}, stencil {(layers & 32) != 0}, motion {(layers & 64) != 0}, even {(layers & 128) != 0}; stencil value {_stencilRef}");
+            Log($"NVG layers: flip {_flip:F2}, at the eyes {_precise}, game draws {NvgDump.Layered}, ours over it: diffuse {(layers & 1) != 0}, specular {(layers & 2) != 0}, normal {(layers & 4) != 0}, emission {(layers & 8) != 0}, depth {(layers & 16) != 0}, stencil {(layers & 32) != 0}, motion {(layers & 64) != 0}, even {(layers & 128) != 0}; stencil value {_stencilRef}");
         }
         for (int half = 0; half < 2; half++)
         {

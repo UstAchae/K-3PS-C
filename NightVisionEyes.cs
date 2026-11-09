@@ -75,7 +75,7 @@ internal static partial class NightVisionEyepieces
         if (!NvgDump.UpToo && ((!BinocularOn && !Active) || _eyepieceImage == null || !_eyepieceImage.enabled))
             return false;
         Vector3 mount = _rotator != null ? _rotator.transform.position : _body.position;
-        return (mount - camera.transform.position).sqrMagnitude <= MaxEyeDistance * MaxEyeDistance;
+        return NvgDump.Layered || (mount - camera.transform.position).sqrMagnitude <= MaxEyeDistance * MaxEyeDistance;
     }
 
     internal static void OnCameraPreCull(Camera camera)
@@ -88,9 +88,11 @@ internal static partial class NightVisionEyepieces
         if (_body != null)
             AdjustMount(camera);
         // Once the device's mount is set for this frame: the camera has been placed by now.
-        _direct = !NvgDump.GameDraws && _directShader != null && LensesOn(camera) && PrepareRelative(camera);
+        NvgDump.DeviceUp = _flip <= 0.001f;
+        // The layers' test goes in the free camera too, where the device is placed from the world.
+        _direct = !NvgDump.GameDraws && _directShader != null && LensesOn(camera) && (PrepareRelative(camera) || NvgDump.Layered);
         if (_direct)
-            HideDevice();
+            HideDevice(camera);
     }
 
     internal static void OnCameraPostRender(Camera camera)

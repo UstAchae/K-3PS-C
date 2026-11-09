@@ -28,8 +28,25 @@ internal static class NvgDump
 
     internal static bool NoEmission => _noEmission != null && _noEmission.Value;
     internal static bool UpToo => Layered || (_upToo != null && _upToo.Value);
-    internal static bool Layered => _layered != null && _layered.Value;
-    internal static bool Layer(int which) => Layered && _layers[which] != null && _layers[which]!.Value;
+    // Only with the device all the way up: down, it stands shifted from where the game draws it, and a layer over it means nothing.
+    internal static bool DeviceUp;
+    internal static bool Layer(int which) => DeviceUp && _layers[which] != null && _layers[which]!.Value;
+    internal static bool Layered
+    {
+        get
+        {
+            if (!DeviceUp)
+                return false;
+            if (_layered != null && _layered.Value)
+                return true;
+            for (int i = 0; i < _layers.Length; i++)
+            {
+                if (Layer(i))
+                    return true;
+            }
+            return false;
+        }
+    }
     internal static bool NoFaceLight => _noFace != null && _noFace.Value;
     internal static bool GameDraws => !Layered && _game != null && _game.Value;
     internal static bool UseRenderer => _byRenderer != null && _byRenderer.Value;
@@ -54,15 +71,15 @@ internal static class NvgDump
         _upToo = Switch("10 翻上时也由我们画", "开：夜视仪翻上时也用合并的画法（翻上时没有平移，也不会贴到近裁剪面）。站着别动，来回开关它和开关 8，比两种画法同一姿势下的差别。");
         _noFace = Switch("11 关目镜照脸的灯", "开：关掉每个镜片往脸上打的那盏绿灯。");
         _byRenderer = Switch("12 外壳用 DrawRenderer 画", "开：我们画外壳时由渲染器自己画（DrawRenderer）；关：取出网格来画（DrawMesh）。开着开关 10 站着不动来回切，看反光和颜色。大地图远处可能会抖。");
-        _layered = Switch("13 分层对比（基准）", "夜视仪翻上时用。开：外壳仍由游戏画，我们也在后台画一份但什么都不换。这时应该和原版一样；如果这样就不对，问题不在外壳的数据。");
-        _layers[LayerDiffuse] = Switch("14 只换漫反射", "开着 13 时用。把游戏画的漫反射颜色换成我们画的。");
-        _layers[LayerSpecular] = Switch("15 只换高光和光滑度", "开着 13 时用。");
-        _layers[LayerNormal] = Switch("16 只换法线", "开着 13 时用。");
-        _layers[LayerEmission] = Switch("17 只换自发光和反射", "开着 13 时用。");
-        _layers[LayerDepth] = Switch("18 只换深度", "开着 13 时用。");
-        _layers[LayerStencil] = Switch("19 只换模板", "开着 13 时用。");
-        _layers[LayerMotion] = Switch("20 只换运动矢量", "开着 13 时用。");
-        _layers[LayerEven] = Switch("21 只开中间带的平滑", "开着 13 时用。");
+        _layered = Switch("13 分层对比（基准）", "只在夜视仪完全翻上时起作用（F7 下也可以），翻下时自动失效。开：外壳仍由游戏画，我们也在后台画一份但什么都不换。这时应该和原版一样；如果这样就不对，问题不在外壳的数据。");
+        _layers[LayerDiffuse] = Switch("14 只换漫反射", "只在夜视仪完全翻上时起作用，不用先开 13。把游戏画的漫反射颜色换成我们画的。");
+        _layers[LayerSpecular] = Switch("15 只换高光和光滑度", "只在夜视仪完全翻上时起作用，不用先开 13。");
+        _layers[LayerNormal] = Switch("16 只换法线", "只在夜视仪完全翻上时起作用，不用先开 13。");
+        _layers[LayerEmission] = Switch("17 只换自发光和反射", "只在夜视仪完全翻上时起作用，不用先开 13。");
+        _layers[LayerDepth] = Switch("18 只换深度", "只在夜视仪完全翻上时起作用，不用先开 13。");
+        _layers[LayerStencil] = Switch("19 只换模板", "只在夜视仪完全翻上时起作用，不用先开 13。");
+        _layers[LayerMotion] = Switch("20 只换运动矢量", "只在夜视仪完全翻上时起作用，不用先开 13。");
+        _layers[LayerEven] = Switch("21 只开中间带的平滑", "只在夜视仪完全翻上时起作用，不用先开 13。");
     }
 
     // As the main camera culls.
