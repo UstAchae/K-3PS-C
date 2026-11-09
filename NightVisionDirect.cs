@@ -418,7 +418,7 @@ internal static partial class NightVisionEyepieces
     private static Matrix4x4 _oldVP;
     private static int _motionFrame = -100;
 
-    private static void DrawMotion(CommandBuffer buffer, Camera main, Matrix4x4 turned, Matrix4x4 projection, Vector3 leftShift, Vector3 rightShift)
+    private static void DrawMotion(CommandBuffer buffer, Camera main, Matrix4x4 turned, Matrix4x4 projection, Vector3 leftShift, Vector3 rightShift, bool checking)
     {
         Matrix4x4 nowVP = main.nonJitteredProjectionMatrix * turned;
         // After a gap there is no last frame to go by: as if it had not moved.
@@ -434,18 +434,44 @@ internal static partial class NightVisionEyepieces
         buffer.SetViewProjectionMatrices(turned, projection);
         buffer.SetGlobalMatrix(DirectNowVP, nowVP);
         buffer.SetGlobalMatrix(DirectOldVP, _oldVP);
-        for (int half = 0; half < 2; half++)
+        // Temporary: the second round into a texture of its own, to count what the motion reaches.
+        RenderTexture? counted = checking ? new RenderTexture(main.pixelWidth, main.pixelHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) { name = "Justachae NVG check", filterMode = FilterMode.Point } : null;
+        for (int round = 0; round < (counted != null ? 2 : 1); round++)
         {
-            Matrix4x4 fromEye = Matrix4x4.Translate(-(half == 0 ? leftShift : rightShift)), fromOldEye = Matrix4x4.Translate(-_oldShifts[half]);
-            buffer.SetRenderTarget(BuiltinRenderTextureType.MotionVectors, _directDepths[half]!);
-            buffer.SetGlobalFloat(DirectHalf, half);
-            foreach (Piece piece in _pieces)
+            buffer.SetRenderTarget(round == 0 ? BuiltinRenderTextureType.MotionVectors : counted!);
+            if (round == 1)
+                buffer.ClearRenderTarget(false, true, Color.clear);
+            for (int half = 0; half < 2; half++)
             {
-                Matrix4x4 old = _oldPieces.TryGetValue(piece.Renderer, out Matrix4x4 was) ? was : piece.FromCamera;
-                buffer.SetGlobalMatrix(DirectOldM, fromOldEye * old);
-                for (int s = 0; s < piece.Mesh.subMeshCount; s++)
-                    buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, _directMaterial!, s, 5);
+                Matrix4x4 fromEye = Matrix4x4.Translate(-(half == 0 ? leftShift : rightShift)), fromOldEye = Matrix4x4.Translate(-_oldShifts[half]);
+                buffer.SetGlobalFloat(DirectHalf, half);
+                foreach (Piece piece in _pieces)
+                {
+                    Matrix4x4 old = _oldPieces.TryGetValue(piece.Renderer, out Matrix4x4 was) ? was : piece.FromCamera;
+                    buffer.SetGlobalMatrix(DirectOldM, fromOldEye * old);
+                    for (int s = 0; s < piece.Mesh.subMeshCount; s++)
+                        buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, _directMaterial!, s, 5);
+                }
             }
+        }
+        if (counted != null)
+        {
+            buffer.RequestAsyncReadback(counted, request =>
+            {
+                if (!request.hasError)
+                {
+                    Unity.Collections.NativeArray<byte> bytes = request.GetData<byte>();
+                    int written = 0;
+                    for (int i = 3; i < bytes.Length; i += 4)
+                    {
+                        if (bytes[i] != 0)
+                            written++;
+                    }
+                    Log($"NVG check: motion written over {written} pixels");
+                }
+                counted.Release();
+                Object.Destroy(counted);
+            });
         }
         buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
@@ -762,7 +788,7 @@ internal static partial class NightVisionEyepieces
         // The device's own motion on the screen: it goes with the head, and left to itself it had what lay behind it, so what is
         // carried from frame to frame by the motion (the reflections, the upscaler) drifted over it like mist.
         if ((main.depthTextureMode & DepthTextureMode.MotionVectors) != 0 && (!NvgDump.Layered || NvgDump.Layer(NvgDump.LayerMotion)))
-            DrawMotion(_directMotion, main, turned, projection, leftShift, rightShift);
+            DrawMotion(_directMotion, main, turned, projection, leftShift, rightShift, checking);
         // Once all is lit: the fade. The textures are let go only after this.
         buffer = _directEnd;
         buffer.SetGlobalVector(DirectTexel, new Vector4(1f / Mathf.Max(width, 1), 1f / Mathf.Max(height, 1), 0f, 0f));

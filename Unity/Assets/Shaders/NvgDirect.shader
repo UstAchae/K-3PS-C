@@ -237,7 +237,7 @@ Shader "Justachae/NVG/Direct" {
   // 5: the device's own motion on the screen, as the game works it out for what it draws: where this bit of the mesh stood from the
   // eye last frame against where it stands now. Over each half's own depth, only where that half is the one seen.
   Pass {
-   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
+   Cull Off ZWrite Off ZTest Always
    CGPROGRAM
    #pragma vertex motionVert
    #pragma fragment frag
@@ -258,6 +258,10 @@ Shader "Justachae/NVG/Direct" {
     float toRight;
     float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
     if (!pick(i.pos.xy, uv, rawL, rawR, toRight) || (_DirectHalf < 0.5) != (toRight < 0.5) || !notCovered(uv, rawL, rawR))
+     discard;
+    // Only what this eye's depth says is the front of the device here: that depth is read, so it cannot be the depth target too.
+    float own = _DirectHalf < 0.5 ? rawL : rawR;
+    if (abs(own - i.pos.z) > max(own * 0.002, 0.000001))
      discard;
     float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
     // By the camera's own matrices, up being up: no turning over, as the game's motion goes the same way in both directions.

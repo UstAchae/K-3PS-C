@@ -126,10 +126,12 @@ internal static partial class NightVisionEyepieces
         {
             RenderTexture? made = null, withIr = null, focused = null;
             // The lenses see IR, the naked eye around them does not; and they see it through the objective.
-            Texture picture = LensPicture(camera, ThroughObjective(camera, WithIr(from, ref withIr), ref focused), ref made);
+            RenderTexture seenFrame = WithIr(from, ref withIr), through = ThroughObjective(camera, seenFrame, ref focused);
+            Texture picture = LensPicture(camera, through, ref made);
             picture = EaseGrain(picture, ref made);
             ReleaseMask();
             Compose(composite, glow, from, into, picture);
+            KeepCompositeOnce(from, through, picture, into);
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
             if (withIr != null)
@@ -144,6 +146,53 @@ internal static partial class NightVisionEyepieces
         }
         if (staged)
             propagator!.ReleaseSourceDestination(from, to);
+    }
+
+    // Temporary: once in a raid, the device down and on for a while, one frame of each step the lenses' picture comes by, to work out
+    // where the dark place between the lenses comes from.
+    private const int KeepAfterFrames = 300;
+    private static int _keepFrames;
+    private static Transform? _keptFor;
+
+    private static void KeepCompositeOnce(RenderTexture frame, Texture through, Texture picture, RenderTexture final)
+    {
+        if (!Active || _flip < 0.999f || !_direct)
+        {
+            _keepFrames = 0;
+            return;
+        }
+        if (ReferenceEquals(_keptFor, _body) || ++_keepFrames != KeepAfterFrames)
+            return;
+        _keptFor = _body;
+        string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgprobe");
+        System.IO.Directory.CreateDirectory(folder);
+        Log($"NVG keep: split {_binocularMaterial!.GetFloat(SplitId):F3}, overscan {_binocularMaterial.GetFloat(OverscanId):F3}, shift {EyeShift}, frame {frame.width}x{frame.height}, format {frame.format}");
+        void Keep(Texture from, string name)
+        {
+            var copy = new RenderTexture(frame.width, frame.height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear) { name = "Justachae NVG keep", filterMode = FilterMode.Point };
+            Graphics.Blit(from, copy);
+            string file = System.IO.Path.Combine(folder, $"{name}_{copy.width}_{copy.height}.bin");
+            UnityEngine.Rendering.AsyncGPUReadback.Request(copy, 0, request =>
+            {
+                if (request.hasError)
+                    Log($"NVG keep: {name} failed");
+                else
+                    System.IO.File.WriteAllBytes(file, request.GetData<byte>().ToArray());
+                copy.Release();
+                UnityEngine.Object.Destroy(copy);
+            });
+        }
+        RenderTexture active = RenderTexture.active;
+        Keep(frame, "frame");
+        Keep(through, "through");
+        Keep(picture, "picture");
+        Keep(final, "final");
+        for (int side = 0; side < 2; side++)
+        {
+            Keep(_lensMaps[side]!, side == 0 ? "lensL" : "lensR");
+            Keep(_glassMaps[side]!, side == 0 ? "glassL" : "glassR");
+        }
+        RenderTexture.active = active;
     }
 
     // What the lenses show this frame, from the frame as it stands: made into a temporary (made) when it is made here.
