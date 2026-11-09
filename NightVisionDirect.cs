@@ -42,6 +42,74 @@ internal static partial class NightVisionEyepieces
     private static readonly int CameraPlaceId = Shader.PropertyToID("_WorldSpaceCameraPos");
     private static readonly RenderTextureFormat[] DirectFormats = { RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB2101010, RenderTextureFormat.DefaultHDR };
     private static readonly RenderTargetIdentifier[][] _directTargets = { new RenderTargetIdentifier[4], new RenderTargetIdentifier[4] };
+    // Textures of our own, not from Unity's pool of temporary ones: out of the pool the right eye's specular came to hold the normals,
+    // and the device glinted in colours where no colour was. Held while the device is in use (DropDirectTextures).
+    private static readonly RenderTexture?[][] _directTextures = { new RenderTexture?[4], new RenderTexture?[4] };
+    private static readonly RenderTexture?[] _directDepths = new RenderTexture?[2];
+
+    private static RenderTexture DirectTexture(RenderTexture?[] kept, int which, int width, int height, int depth, RenderTextureFormat format, RenderTextureReadWrite readWrite, string name)
+    {
+        RenderTexture? texture = kept[which];
+        if (texture != null && texture.width == width && texture.height == height)
+            return texture;
+        if (texture != null)
+        {
+            texture.Release();
+            Object.Destroy(texture);
+        }
+        texture = new RenderTexture(width, height, depth, format, readWrite) { name = name, filterMode = FilterMode.Point, hideFlags = HideFlags.DontSave };
+        texture.Create();
+        kept[which] = texture;
+        return texture;
+    }
+
+    private static void DropDirectTextures()
+    {
+        for (int half = 0; half < 2; half++)
+        {
+            Drop(_directDepths, half);
+            for (int t = 0; t < 4; t++)
+                Drop(_directTextures[half], t);
+        }
+    }
+
+    // Temporary: whether the specular of each eye holds any colour (it is grey in all the device's materials), just as drawn and again
+    // when the lights are about to take it, written to the log.
+    private const int CheckEveryFrames = 1800;
+    private static int _checkFrame = CheckEveryFrames - 120;
+
+    private static void CheckSpecular(CommandBuffer buffer, string when)
+    {
+        for (int half = 0; half < 2; half++)
+        {
+            RenderTexture texture = _directTextures[half][1]!;
+            string name = (half == 0 ? "left" : "right") + " specular " + when;
+            var target = new RenderTexture(texture.width, texture.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) { name = "Justachae NVG check", filterMode = FilterMode.Point };
+            buffer.Blit(texture, target);
+            buffer.RequestAsyncReadback(target, request =>
+            {
+                if (request.hasError)
+                    Log($"NVG check: {name}: reading failed");
+                else
+                {
+                    Unity.Collections.NativeArray<byte> bytes = request.GetData<byte>();
+                    int shown = 0, tinted = 0;
+                    for (int i = 0; i + 3 < bytes.Length; i += 4)
+                    {
+                        int r = bytes[i], g = bytes[i + 1], b = bytes[i + 2];
+                        if (r + g + b == 0)
+                            continue;
+                        shown++;
+                        if (Mathf.Abs(r - g) > 8 || Mathf.Abs(g - b) > 8)
+                            tinted++;
+                    }
+                    Log($"NVG check: {name}: {tinted} tinted of {shown} written");
+                }
+                target.Release();
+                Object.Destroy(target);
+            });
+        }
+    }
     private static readonly RenderTargetIdentifier[] _directPlaces = new RenderTargetIdentifier[2];
     private static readonly RenderTargetIdentifier[] _mainGBuffer =
     {
@@ -369,7 +437,7 @@ internal static partial class NightVisionEyepieces
         for (int half = 0; half < 2; half++)
         {
             Matrix4x4 fromEye = Matrix4x4.Translate(-(half == 0 ? leftShift : rightShift)), fromOldEye = Matrix4x4.Translate(-_oldShifts[half]);
-            buffer.SetRenderTarget(BuiltinRenderTextureType.MotionVectors, half == 0 ? DirectLeftDepth : DirectRightDepth);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.MotionVectors, _directDepths[half]!);
             buffer.SetGlobalFloat(DirectHalf, half);
             foreach (Piece piece in _pieces)
             {
@@ -573,12 +641,9 @@ internal static partial class NightVisionEyepieces
             int depth = half == 0 ? DirectLeftDepth : DirectRightDepth;
             Vector3 shift = half == 0 ? leftShift : rightShift;
             for (int t = 0; t < 4; t++)
-            {
-                buffer.GetTemporaryRT(ids[t], width, height, 0, FilterMode.Point, DirectFormats[t], t < 2 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear);
-                _directTargets[half][t] = ids[t];
-            }
-            buffer.GetTemporaryRT(depth, width, height, 24, FilterMode.Point, RenderTextureFormat.Depth);
-            buffer.SetRenderTarget(_directTargets[half], depth);
+                _directTargets[half][t] = DirectTexture(_directTextures[half], t, width, height, 0, DirectFormats[t], t < 2 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear, "Justachae NVG device " + half + " " + t);
+            RenderTexture depthTexture = DirectTexture(_directDepths, half, width, height, 24, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG device depth " + half);
+            buffer.SetRenderTarget(_directTargets[half], depthTexture);
             buffer.ClearRenderTarget(true, true, Color.clear);
             // From where this eye truly stands: the view direction a material works out comes from the camera's place, which the
             // view matrix alone leaves where the main camera is. (Far out in a map a place in the world is kept only to some tens
@@ -609,8 +674,8 @@ internal static partial class NightVisionEyepieces
                 }
             }
             for (int t = 0; t < 4; t++)
-                buffer.SetGlobalTexture(ids[t], ids[t]);
-            buffer.SetGlobalTexture(depth, depth);
+                buffer.SetGlobalTexture(ids[t], _directTextures[half][t]!);
+            buffer.SetGlobalTexture(depth, depthTexture);
         }
 
         // The camera's place given back before anything else is drawn.
@@ -660,6 +725,12 @@ internal static partial class NightVisionEyepieces
             }
         }
 
+        bool checking = ++_checkFrame >= CheckEveryFrames;
+        if (checking)
+        {
+            _checkFrame = 0;
+            CheckSpecular(buffer, "as drawn");
+        }
         _directMaterial.SetFloat(DirectStencilRefId, _stencilRef);
         _directMaterial.SetFloat("_DirectNoEmission", NvgDump.NoEmission ? 1f : 0f);
         buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
@@ -671,6 +742,8 @@ internal static partial class NightVisionEyepieces
 
         // After the decals, which are thrown on whatever the depth holds. The textures are let go only after this.
         buffer = _directAgain;
+        if (checking)
+            CheckSpecular(buffer, "before the lights");
         buffer.SetRenderTarget(_mainSurface, BuiltinRenderTextureType.CameraTarget);
         if (NvgDump.Layered)
             DrawLayers(buffer, true);
@@ -702,11 +775,6 @@ internal static partial class NightVisionEyepieces
             buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 4);
             buffer.ReleaseTemporaryRT(DirectLitNow);
         }
-        for (int t = 0; t < 4; t++)
-        {
-            buffer.ReleaseTemporaryRT(DirectLeft[t]);
-            buffer.ReleaseTemporaryRT(DirectRight[t]);
-        }
         if (_compareNow)
         {
             CompareCopy(buffer, BuiltinRenderTextureType.CameraTarget, "opaque", width, height);
@@ -714,8 +782,6 @@ internal static partial class NightVisionEyepieces
             CompareCopy(buffer, BuiltinRenderTextureType.MotionVectors, "motion", width, height);
             buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         }
-        buffer.ReleaseTemporaryRT(DirectLeftDepth);
-        buffer.ReleaseTemporaryRT(DirectRightDepth);
     }
 
     // Temporary: why a device down does or does not go this way, each time any of it changes.

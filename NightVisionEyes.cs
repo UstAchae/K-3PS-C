@@ -413,6 +413,7 @@ internal static partial class NightVisionEyepieces
 
     private static void ReleaseEyes()
     {
+        DropDirectTextures();
         for (int i = 0; i < 2; i++)
         {
             Drop(_lensMaps, i);
