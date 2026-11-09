@@ -11,7 +11,6 @@ Shader "Justachae/NVG/Direct" {
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
  float _DirectSplit, _DirectStrip, _DirectBehind;
  float _DirectNoEmission;   // temporary: a switch in F12
- float _DirectSpecular;     // how much of its highlights the device keeps: the lights take it for nearer than it is
  float4x4 _EyeInvVP0, _EyeInvVP1;
  float4 _TubeField, _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;
  float4 _DirectInset;    // how far past the lens's edge the device goes, as a share of the frame
@@ -141,7 +140,6 @@ Shader "Justachae/NVG/Direct" {
     o.g2 = lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
     o.g3 = lerp(tex2D(_DirectL3, uv), tex2D(_DirectR3, uv), toRight);
     if (_DirectNoEmission > 0.5) o.g3.rgb = 0;
-    o.g1.rgb *= _DirectSpecular;
     o.depth = mainDepth(lerp(inverseDepth(rawL), inverseDepth(rawR), toRight));
     return o;
    }
@@ -172,7 +170,6 @@ Shader "Justachae/NVG/Direct" {
     o.g0 = lerp(tex2D(_DirectL0, uv), tex2D(_DirectR0, uv), toRight);
     o.g1 = lerp(tex2D(_DirectL1, uv), tex2D(_DirectR1, uv), toRight);
     o.g2 = lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
-    o.g1.rgb *= _DirectSpecular;
     return o;
    }
    ENDCG

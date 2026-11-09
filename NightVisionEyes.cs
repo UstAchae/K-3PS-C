@@ -70,7 +70,9 @@ internal static partial class NightVisionEyepieces
     private static bool LensesOn(Camera camera)
     {
         // Only while our image effect is on to lay the lenses' picture over the frame.
-        if ((!BinocularOn && !Active) || _body == null || _lensNodes.Length == 0 || camera != Camera.main || _eyepieceImage == null || !_eyepieceImage.enabled)
+        if (_body == null || _lensNodes.Length == 0 || camera != Camera.main)
+            return false;
+        if (!NvgDump.UpToo && ((!BinocularOn && !Active) || _eyepieceImage == null || !_eyepieceImage.enabled))
             return false;
         Vector3 mount = _rotator != null ? _rotator.transform.position : _body.position;
         return (mount - camera.transform.position).sqrMagnitude <= MaxEyeDistance * MaxEyeDistance;
