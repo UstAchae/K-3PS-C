@@ -154,6 +154,7 @@ internal static partial class NightVisionEyepieces
     {
         _objective!.SetTexture(ScopeLensId, Texture2D.blackTexture);
         _objective.SetFloat(ScopeOnId, 0f);
+        _scopeMaskFrame = -1;
         if (ScopePullback <= 0.005f || _lensMesh == null || _lensFrame != Time.frameCount)
             return;
         _scopeMask ??= new Material(_objectiveShader!) { hideFlags = HideFlags.DontSave };
@@ -176,7 +177,11 @@ internal static partial class NightVisionEyepieces
         _objective.SetTexture(ScopeLensId, _scopeLens);
         _objective.SetFloat(ScopeOnId, 1f);
         _objective.SetFloat(ScopeLightId, _scopeLight);
+        _scopeMaskFrame = Time.frameCount;
     }
+
+    // The frame the sight's lens mask (_scopeLens) was drawn for, or -1.
+    private static int _scopeMaskFrame = -1;
     // The sight's power now. The game's own figure (GetCurrentOpticZoom) is its table of powers by mode, which for a
     // variable sight turned smoothly with the wheel holds one end only. What the wheel turns is the sight camera's
     // field: SightComponent.ScopeZoomValue, between MinMaxFov.x, the widest, at the least power, and MinMaxFov.y, the

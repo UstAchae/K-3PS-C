@@ -127,6 +127,7 @@ internal static partial class NightVisionEyepieces
         else
         {
             RenderTexture? made = null, withIr = null, focused = null;
+            PrepareScopeEarly(camera, from);
             // The lenses see IR, the naked eye around them does not; and they see it through the objective.
             Texture picture = LensPicture(camera, ThroughObjective(camera, WithIr(from, ref withIr), ref focused), ref made);
             picture = EaseGrain(picture, ref made);

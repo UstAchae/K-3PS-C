@@ -64,6 +64,24 @@ internal static partial class NightVisionEyepieces
         _objectiveFront = new Vector3(across.x, front, across.z);
     }
 
+    // The magnified sight's lens mask, ahead of the IR layer, which leaves the lens to the sight's own picture (WithIr):
+    // as ThroughObjective would make it, once a frame.
+    private static int _scopePreparedFrame = -1;
+
+    private static void PrepareScopeEarly(Component camera, RenderTexture frame)
+    {
+        Camera? view = camera.GetComponent<Camera>();
+        // Whatever the objective's blur is set to: the lens is the sight's own picture in any case.
+        if (_objective == null || view == null || _body == null || _device.Thermal || !Active)
+            return;
+        if (_renderedFrame != Time.frameCount || (_body.TransformPoint(_objectiveFront) - _renderedFrom).magnitude > MaxEyeDistance)
+            return;
+        float tanUp = Mathf.Tan(view.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        _objective.SetVector(TanHalfId, new Vector2(tanUp * frame.width / frame.height, tanUp));
+        PrepareScope(view, frame);
+        _scopePreparedFrame = Time.frameCount;
+    }
+
     // The frame as the objective lays it on the tube: made into a temporary (made) when there is a lens to do it.
     private static RenderTexture ThroughObjective(Component camera, RenderTexture frame, ref RenderTexture? made)
     {
@@ -81,7 +99,8 @@ internal static partial class NightVisionEyepieces
         _objective.SetVector(LensId, new Vector4(NearBlurDistance, 0f, ahead,
             NearBlurLimit * Mathf.Deg2Rad * pixelsPerRadian));
         _objective.SetVector(TanHalfId, new Vector2(tanUp * frame.width / frame.height, tanUp));
-        PrepareScope(view, frame);
+        if (_scopePreparedFrame != Time.frameCount)
+            PrepareScope(view, frame);
 
         // Everything, blurred at each size; what is near, cut out (premultiplied), the same; and how far what is near
         // is spread, blurred so that it reaches past its edge.

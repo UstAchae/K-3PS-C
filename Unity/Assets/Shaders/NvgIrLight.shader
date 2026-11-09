@@ -3,7 +3,7 @@
 //    G-buffer, the light's cookie and falloff), added into the layer. Shadowed lights are drawn right after their
 //    shadow map, which is then the current target's: the view-projection still set is the one it was drawn with.
 // 1: the frame with the layer added and the naked eye's look of the visible lasers taken out (the lenses' picture is
-//    made from that).
+//    made from that); over a magnified sight's lens looked through, the layer is left out.
 // 2: lasers drawn apart added onto the upscaled frame.
 // 3: the layer held over frames as TAA holds a frame: this frame's (its jitter taken out) blended into the last
 //    frame's, followed along the motion vectors and kept within what this frame has about the pixel. The layer is
@@ -120,11 +120,15 @@ Shader "Justachae/NVG/IrLight" {
    #pragma vertex vert_img
    #pragma fragment frag
    #include "UnityCG.cginc"
-   sampler2D _MainTex, _IrLayer, _IrNaked;
+   sampler2D _MainTex, _IrLayer, _IrNaked, _IrScopeLens;
+   float _IrScopeOn;
    float4 frag (v2f_img i) : SV_Target {
     float4 frame = tex2D(_MainTex, i.uv);
+    // A magnified sight's lens (_IrScopeOn): the sight's own picture there, with the lasers and IR its camera sees; the
+    // layer's, past the sight as seen from the eye, left out (the naked eye's look of the lasers taken out all the same).
+    float past = _IrScopeOn > 0.5 && tex2D(_IrScopeLens, i.uv).r > 0.5 ? 0 : 1;
     // The visible lasers as the naked eye sees them taken out, as night vision does put in.
-    return float4(max(frame.rgb + tex2D(_IrLayer, i.uv).rgb - tex2D(_IrNaked, i.uv).rgb, 0), frame.a);
+    return float4(max(frame.rgb + tex2D(_IrLayer, i.uv).rgb * past - tex2D(_IrNaked, i.uv).rgb, 0), frame.a);
    }
    ENDCG
   }

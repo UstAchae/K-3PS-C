@@ -121,6 +121,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int IrShadowMapId = Shader.PropertyToID("_IrShadowMap");
     private static readonly int IrLayerId = Shader.PropertyToID("_IrLayer");
     private static readonly int IrNakedId = Shader.PropertyToID("_IrNaked");
+    private static readonly int IrScopeLensId = Shader.PropertyToID("_IrScopeLens"), IrScopeOnId = Shader.PropertyToID("_IrScopeOn");
     private static readonly int IrHistoryId = Shader.PropertyToID("_IrHistory");
     private static readonly int IrJitterId = Shader.PropertyToID("_IrJitter");
     private const float IrHeld = 0.1f;               // how much of this frame's layer goes into the held one
@@ -623,6 +624,11 @@ internal static partial class NightVisionEyepieces
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
         _irAdd.SetTexture(IrLayerId, HoldIr(_irLayer, _irAdd));
         _irAdd.SetTexture(IrNakedId, _nakedFrame == Time.frameCount && _irNaked != null ? _irNaked : Texture2D.blackTexture);
+        // A magnified sight looked through: its lens shows the sight's own picture, IR and lasers as its camera sees them;
+        // what the layer has there is what lies past the sight, seen from the eye, which the sight hides.
+        bool lens = _scopeMaskFrame == Time.frameCount && _scopeLens != null;
+        _irAdd.SetTexture(IrScopeLensId, lens ? _scopeLens! : Texture2D.blackTexture);
+        _irAdd.SetFloat(IrScopeOnId, lens ? 1f : 0f);
         Graphics.Blit(frame, made, _irAdd, 1);
         return made;
     }
