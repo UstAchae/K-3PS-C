@@ -44,6 +44,12 @@ Shader "Justachae/NVG/Objective" {
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
   }
+  // How much of the light at a point of the frame reaches the tube: the sight's lens only its share, in every layer
+  // made from the frame, not only where it is laid back sharp: spread at full strength, a bright laser in the sight's
+  // picture (its beam under night vision is many times the rest) glowed over the eyepiece's blurred rim and the lens.
+  float Reaching(float2 uv) {
+   return InLens(uv) ? _ScopeLight : 1;
+  }
 
   float Blur(float2 uv) {
    if (InLens(uv))
@@ -93,7 +99,7 @@ Shader "Justachae/NVG/Objective" {
     for (int y = 0; y < 2; y++)
      for (int x = 0; x < 2; x++) {
       float2 uv = i.uv + (float2(x, y) * 2 - 1) * texel;
-      sum += float4(tex2D(_MainTex, uv).rgb, Blur(uv));
+      sum += float4(tex2D(_MainTex, uv).rgb * Reaching(uv), Blur(uv));
      }
     return sum / 4;
    }
@@ -157,7 +163,7 @@ Shader "Justachae/NVG/Objective" {
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
       float2 uv = i.uv + (float2(x, y) - 1.5) * _MainTex_TexelSize.xy;
-      sum += float4(tex2D(_MainTex, uv).rgb, 1) * Near(Blur(uv));
+      sum += float4(tex2D(_MainTex, uv).rgb * Reaching(uv), 1) * Near(Blur(uv));
      }
     return sum / 16;
    }
