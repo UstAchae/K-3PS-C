@@ -141,13 +141,22 @@ internal static class HeadwearTilt
     }
 
     private static readonly List<Shown> _shown = new List<Shown>();
+    private static readonly Dictionary<string, float> _shownByKind = new Dictionary<string, float>();
 
     internal static void Show(PlayerBody body, Transform model, Item? helmet)
     {
         Transform? head = body.PlayerBones?.Head?.Original;
         if (head == null || helmet == null)
             return;
-        float degrees = Mathf.Clamp(SavedFor(helmet.Id.ToString()), 0f, Range);
+        // The loading screen's model wears a copy the game makes with ids of its own, right after the helmet itself: none of those is
+        // ever saved, so such a one goes by the last of its kind that was.
+        string id = helmet.Id.ToString(), kind = helmet.TemplateId.ToString();
+        float saved = SavedFor(id);
+        if (_saved != null && _saved.ContainsKey(id))
+            _shownByKind[kind] = saved;
+        else if (_shownByKind.TryGetValue(kind, out float sameKind))
+            saved = sameKind;
+        float degrees = Mathf.Clamp(saved, 0f, Range);
         if (degrees < 0.01f)
             return;
         Forget(model);
