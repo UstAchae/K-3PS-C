@@ -56,6 +56,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             new ConfigDescription("第三人称骨架：用第三人称的身体动作（呼吸摆动、跑步转向时头部翻滚、换枪和翻背包的动作）。第一人称骨架：身体动作用游戏原版的第一人称（没有呼吸摆动和跑步转向时的头部翻滚，换枪、翻背包没有身体动作），晃得少，适合觉得第三人称骨架晕的玩家。除了身体动作，两种骨架的其他功能完全一样（镜头挂在头部、人物显示、瞄准等），只是第一人称骨架下瞄准时枪本身按原版第一人称的摆动晃（呼吸、手抖，屏息时由原版自己减弱），“瞄准摆动”那几组里的“摆动”只管手臂跟着身体动作的晃动，“呼吸”不起作用。局内可以随时切换。",
                 new AcceptableValueList<string>(SkeletonThird, SkeletonFirst), new ConfigurationManagerAttributes { Order = 7 }));
         AimPatches.Install();
+        DovetailSlots.Install();
         Fisheye.Install();
         BodyVisibility.Install();
         VisorFilter.Install();
@@ -170,7 +171,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             new ConfigDescription("夜视仪翻下时，目镜镜片表面映出的周围环境和高光，叠在镜片里的夜视画面上。关掉后镜片里只剩夜视画面，设备上的玻璃部件也不画。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
         ConfigEntry<float> monocularSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "PVS-14 左眼透明度", 0.5f,
-            new ConfigDescription("AN/PVS-14 单筒夜视仪只挡在右眼前，左眼看过去时机身往画面边缘逐渐变透明。0：不变透明（两只眼都看到完整的机身）；0.5：默认；1：变透明得最快。",
+            new ConfigDescription("AN/PVS-14 单筒夜视仪只挡在一只眼前（插在双燕尾转接件的哪个槽位，就在哪只眼前），另一只眼看过去时机身往画面边缘逐渐变透明。0：不变透明（两只眼都看到完整的机身）；0.5：默认；1：变透明得最快。",
                 new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
         ConfigEntry<float> nearBlur = SettingsLayout.Bind(Config, "头戴式成像装备", "近处虚化距离", 1f,
             new ConfigDescription("夜视仪的物镜对焦在远处，近处的手、枪和机瞄是虚的，越近越虚，远处是清楚的。原版夜视和 BRNVG 的画面都会这样，热成像不受影响。距离从夜视仪的物镜算起：在这个距离上虚化是“近处虚化上限”的一半，更近的越来越接近上限，更远的逐渐变清楚。拉长这个距离，枪的前端和更远一点的东西也会更虚。",
@@ -601,6 +602,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     {
         OpticElevation.UpdateHeld();
         AdjustAimDistance();
+        DovetailSlots.Update();
     }
 
     private void LateUpdate()
