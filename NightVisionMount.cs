@@ -902,8 +902,10 @@ internal static partial class NightVisionEyepieces
                     role[p] = near.Intersects(mesh.Bounds[p]) && Volume(mesh.Bounds[p]) < Volume(mesh.Bounds[link]) * 0.1f ? 0 : 1;
             }
 
-            // The screw's knob: what of the slide lies wholly past ScrewFrom along the screw's axis.
+            // The screw's knob: what of the slide lies wholly past ScrewFrom along the screw's axis, and as wide as that about the axis
+            // what crosses ScrewFrom too. Those left on the slide stood still as the knob turned, and holes opened between them.
             int[] triangles = ByTriangle(mesh, role);
+            float reach = 0f;
             for (int t = 0; t < triangles.Length; t++)
             {
                 if (triangles[t] != 2)
@@ -911,7 +913,23 @@ internal static partial class NightVisionEyepieces
                 bool past = true;
                 for (int j = 0; j < 3; j++)
                     past &= Vector3.Dot(mesh.Pos[t * 3 + j], mount.ScrewAxis) >= mount.ScrewFrom;
-                if (past)
+                if (!past)
+                    continue;
+                triangles[t] = 3;
+                for (int j = 0; j < 3; j++)
+                    reach = Mathf.Max(reach, Vector3.ProjectOnPlane(mesh.Pos[t * 3 + j] - mount.Screw, mount.ScrewAxis).magnitude);
+            }
+            for (int t = 0; t < triangles.Length; t++)
+            {
+                if (triangles[t] != 2)
+                    continue;
+                bool crosses = false, within = true;
+                for (int j = 0; j < 3; j++)
+                {
+                    crosses |= Vector3.Dot(mesh.Pos[t * 3 + j], mount.ScrewAxis) >= mount.ScrewFrom;
+                    within &= Vector3.ProjectOnPlane(mesh.Pos[t * 3 + j] - mount.Screw, mount.ScrewAxis).magnitude <= reach + PieceGap;
+                }
+                if (crosses && within)
                     triangles[t] = 3;
             }
             Transform[] pieces = Split(filter, mesh, triangles, new[] { Vector3.zero, Vector3.zero, Vector3.zero, mount.Screw },
