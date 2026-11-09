@@ -558,6 +558,11 @@ internal static partial class NightVisionEyepieces
             __instance.TextureMask.enabled = false;
             _hiddenMask = __instance.TextureMask;
         }
+        // The game also lights the whole scene by its night-vision ambient while the filter is on (it sets the level's
+        // ambient to it here, and back after the frame). With the eyepieces in, the frame is the naked eye's: it keeps
+        // the level's own ambient, whatever other mods do or do not do about it.
+        if (Comfort.Common.Singleton<LevelSettings>.Instance is LevelSettings level && level != null)
+            level.AmbientType = AmbientType.Default;
     }
 
     // The game turns its mask on with the filter; BRNVG keeps it off itself.
