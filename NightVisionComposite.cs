@@ -210,6 +210,11 @@ internal static partial class NightVisionEyepieces
         }
         tube.SetFloat(TubeGainId, GameLensGain);
         tube.SetFloat(TubeCompressId, GameLensCompress);
+        // The tube's ceiling where the filter shows white: it multiplies the light by its intensity and the device's
+        // colour (the colour as set, not as it fades while the device switches).
+        Color tint = nightVision.Color;
+        float white = filter.GetFloat(FilterIntensityId) * Mathf.Max(tint.r, Mathf.Max(tint.g, tint.b));
+        tube.SetFloat(TubeCeilingId, white > 1e-3f ? 1f / white : 1f);
         RenderTexture tubed = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
         Graphics.Blit(frame, tubed, tube);
         Graphics.Blit(tubed, made, filter);
@@ -218,7 +223,7 @@ internal static partial class NightVisionEyepieces
     }
 
     // The game's own night-vision picture in the lenses (F12 原版夜视目镜增益, 原版夜视目镜亮处压缩): its light times the
-    // gain, the bright end pressed toward the tube's ceiling by the compression. The frame is the naked eye's, lit by the
+    // gain, the bright end pressed toward the tube's ceiling (the filter's white) by the compression. The frame is the naked eye's, lit by the
     // level's own ambient (NightVisionPreCullPostfix): what is dark stays dark.
     internal static float GameLensGain = 1f;
     internal static float GameLensCompress;
@@ -226,6 +231,8 @@ internal static partial class NightVisionEyepieces
     private static Material? _tubeMaterial;
     private static readonly int TubeGainId = Shader.PropertyToID("_TubeGain");
     private static readonly int TubeCompressId = Shader.PropertyToID("_TubeCompress");
+    private static readonly int TubeCeilingId = Shader.PropertyToID("_TubeCeiling");
+    private static readonly int FilterIntensityId = Shader.PropertyToID("_Intensity");
 
     // Null while there is nothing to change (gain 1, no compression), or without the shader.
     private static Material? TubeMaterial()
