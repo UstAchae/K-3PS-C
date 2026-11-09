@@ -423,7 +423,6 @@ internal static partial class NightVisionEyepieces
         buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
         buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 0);
-        NvgDump.AfterInsert(buffer, main, DirectLeft, DirectRight);
 
         // After the decals, which are thrown on whatever the depth holds. The textures are let go only after this.
         buffer = _directAgain;
@@ -469,26 +468,6 @@ internal static partial class NightVisionEyepieces
             return;
         _stateNoted = state;
         Log($"NVG state: present {present}, worn {worn}, switched on {switchedOn}, BRNVG renderer {renderer}, wants BRNVG {brnvg}, settled {settled}, tubes on {on}, game's filter {filter}, flip {_flip:F2}, image {image}, direct {_direct}, precise {_precise}, body {(_body != null ? _body.name : "none")}");
-    }
-
-    // Temporary: what the capture needs to know.
-    internal static float FlipNow => _flip;
-
-    internal static void DescribeDevice(Camera main)
-    {
-        Log($"NVG dump: flip {_flip:F3}, direct {_direct}, pieces {_pieces.Count}, renderers {_slotRenderers.Count}, body {(_body != null ? _body.name : "none")} under {(_body != null ? _body.root.name : "none")}, near {main.nearClipPlane}, far {main.farClipPlane}, device {_device.Node}, shift share {EyeShift}, depth mode {main.depthTextureMode}");
-        foreach (Renderer r in _slotRenderers)
-        {
-            if (r == null)
-                continue;
-            var text = new System.Text.StringBuilder();
-            foreach (Material m in r.sharedMaterials)
-            {
-                if (m != null)
-                    text.Append(m.shader.name).Append(" q").Append(m.renderQueue).Append(" deferred ").Append(GBufferPass(m)).Append(' ').Append(string.Join(",", m.shaderKeywords)).Append("; ");
-            }
-            Log($"NVG dump, {r.name}: drawn {_pieces.Exists(p => p.Renderer == r)}, probes {r.lightProbeUsage}/{r.reflectionProbeUsage}, {text}");
-        }
     }
 
     private static void Log(string text) => NewCameraPlugin.Log?.LogInfo(text);
