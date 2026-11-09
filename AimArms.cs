@@ -140,7 +140,10 @@ internal static class AimArms
     private static int _opticFrame = -1;
     private static readonly AccessTools.FieldRef<ProceduralWeaponAnimation, float> LineOfSightAngle =
         AccessTools.FieldRefAccess<ProceduralWeaponAnimation, float>("_currentLineOfSightDeltaAngle");
-    internal static float RecoilKick = 0.25f;
+    // The game's own (first-person) recoil, as a whole: the gun's slide back (the hands' position recoil) and flip (the
+    // hands' turn recoil, about the recoil pivot), the view's chase of the sight and its turn after the gun
+    // (FollowGun), and the view's own kick (BodyRecoil). 1 is the game's first person in all of them (F12 后坐力力度).
+    internal static float RecoilStrength = 1f;
     private static bool _mounted;
     private static Quaternion _viewKick = Quaternion.identity;
     private static int _shotFrame = -1;
@@ -328,11 +331,14 @@ internal static class AimArms
                 SteadyHead(player, cameraPosition, cameraRotation, out Vector3 steadyPosition, out Quaternion steadyRotation);
                 Quaternion bodyRotation = _bodyLook * Quaternion.Inverse(_smoothLook) * steadyRotation;
                 Vector3 bodyPosition = CameraPosition.Resolve(steadyPosition - CameraPosition.Resolve(Vector3.zero, steadyRotation), bodyRotation);
+                // What the recoil will still do to the sight once it is placed (the flip about the recoil pivot, and the
+                // slide back as the strength has it): the place is chased with it, as the game's camera chases the sight.
+                Vector3 later = !_mounted && root != null ? RecoilLater(animation, root, sightPosition) : Vector3.zero;
                 if (bones.Weapon_Root_Third != null && root != null)
-                    Sway(animation, bones.Weapon_Root_Third, root, bone, sightPosition, sightForward, ironAligned, sightId, bodyPosition, bodyRotation, aimPoint, out target, out turn);
+                    Sway(animation, bones.Weapon_Root_Third, root, bone, sightPosition, sightForward, ironAligned, sightId, bodyPosition, bodyRotation, aimPoint, later, out target, out turn);
                 else
                 {
-                    target = bodyPosition - sightPosition + bodyRotation * aimPoint;
+                    target = bodyPosition - (sightPosition + later) + bodyRotation * aimPoint;
                     if (ironAligned)
                         turn = TurnFromTo(sightForward, bodyRotation * Vector3.forward);
                 }
@@ -365,7 +371,9 @@ internal static class AimArms
             _hasHeadMean = false;
         }
 
-        if (!aiming && !_blendAiming && _offset.sqrMagnitude < 0.00000001f && Settled(_turn) && Settled(turn) && _blend >= 1f)
+        // From the hip too the gun flips with a shot (the game's third person leaves that out; its first person has it).
+        bool hipRecoil = !_mounted && player.HandsController is Player.FirearmController && RecoilMoves(player.ProceduralWeaponAnimation);
+        if (!aiming && !hipRecoil && !_blendAiming && _offset.sqrMagnitude < 0.00000001f && Settled(_turn) && Settled(turn) && _blend >= 1f)
         {
             _hasCarry = false;
             Remember(gunPart, cameraPosition, cameraRotation, Vector3.zero, Vector3.zero, Quaternion.identity);
@@ -450,8 +458,11 @@ internal static class AimArms
         Quaternion carryTurn = _turn;
         Vector3 pivot = seenPivot ?? sightPoint ?? (bones.Weapon_Root_Anim != null ? bones.Weapon_Root_Anim.position : Vector3.zero);
         Quaternion kick = Quaternion.identity;
-        if (aiming && !_mounted)
+        if (!_mounted && player.HandsController is Player.FirearmController)
+        {
+            displacement -= SlideBackCut(player.ProceduralWeaponAnimation, bones.Weapon_Root_Anim);
             kick = Recoil(player.ProceduralWeaponAnimation, bones.Weapon_Root_Anim, pivot, ref displacement, ref carryTurn);
+        }
         else if (!aiming && _mounted && bones.Weapon_Root_Anim != null)
             kick = ShotKick(player.ProceduralWeaponAnimation, bones.Weapon_Root_Anim.rotation);
         _viewKick = !aiming && _mounted ? kick : Quaternion.identity;
@@ -621,9 +632,12 @@ internal static class AimArms
         return kick;
     }
 
+    // The hands' turn recoil as the game's first person turns the gun with it (ApplyComplexRotation: the vector taken
+    // into the gun's frame, about the recoil pivot), by the strength. Its fov compensation is left out: the gun here
+    // is drawn at the scene's field of view.
     private static Quaternion ShotKick(ProceduralWeaponAnimation? animation, Quaternion space)
     {
-        if (animation == null || animation.Shootingg?.CurrentRecoilEffect == null || RecoilKick <= 0f)
+        if (animation == null || animation.Shootingg?.CurrentRecoilEffect == null || RecoilStrength <= 0f)
             return Quaternion.identity;
 
         Vector3 recoil = animation.Shootingg.CurrentRecoilEffect.GetHandRotationRecoil();
@@ -632,7 +646,106 @@ internal static class AimArms
         if (recoil.sqrMagnitude < 0.00000001f)
             return Quaternion.identity;
 
-        return Quaternion.Euler(space * (recoil * RecoilKick));
+        return Quaternion.Euler(space * (recoil * RecoilStrength));
+    }
+
+    // The hands' position recoil, as the game put it on the gun (ApplyPosition: in the gun root's parent), in the world.
+    private static Vector3 SlideBack(ProceduralWeaponAnimation? animation, Transform? root)
+    {
+        if (animation?.Shootingg?.CurrentRecoilEffect == null || root == null || root.parent == null)
+            return Vector3.zero;
+        Vector3 back = animation.Shootingg.CurrentRecoilEffect.GetHandPositionRecoil();
+        if (animation.Shootingg.CurrentRecoilEffect.WeaponRecoilEffect != null)
+            back += animation.Shootingg.CurrentRecoilEffect.WeaponRecoilEffect.GetPositionRecoil();
+        return root.parent.TransformVector(back);
+    }
+
+    // The part of the slide back the strength takes off (none at 1): the game puts all of it on the bones.
+    private static Vector3 SlideBackCut(ProceduralWeaponAnimation? animation, Transform? root)
+    {
+        return Mathf.Approximately(RecoilStrength, 1f) ? Vector3.zero : (1f - RecoilStrength) * SlideBack(animation, root);
+    }
+
+    private static bool RecoilMoves(ProceduralWeaponAnimation? animation)
+    {
+        Transform? root = animation?.HandsContainer?.WeaponRootAnim;
+        return animation != null && root != null
+            && (!Settled(ShotKick(animation, root.rotation)) || SlideBackCut(animation, root).sqrMagnitude > 0.00000001f);
+    }
+
+    // Aimed: how far the recoil still moves the sight once it is placed, the flip about the recoil pivot less the part
+    // of the slide back the strength takes off. Worked out on the gun as the game posed it.
+    private static Vector3 RecoilLater(ProceduralWeaponAnimation animation, Transform root, Vector3 sight)
+    {
+        Vector3 later = -SlideBackCut(animation, root);
+        Quaternion kick = ShotKick(animation, root.rotation);
+        if (animation.HandsContainer != null && !Settled(kick))
+        {
+            Vector3 recoilPivot = root.position + root.rotation * animation.HandsContainer.RecoilPivot;
+            later += recoilPivot + kick * (sight - recoilPivot) - sight;
+        }
+        return later;
+    }
+
+    // Aimed, the game's first-person camera turns after the gun's flip (AddHandRecoilRotateToCamera): toward it at a
+    // speed that grows through a burst (CameraToWeaponAngleStep, within CameraToWeaponAngleSpeedRange, the gun's own),
+    // held while the recoil is steady, and let go after the shots or off the aim. Ours does the same, by the strength,
+    // after the view is placed. Recoil Rework stops the game's own; with it working, nor does ours.
+    private static Quaternion _follow = Quaternion.identity;
+    private static Quaternion _followTarget = Quaternion.identity;
+    private static float _followSpeed;
+    private static int _followFrame = -1;
+
+    internal static Quaternion FollowGun(Player player, Quaternion view)
+    {
+        if (_followFrame != Time.frameCount)
+        {
+            _followFrame = Time.frameCount;
+            StepFollow(player);
+        }
+        return Settled(_follow) ? view : view * _follow;
+    }
+
+    private static void StepFollow(Player player)
+    {
+        ProceduralWeaponAnimation? animation = player.ProceduralWeaponAnimation;
+        RotationRecoilProcessBase? hands = animation?.Shootingg?.CurrentRecoilEffect?.HandRotationRecoilEffect;
+        if (animation == null || hands == null || RecoilMode.ReworkWorking || RecoilStrength <= 0f
+            || !(player.HandsController is Player.FirearmController))
+        {
+            _follow = _followTarget = Quaternion.identity;
+            _followSpeed = 0f;
+            return;
+        }
+        // The free look holds it where it is, as the game's does.
+        if (!Settled(FreeLookTurn(player)))
+            return;
+        MovementContext? movement = player.MovementContext;
+        bool aimed = player.HandsController.IsAiming && !ChestStance.Active
+            && movement != null && !movement.IsInMountedState && !movement.IsStationaryWeaponInHands;
+        bool auto = hands is NewRotationRecoilProcess { AutoFireOn: true };
+        Vector3 current = hands.Current * RecoilStrength;
+        Vector2 range = animation.CameraToWeaponAngleSpeedRange;
+        float step = animation.CameraToWeaponAngleStep * Time.deltaTime;
+        if (auto && aimed && current != Vector3.zero)
+        {
+            _followSpeed = Mathf.Clamp(_followSpeed + step, range.x, range.y);
+            if (!hands.StableOn)
+                _followTarget = Quaternion.Euler(current);
+            _follow = Quaternion.Lerp(_follow, _followTarget, _followSpeed);
+        }
+        else if (!auto && aimed)
+        {
+            _followSpeed = Mathf.Clamp(_followSpeed - step, range.x, range.y);
+            _followTarget = Quaternion.Euler(current);
+            _follow = Quaternion.Lerp(_follow, _followTarget, _followSpeed);
+        }
+        else if (!aimed)
+        {
+            _followSpeed = Mathf.Clamp(_followSpeed - step, range.x, range.y);
+            _followTarget = Quaternion.identity;
+            _follow = Quaternion.Lerp(_follow, Quaternion.identity, range.y);
+        }
     }
 
     // A bipod and a scene gun (the mounted machine gun or grenade launcher) both stay where they are.
@@ -789,8 +902,10 @@ internal static class AimArms
             ApplyLook(player, bones, _smoothedHead);
     }
 
-    private const float RecoilChest = 2f;
-    private const float RecoilHead = 1f;
+    // Half the turn into the chest and half into the head: the view turns by all of it, as the game's first-person
+    // camera does (CameraTransform.localEulerAngles += the camera recoil), and the body is seen to take it.
+    private const float RecoilChest = 0.5f;
+    private const float RecoilHead = 0.5f;
 
     // The first-person camera kick of a shot goes into the chest and on into the head, which carries
     // the camera. The gun and hands keep their place in the world; only the body and view are pushed.
@@ -810,8 +925,8 @@ internal static class AimArms
 
         Transform? chest = bones.Ribcage?.Original;
         Transform? neck = bones.Neck;
-        Quaternion chestKick = Scale(kick, RecoilChest);
-        Quaternion headKick = Scale(kick, RecoilHead);
+        Quaternion chestKick = Scale(kick, RecoilChest * RecoilStrength);
+        Quaternion headKick = Scale(kick, RecoilHead * RecoilStrength);
         if (chest != null && !Settled(chestKick))
         {
             Transform upper = FollowRoot(bones, chest);
@@ -972,7 +1087,7 @@ internal static class AimArms
     }
 
 
-    private static void Sway(ProceduralWeaponAnimation animation, Transform third, Transform anim, Transform sightBone, Vector3 sight, Vector3 sightForward, bool ironAligned, int sightId, Vector3 cameraPosition, Quaternion cameraRotation, Vector3 aimPoint, out Vector3 displacement, out Quaternion turn)
+    private static void Sway(ProceduralWeaponAnimation animation, Transform third, Transform anim, Transform sightBone, Vector3 sight, Vector3 sightForward, bool ironAligned, int sightId, Vector3 cameraPosition, Quaternion cameraRotation, Vector3 aimPoint, Vector3 later, out Vector3 displacement, out Quaternion turn)
     {
         Quaternion toCamera = Quaternion.Inverse(cameraRotation);
         Vector3 sightOnThird = third.position + third.rotation * (Quaternion.Inverse(anim.rotation) * (sight - anim.position));
@@ -1033,7 +1148,7 @@ internal static class AimArms
         float gunTurnScale = _mounted ? 0f : Now.GunTurn;
         float breathScale = _mounted ? 0f : Now.Breath;
         Vector3 sway = armMoveScale * (armMove - _armMoveMean) + gunMoveScale * (gunMove - _gunMoveMean);
-        Vector3 pinned = toCamera * (cameraPosition + cameraRotation * (aimPoint + sway) - smoothSight);
+        Vector3 pinned = toCamera * (cameraPosition + cameraRotation * (aimPoint + sway) - smoothSight - later);
         float side = 1f;
         bool chasing = _hasChase && (_handAction || _chaseCatching);
         if (_hasChase)

@@ -102,8 +102,7 @@ internal static class VestibularView
             _eyeSteady = Vector3.Lerp(_eyeSteady, _eyeFirst, follow);
         }
 
-        // Not aimed (the stock at the chest aside), as in 1.1.1: aimed, the view goes with the head, and with the
-        // third-person body's reaction to each shot.
+        // Not aimed (the stock at the chest aside), as in 1.1.1: aimed, the view goes with the head.
         bool free = (!(player.HandsController != null && player.HandsController.IsAiming) || ChestStance.Active)
             && !movement.IsInMountedState
             && !movement.IsStationaryWeaponInHands

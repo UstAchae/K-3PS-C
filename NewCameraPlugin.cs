@@ -377,7 +377,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     {
         RecoilMode.Find();
         ConfigEntry<string> recoil = SettingsLayout.Bind(Config, "瞄准", "后坐力", RecoilMode.Legacy,
-            new ConfigDescription("开枪时用谁的后坐力。旧版后坐力：1.1.1 版的做法，用游戏自己的后坐力，枪口上跳的力度由下面的“后坐力上跳”决定，镜头和身体跟着动。Recoil Rework：别人的后坐力 mod SPTRecoilReworkLegacy，装了它才有这一项；不选它时它的改动全部撤下，选它时再装回去。它的服务端部分改了一些枪的后坐数值，那部分在这里关不掉，选“旧版后坐力”时也带着。局内可以随时切换；切到或切离 Recoil Rework 后，换一次枪才完全生效。",
+            new ConfigDescription("开枪时用谁的后坐力。原版后坐力：游戏自己的后坐力，按原版第一人称的整套做法放到第三人称的枪、身体和镜头上：枪往后顶、枪口上翻（腰射也翻，子弹跟着枪口），瞄准时镜头追着瞄具、跟着枪口转过去，镜头自己的那一下推到胸腔和头上，总量和原版一样。力度由下面的“后坐力力度”决定。Recoil Rework：别人的后坐力 mod SPTRecoilReworkLegacy，装了它才有这一项；不选它时它的改动全部撤下，选它时再装回去。选它时枪和镜头按它调过的数值走，镜头不再跟着枪口转（它在原版里也把这一下关掉），它自己把视角往上拉的那部分照常起作用。它的服务端部分改了一些枪的后坐数值，那部分在这里关不掉，选“原版后坐力”时也带着。局内可以随时切换；切到或切离 Recoil Rework 后，换一次枪才完全生效。",
                 new AcceptableValueList<string>(RecoilMode.Choices)));
         recoil.SettingChanged += (_, _) => RecoilMode.Set(recoil.Value);
         RecoilMode.Set(recoil.Value);
@@ -388,11 +388,11 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             "瞄准时按住，瞄准的前后距离慢慢变大，枪离镜头更远。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
         _aimDistanceCloser = SettingsLayout.Bind(Config, "瞄准", "前后距离调近快捷键", new KeyboardShortcut(KeyCode.Minus),
             "瞄准时按住，瞄准的前后距离慢慢变小，枪离镜头更近。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
-        ConfigEntry<float> recoilKick = SettingsLayout.Bind(Config, "瞄准", "后坐力上跳", 0.25f,
-            new ConfigDescription("瞄准开枪时枪口上跳的力度，1 是原版第一人称的力度，0 是不跳。子弹跟着枪口走。",
+        ConfigEntry<float> recoilStrength = SettingsLayout.Bind(Config, "瞄准", "后坐力力度", 1f,
+            new ConfigDescription("整套后坐力的力度：枪往后顶、枪口上翻、镜头跟着枪口转、镜头自己的那一下，一起按这个数放大或缩小。1 是原版第一人称，0 是都没有。子弹跟着枪口走。选 Recoil Rework 时同样起作用，但管不到它把视角往上拉的那部分（那部分在它自己的设置里调）。",
                 new AcceptableValueRange<float>(0f, 2f)));
-        recoilKick.SettingChanged += (_, _) => AimArms.RecoilKick = recoilKick.Value;
-        AimArms.RecoilKick = recoilKick.Value;
+        recoilStrength.SettingChanged += (_, _) => AimArms.RecoilStrength = recoilStrength.Value;
+        AimArms.RecoilStrength = recoilStrength.Value;
         _aimDistance.SettingChanged += (_, _) => AimArms.ForwardDistance = _aimDistance.Value;
         AimArms.ForwardDistance = _aimDistance.Value;
     }
@@ -788,6 +788,8 @@ internal static class NewCameraSwitch
                 else
                     _poseRotation = AimArms.KickView(_poseRotation);
                 _poseRotation = VestibularView.Stabilize(player, _posePosition, _poseRotation);
+                // Aimed, the view turns after the gun's flip, as the game's first-person camera does; the gun stays.
+                _poseRotation = AimArms.FollowGun(player, _poseRotation);
                 Vector3 beforeRecoil = _posePosition;
                 AimArms.BodyRecoil(player, ref _posePosition, ref _poseRotation);
                 PoseFromHead += _posePosition - beforeRecoil;

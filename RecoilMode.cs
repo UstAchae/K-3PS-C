@@ -10,14 +10,16 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// Whose recoil the gun has (F12 「瞄准」 → 后坐力): the older one (the game's own shot effect, carried to the third-person
-// gun and body by AimArms.Recoil and BodyRecoil, as in 1.1.1), or SPTRecoilReworkLegacy's, when that mod is installed.
+// Whose recoil the gun has (F12 「瞄准」 → 后坐力): the game's own, all of it as its first person has it, put on the
+// third-person gun, body and view (AimArms: Recoil, FollowGun, BodyRecoil), or SPTRecoilReworkLegacy's, when that mod is
+// installed (the same, on the springs it sets, less the view's turn after the gun, which it stops; its own pull of the
+// look works as it does without this mod).
 // It has no switch of its own (its patches are always in), so while it is not chosen its patches are taken out of the
 // game, and put back as they were when it is. Its server part changes some guns' recoil figures in the database; that
 // stays, whatever is chosen here.
 internal static class RecoilMode
 {
-    internal const string Legacy = "旧版后坐力", Rework = "Recoil Rework";
+    internal const string Legacy = "原版后坐力", Rework = "Recoil Rework";
     private const string ReworkGuid = "com.pein.camerarecoilmod";
 
     private static Assembly? _rework;
@@ -45,6 +47,9 @@ internal static class RecoilMode
     private static float _cameraIntensity, _cameraReturn, _cameraDamping, _handsIntensity, _handsReturn, _handsDamping;
 
     internal static bool ReworkInstalled => _rework != null;
+
+    // Its patches are in the game now (chosen, or the mod switched off).
+    internal static bool ReworkWorking => _rework != null && _reworkIn;
 
     // At load, after Recoil Rework (a soft dependency, so it loads first).
     internal static void Find()
