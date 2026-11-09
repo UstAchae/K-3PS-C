@@ -13,7 +13,7 @@ namespace EFTNewCamera;
 internal static class NvgDump
 {
     private static readonly string[] Starting = { "mesh", "game", "renderer" };
-    private static readonly string[] Down = { "mesh", "no_tracesix", "no_area", "no_postprocess", "no_hbao", "no_sun_shadow", "mesh_again", "game" };
+    private static readonly string[] Down = { "mesh", "no_tracesix", "no_area", "no_postprocess", "no_hbao", "no_sun_shadow", "near_005", "mesh_again", "game" };
     private const int HeldFrames = 40;
     private const int SmallWidth = 480, SmallHeight = 300;
     private static readonly List<RenderTexture> _held = new List<RenderTexture>();
@@ -30,6 +30,7 @@ internal static class NvgDump
     private static readonly List<(CameraEvent at, CommandBuffer[] all)> _stripped = new List<(CameraEvent, CommandBuffer[])>();
     private static readonly List<Behaviour> _disabled = new List<Behaviour>();
     private static Light? _sun;
+    private static float _nearWas = -1f;
     private static LightShadows _sunShadows;
 
     internal static bool GameDraws;
@@ -109,6 +110,10 @@ internal static class NvgDump
                 break;
             case "no_area":
                 Strip(camera, CameraEvent.AfterImageEffectsOpaque, "");
+                break;
+            case "near_005":
+                _nearWas = camera.nearClipPlane;
+                camera.nearClipPlane = 0.005f;
                 break;
             case "no_hbao":
                 Disable(camera.GetComponent("HBAO") as Behaviour);
@@ -287,6 +292,11 @@ internal static class NvgDump
         {
             _sun.shadows = _sunShadows;
             _sun = null;
+        }
+        if (_nearWas >= 0f)
+        {
+            camera.nearClipPlane = _nearWas;
+            _nearWas = -1f;
         }
         GameDraws = false;
         UseRenderer = false;
