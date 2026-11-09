@@ -15,7 +15,7 @@ internal static partial class NightVisionEyepieces
     // fixed centimetre, an eye coming that close to an eyecup lost the picture on that side: the card the lenses'
     // picture is worked out on, just above the rim, was cut off by the near plane. The eyes see only half a metre, so
     // it can go far below the main camera's without the depth suffering.
-    internal static float EyeNearPlane = 0.0001f;
+    internal static float EyeNearPlane = 0.00001f;
     private static float EyeNear => Mathf.Clamp(EyeNearPlane, 0.00001f, 0.05f);
     private const float LensMapScale = 1f;   // the lenses' edges are sharp: the map at the eye's own size
     private const float LensMapRange = 1f;

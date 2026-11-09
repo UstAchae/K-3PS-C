@@ -264,7 +264,7 @@ Shader "Justachae/NVG/Direct" {
      discard;
     // Only what this eye's depth says is the front of the device here: that depth is read, so it cannot be the depth target too.
     float own = _DirectHalf < 0.5 ? rawL : rawR;
-    if (abs(own - i.pos.z) > max(own * 0.002, 0.000001))
+    if (abs(own - i.pos.z) > max(own * 0.002, 0.0000003))
      discard;
     float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
     // By the camera's own matrices, up being up: no turning over, as the game's motion goes the same way in both directions.
@@ -461,7 +461,7 @@ Shader "Justachae/NVG/Direct" {
     if (!pick(i.pos.xy, uv, rawL, rawR, toRight) || (_DirectHalf < 0.5) != (toRight < 0.5))
      discard;
     float own = _DirectHalf < 0.5 ? rawL : rawR;
-    if (abs(own - i.pos.z) > max(own * 0.002, 0.000001))
+    if (abs(own - i.pos.z) > max(own * 0.002, 0.0000003))
      discard;
     placed o;
     o.place = float4(i.place, _DirectHalf + 1);
