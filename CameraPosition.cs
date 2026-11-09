@@ -27,6 +27,8 @@ internal static class CameraPosition
     // Across from the camera to where the gun is placed from (the aiming eye's place as the pose has it), camera's right (m).
     internal static float PoseAcross;
     private static float _side = 1f;
+    // How far over to the aiming eye the camera is, 0 to 1, as it moves.
+    internal static float ViewAimed => Smooth(_viewAimed);
 
     // Each frame, before the camera is placed: how far over to the aiming eye the pose is (aimed, also at the chest)
     // and the camera (aimed, not at the chest).
