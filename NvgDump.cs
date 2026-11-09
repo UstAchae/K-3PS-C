@@ -12,11 +12,11 @@ internal static class NvgDump
     private const string Section = "16 夜视仪直接绘制（测试）";
     private const int RecheckFrames = 30;
 
-    private static ConfigEntry<bool>? _motion, _near, _traceSix, _area, _post, _hbao, _sun, _game;
+    private static ConfigEntry<bool>? _near, _traceSix, _area, _post, _hbao, _sun, _game;
     private static Camera? _on;
     private static PostProcessLayer? _layer;
     private static Behaviour? _ambientOcclusion;
-    private static bool _layerOff, _ambientOff, _motionHung, _sunOff;
+    private static bool _layerOff, _ambientOff, _sunOff;
     private static Light? _sunLight;
     private static LightShadows _sunShadows;
     private static int _nextCheck;
@@ -24,7 +24,6 @@ internal static class NvgDump
     private static readonly List<CommandBuffer> _areaTaken = new List<CommandBuffer>();
 
     internal static bool GameDraws => _game != null && _game.Value;
-    internal static bool ZeroMotion => _motion != null && _motion.Value;
     internal static bool UseRenderer => false;
     internal static float TestNear => _near != null && _near.Value ? 0.005f : 0f;
 
@@ -36,7 +35,6 @@ internal static class NvgDump
             entry.Value = false;
             return entry;
         }
-        _motion = Switch("1 外壳运动矢量写成 0", "外壳跟着头走，本来几乎不动。开：外壳不再带后面场景的运动。");
         _near = Switch("2 近裁剪面调到 0.005 米", "开：外壳的深度不再被压到近裁剪面。远处的阴影和涂鸦可能会抖。");
         _traceSix = Switch("3 关 TraceSix 光照", "开：拿掉 TraceSix 加在画面上的光。");
         _area = Switch("4 关面光源", "开：拿掉游戏的彩色面光源（车灯、灯管）。");
@@ -57,28 +55,13 @@ internal static class NvgDump
             _on = camera;
             _layer = camera.GetComponent<PostProcessLayer>();
             _ambientOcclusion = camera.GetComponent("HBAO") as Behaviour;
-            _layerOff = _ambientOff = _motionHung = false;
+            _layerOff = _ambientOff = false;
             _traceTaken.Clear();
             _areaTaken.Clear();
             _nextCheck = 0;
         }
         Keep(_layer, _post.Value, ref _layerOff);
         Keep(_ambientOcclusion, _hbao!.Value, ref _ambientOff);
-        if (ZeroMotion != _motionHung)
-        {
-            _motionHung = ZeroMotion;
-            CommandBuffer motion = NightVisionEyepieces.MotionBuffer;
-            camera.RemoveCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, motion);
-            if (_motionHung)
-            {
-                // Ahead of what reads the motion.
-                CommandBuffer[] all = camera.GetCommandBuffers(CameraEvent.BeforeImageEffectsOpaque);
-                camera.RemoveCommandBuffers(CameraEvent.BeforeImageEffectsOpaque);
-                camera.AddCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, motion);
-                foreach (CommandBuffer b in all)
-                    camera.AddCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, b);
-            }
-        }
         // Lights come and go, and the sky sets the sun again: looked at now and then, not every frame.
         if (Time.frameCount < _nextCheck)
             return;
