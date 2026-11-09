@@ -11,7 +11,6 @@ Shader "Justachae/NVG/Direct" {
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
  UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
  float _DirectSplit, _DirectStrip, _DirectBehind;
- float _DirectNoEmission;   // temporary: a switch in F12
  float4x4 _EyeInvVP0, _EyeInvVP1;
  float4 _TubeField, _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;
  float4 _DirectInset;    // how far past the lens's edge the device goes, as a share of the frame
@@ -108,7 +107,7 @@ Shader "Justachae/NVG/Direct" {
  }
 
  // Whether this pixel has the device, and whose: each pixel one eye's whole, more of them the other's across the strip. Evened over
- // the pattern once all is lit (pass 4), that is the two eyes' lit pictures eased into each other, as the eyes' cameras were.
+ // the pattern once all is lit (pass 2), that is the two eyes' lit pictures eased into each other, as the eyes' cameras were.
  bool pick (float2 pixel, float2 uv, float rawL, float rawR, out float toRight) {
   float c = coverage(uv, rawL, rawR, toRight);
   if (c <= 0)
@@ -135,14 +134,6 @@ Shader "Justachae/NVG/Direct" {
   #endif
  }
 
- // Temporary, for the layers over the game's own drawing: its depth and ours are worked out apart, a hair from each other.
- float layerDepth (float d) {
-  #if defined(UNITY_REVERSED_Z)
-  return saturate(d + 0.0003);
-  #else
-  return saturate(d - 0.0003);
-  #endif
- }
  ENDCG
  SubShader {
   Pass {
@@ -172,20 +163,12 @@ Shader "Justachae/NVG/Direct" {
     o.g1 = lerp(tex2D(_DirectL1, uv), tex2D(_DirectR1, uv), toRight);
     o.g2 = lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
     o.g3 = lerp(tex2D(_DirectL3, uv), tex2D(_DirectR3, uv), toRight);
-    if (_DirectNoEmission > 0.5) o.g3.rgb = 0;
     o.depth = mainDepth(lerp(inverseDepth(rawL), inverseDepth(rawR), toRight));
     return o;
    }
    ENDCG
   }
-  // 1: unused, the passes keep their numbers.
-  Pass { ColorMask 0 ZWrite Off ZTest Never CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   float4 frag (v2f i) : SV_Target { return 0; }
-   ENDCG
-  }
-  // 2: the device's surface again, once the game's decals are done: they are thrown on whatever the depth holds, and what is
+  // 1: the device's surface again, once the game's decals are done: they are thrown on whatever the depth holds, and what is
   // put in after the G-buffer is not marked as what they leave alone. The dirt of the ground lay on it, other with each move.
   Pass {
    // By the depth the device was put in with: what stands before it keeps its own surface.
@@ -210,14 +193,7 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 3: unused, the passes keep their numbers.
-  Pass { ColorMask 0 ZWrite Off ZTest Never CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   float4 frag (v2f i) : SV_Target { return 0; }
-   ENDCG
-  }
-  // 4: where a half is fading, once all is lit: its pixels kept and left out (kept) evened into one fade, over the pattern's width.
+  // 2: where a half is fading, once all is lit: its pixels kept and left out (kept) evened into one fade, over the pattern's width.
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM
@@ -242,7 +218,7 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 5: the device's own motion on the screen, as the game works it out for what it draws: where this bit of the mesh stood from the
+  // 3: the device's own motion on the screen, as the game works it out for what it draws: where this bit of the mesh stood from the
   // eye last frame against where it stands now. Over each half's own depth, only where that half is the one seen.
   Pass {
    Cull Off ZWrite Off ZTest Always
@@ -277,7 +253,7 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 6: bit 0 of the stencil the game left under its own drawing of the device.
+  // 4: bit 0 of the stencil the game left under its own drawing of the device.
   Pass {
    Cull Off ZWrite Off ZTest LEqual Offset -1, -64
    Blend One One
@@ -290,7 +266,7 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 0.00392157; }
    ENDCG
   }
-  // 7: bit 1 of the stencil the game left under its own drawing of the device.
+  // 5: bit 1 of the stencil the game left under its own drawing of the device.
   Pass {
    Cull Off ZWrite Off ZTest LEqual Offset -1, -64
    Blend One One
@@ -303,7 +279,7 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 0.00784314; }
    ENDCG
   }
-  // 8: bit 2 of the stencil the game left under its own drawing of the device.
+  // 6: bit 2 of the stencil the game left under its own drawing of the device.
   Pass {
    Cull Off ZWrite Off ZTest LEqual Offset -1, -64
    Blend One One
@@ -316,7 +292,7 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 0.01568627; }
    ENDCG
   }
-  // 9: bit 3 of the stencil the game left under its own drawing of the device.
+  // 7: bit 3 of the stencil the game left under its own drawing of the device.
   Pass {
    Cull Off ZWrite Off ZTest LEqual Offset -1, -64
    Blend One One
@@ -329,7 +305,7 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 0.03137255; }
    ENDCG
   }
-  // 10: bit 4 of the stencil the game left under its own drawing of the device.
+  // 8: bit 4 of the stencil the game left under its own drawing of the device.
   Pass {
    Cull Off ZWrite Off ZTest LEqual Offset -1, -64
    Blend One One
@@ -342,7 +318,7 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 0.06274510; }
    ENDCG
   }
-  // 11: bit 5 of the stencil the game left under its own drawing of the device.
+  // 9: bit 5 of the stencil the game left under its own drawing of the device.
   Pass {
    Cull Off ZWrite Off ZTest LEqual Offset -1, -64
    Blend One One
@@ -355,7 +331,7 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 0.12549020; }
    ENDCG
   }
-  // 12: bit 6 of the stencil the game left under its own drawing of the device.
+  // 10: bit 6 of the stencil the game left under its own drawing of the device.
   Pass {
    Cull Off ZWrite Off ZTest LEqual Offset -1, -64
    Blend One One
@@ -368,7 +344,7 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 0.25098039; }
    ENDCG
   }
-  // 13: bit 7 of the stencil the game left under its own drawing of the device.
+  // 11: bit 7 of the stencil the game left under its own drawing of the device.
   Pass {
    Cull Off ZWrite Off ZTest LEqual Offset -1, -64
    Blend One One
@@ -381,66 +357,7 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 0.50196078; }
    ENDCG
   }
-  // 14, temporary: one layer of what we drew, over what the game drew, to find which of them it is that differs.
-  Pass {
-   Cull Off ZWrite Off ZTest LEqual
-   CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   #pragma target 3.5
-   float _DirectLayer;
-   float4 frag (v2f i, out float depth : SV_Depth) : SV_Target {
-    float2 uv = i.screen.xy / i.screen.w;
-    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
-    float toRight;
-    if (!pick(i.pos.xy, uv, rawL, rawR, toRight))
-     discard;
-    depth = layerDepth(pickedDepth(rawL, rawR, toRight));
-    if (_DirectLayer < 0.5) return lerp(tex2D(_DirectL0, uv), tex2D(_DirectR0, uv), toRight);
-    if (_DirectLayer < 1.5) return lerp(tex2D(_DirectL1, uv), tex2D(_DirectR1, uv), toRight);
-    if (_DirectLayer < 2.5) return lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
-    return lerp(tex2D(_DirectL3, uv), tex2D(_DirectR3, uv), toRight);
-   }
-   ENDCG
-  }
-  // 15, temporary: our depth alone.
-  Pass {
-   Cull Off ZWrite On ZTest LEqual
-   ColorMask 0
-   CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   #pragma target 3.5
-   float frag (v2f i) : SV_Depth {
-    float2 uv = i.screen.xy / i.screen.w;
-    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
-    float toRight;
-    if (!pick(i.pos.xy, uv, rawL, rawR, toRight))
-     discard;
-    return layerDepth(pickedDepth(rawL, rawR, toRight));
-   }
-   ENDCG
-  }
-  // 16, temporary: our stencil alone.
-  Pass {
-   Cull Off ZWrite Off ZTest LEqual
-   ColorMask 0
-   Stencil { Ref [_DirectStencilRef] WriteMask 255 Comp Always Pass Replace }
-   CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   #pragma target 3.5
-   float frag (v2f i) : SV_Depth {
-    float2 uv = i.screen.xy / i.screen.w;
-    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
-    float toRight;
-    if (!pick(i.pos.xy, uv, rawL, rawR, toRight))
-     discard;
-    return layerDepth(pickedDepth(rawL, rawR, toRight));
-   }
-   ENDCG
-  }
-  // 17: for a sealed eyecup's dark (NvgShade.shader), where the device seen at each pixel stands from its own eye and which way it faces:
+  // 12: for a sealed eyecup's dark (NvgShade.shader), where the device seen at each pixel stands from its own eye and which way it faces:
   // only what is seen there, so the same half as the surface, and nothing through a lens. w: 1 the left eye's half, 2 the right's.
   Pass {
    Cull Off ZWrite Off ZTest Always

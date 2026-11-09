@@ -72,10 +72,10 @@ internal static partial class NightVisionEyepieces
         // Only while our image effect is on to lay the lenses' picture over the frame.
         if (_body == null || _lensNodes.Length == 0 || camera != Camera.main)
             return false;
-        if (!NvgDump.UpToo && ((!BinocularOn && !Active) || _eyepieceImage == null || !_eyepieceImage.enabled))
+        if ((!BinocularOn && !Active) || _eyepieceImage == null || !_eyepieceImage.enabled)
             return false;
         Vector3 mount = _rotator != null ? _rotator.transform.position : _body.position;
-        return NvgDump.Layered || (mount - camera.transform.position).sqrMagnitude <= MaxEyeDistance * MaxEyeDistance;
+        return (mount - camera.transform.position).sqrMagnitude <= MaxEyeDistance * MaxEyeDistance;
     }
 
     internal static void OnCameraPreCull(Camera camera)
@@ -83,15 +83,11 @@ internal static partial class NightVisionEyepieces
         LightFace(camera);
         if (camera != Camera.main)
             return;
-        NvgDump.PreCull(camera);
         HideIrLaserLights(camera);
         if (_body != null)
             AdjustMount(camera);
         // Once the device's mount is set for this frame: the camera has been placed by now.
-        NvgDump.DeviceUp = _flip <= 0.001f;
-        StepCompare();
-        // The layers' test goes in the free camera too, where the device is placed from the world.
-        _direct = !NvgDump.GameDraws && _directShader != null && LensesOn(camera) && (PrepareRelative(camera) || NvgDump.Layered);
+        _direct = _directShader != null && LensesOn(camera) && PrepareRelative(camera);
         if (_direct)
             HideDevice(camera);
     }
@@ -153,7 +149,7 @@ internal static partial class NightVisionEyepieces
         // that eye, its eyepiece straight ahead in the middle of the frame, the other off to its side. They stay back of the
         // camera when it has come forward to a sight (NightVisionScope.cs). Where the game draws the device, from the camera.
         Vector3 back = view.forward * ScopePullback;
-        Vector3 EyeShiftOf(float lens) => _direct && NvgDump.ComparePhase == 0 ? right * (lens * EyeShift * _split) - back : Vector3.zero;
+        Vector3 EyeShiftOf(float lens) => _direct ? right * (lens * EyeShift * _split) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
         Vector3 leftPlace = a <= b ? placeA : placeB, rightPlace = a <= b ? placeB : placeA;
         if (monocular >= 0)

@@ -309,7 +309,6 @@ internal static partial class NightVisionEyepieces
         Active = on;
         _split = _flip;
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
-        NoteState(present, worn, switchedOn, renderer != null, brnvg, settled, on, cameras?.NightVision != null && cameras.NightVision.On);
         KeepGlow(device);
         UpdateMountHeight(player);
 

@@ -210,7 +210,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         }
 
         eyeShift.SettingChanged += (_, _) => Refresh();
-        NvgDump.Install(Config);
         picture.SettingChanged += (_, _) => Refresh();
         nearBlur.SettingChanged += (_, _) => Refresh();
         tritium.SettingChanged += (_, _) => Refresh();
