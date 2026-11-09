@@ -670,7 +670,7 @@ internal static partial class NightVisionEyepieces
             Vector3 shift = half == 0 ? leftShift : rightShift;
             for (int t = 0; t < 4; t++)
                 _directTargets[half][t] = DirectTexture(_directTextures[half], t, width, height, 0, DirectFormats[t], t < 2 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear, "Justachae NVG device " + half + " " + t);
-            RenderTexture depthTexture = DirectTexture(_directDepths, half, width, height, 24, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG device depth " + half);
+            RenderTexture depthTexture = DirectTexture(_directDepths, half, width, height, 32, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG device depth " + half);
             buffer.SetRenderTarget(_directTargets[half], depthTexture);
             buffer.ClearRenderTarget(true, true, Color.clear);
             // From where this eye truly stands: the view direction a material works out comes from the camera's place, which the

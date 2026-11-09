@@ -25,8 +25,13 @@ Shader "Justachae/NVG/Direct" {
   return raw * (_DirectPlanes.x - _DirectPlanes.y) + _DirectPlanes.y;
  }
 
- // The main camera's depth at that.
+ // The main camera's depth at that. What is nearer than its near plane cannot be held as it is: all of it held at the plane, lit there, with
+ // a hard edge where that began, the edge of the device flickered as the frame's jitter moved it. So what comes near is eased in toward
+ // the plane instead, in its order, never reaching it.
  float mainDepth (float inverse) {
+  float limit = _DirectPlanes.z, knee = limit * 0.7;
+  if (inverse > knee)
+   inverse = knee + (limit - knee) * (1 - exp((knee - inverse) / (limit - knee)));
   float d = saturate((inverse - _DirectPlanes.w) / (_DirectPlanes.z - _DirectPlanes.w));
   #if !defined(UNITY_REVERSED_Z)
   d = 1 - d;
