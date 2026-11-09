@@ -13,7 +13,11 @@ namespace EFTNewCamera;
 internal static class NvgDump
 {
     private static readonly string[] Starting = { "mesh", "game", "renderer" };
-    private static readonly string[] Down = { "mesh", "renderer", "no_tracesix", "no_ambient", "no_hbao", "no_postprocess", "no_sun_shadow", "game" };
+    private static readonly string[] Down = { "mesh", "no_tracesix", "no_area", "no_postprocess", "no_hbao", "no_sun_shadow", "mesh_again", "game" };
+    private const int HeldFrames = 40;
+    private const int SmallWidth = 480, SmallHeight = 300;
+    private static readonly List<RenderTexture> _held = new List<RenderTexture>();
+    private static CommandBuffer? _heldBuffer;
 
     private static ConfigEntry<bool>? _switch;
     private static string[]? _running;
@@ -60,7 +64,11 @@ internal static class NvgDump
         _frame++;
         if (_frame == 1)
             HangShots(camera);
-        else if (_frame >= 2)
+        // Once it is down, each way is held: what drifts over the housing frame to frame, and what it goes away with.
+        bool holding = _stage == "down" && _running[_index] != "game";
+        if (holding && _frame >= 1 && _frame <= HeldFrames)
+            HoldFrame(camera);
+        if (_frame >= (holding ? HeldFrames + 1 : 2))
             Next(camera);
     }
 
@@ -99,8 +107,8 @@ internal static class NvgDump
             case "no_tracesix":
                 Strip(camera, CameraEvent.AfterLighting, "TraceSix");
                 break;
-            case "no_ambient":
-                Strip(camera, CameraEvent.AfterLighting, "Custom Ambient");
+            case "no_area":
+                Strip(camera, CameraEvent.AfterImageEffectsOpaque, "");
                 break;
             case "no_hbao":
                 Disable(camera.GetComponent("HBAO") as Behaviour);
@@ -165,6 +173,11 @@ internal static class NvgDump
         Hang(camera, CameraEvent.BeforeLighting, "_g2", BuiltinRenderTextureType.GBuffer2);
         Hang(camera, CameraEvent.BeforeLighting, "_g3", BuiltinRenderTextureType.CameraTarget);
         Hang(camera, CameraEvent.AfterLighting, "_lit", BuiltinRenderTextureType.CameraTarget);
+        // After each thing that comes after the lights: the first of these a mark is on names what laid it there.
+        Hang(camera, CameraEvent.AfterForwardOpaque, "_s1_forward", BuiltinRenderTextureType.CameraTarget);
+        Hang(camera, CameraEvent.BeforeImageEffectsOpaque, "_s2_opaque_post", BuiltinRenderTextureType.CameraTarget);
+        Hang(camera, CameraEvent.AfterImageEffectsOpaque, "_s3_area", BuiltinRenderTextureType.CameraTarget);
+        Hang(camera, CameraEvent.BeforeImageEffects, "_s4_before_effects", BuiltinRenderTextureType.CameraTarget);
         // The frame as it goes to the screen, with all the effects.
         ScreenCapture.CaptureScreenshot(Path.Combine(_folder, Prefix + "_screen.png"));
     }
@@ -181,8 +194,79 @@ internal static class NvgDump
         }
     }
 
+    private static void HoldFrame(Camera camera)
+    {
+        if (_heldBuffer == null)
+        {
+            _heldBuffer = new CommandBuffer { name = "NVG dump held" };
+            camera.AddCommandBuffer(CameraEvent.BeforeImageEffects, _heldBuffer);
+        }
+        var small = new RenderTexture(SmallWidth, SmallHeight, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+        _held.Add(small);
+        _heldBuffer.Clear();
+        _heldBuffer.Blit(BuiltinRenderTextureType.CameraTarget, small);
+        _heldBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+    }
+
+    // The frames held for one way: how much each pixel moves from frame to frame, and how much over all of them.
+    private static void SaveHeld(string name)
+    {
+        if (_held.Count < 3)
+            return;
+        RenderTexture? active = RenderTexture.active;
+        var read = new Texture2D(SmallWidth, SmallHeight, TextureFormat.RGBAFloat, false, true);
+        float[]? last = null;
+        var change = new float[SmallWidth * SmallHeight];
+        var low = new float[change.Length];
+        var high = new float[change.Length];
+        for (int i = 0; i < low.Length; i++)
+            low[i] = float.MaxValue;
+        // The first frames after a change of way are the change itself.
+        for (int k = 8; k < _held.Count; k++)
+        {
+            RenderTexture.active = _held[k];
+            read.ReadPixels(new Rect(0, 0, SmallWidth, SmallHeight), 0, 0);
+            Color[] pixels = read.GetPixels();
+            var now = new float[pixels.Length];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                now[i] = Mathf.Sqrt(Mathf.Max(pixels[i].r * 0.3f + pixels[i].g * 0.6f + pixels[i].b * 0.1f, 0f));
+                if (last != null)
+                    change[i] += Mathf.Abs(now[i] - last[i]);
+                low[i] = Mathf.Min(low[i], now[i]);
+                high[i] = Mathf.Max(high[i], now[i]);
+            }
+            last = now;
+        }
+        var png = new Texture2D(SmallWidth, SmallHeight, TextureFormat.RGB24, false, true);
+        var output = new Color[change.Length];
+        float frames = _held.Count - 9;
+        for (int i = 0; i < output.Length; i++)
+        {
+            float each = change[i] / frames * 20f, all = (high[i] - low[i]) * 6f;
+            output[i] = new Color(Mathf.Clamp01(each), Mathf.Clamp01(all), Mathf.Clamp01(all), 1f);
+        }
+        png.SetPixels(output);
+        File.WriteAllBytes(Path.Combine(_folder, name + "_drift.png"), png.EncodeToPNG());
+        RenderTexture.active = active;
+        Object.Destroy(read);
+        Object.Destroy(png);
+        foreach (RenderTexture rt in _held)
+        {
+            rt.Release();
+            Object.Destroy(rt);
+        }
+        _held.Clear();
+    }
+
     private static void Undo(Camera camera)
     {
+        if (_heldBuffer != null)
+        {
+            camera.RemoveCommandBuffer(CameraEvent.BeforeImageEffects, _heldBuffer);
+            _heldBuffer = null;
+            SaveHeld(Prefix);
+        }
         foreach ((CameraEvent at, CommandBuffer buffer) in _hung)
             camera.RemoveCommandBuffer(at, buffer);
         _hung.Clear();
