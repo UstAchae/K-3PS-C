@@ -290,9 +290,9 @@ internal static partial class NightVisionEyepieces
         ThermalVisionDevice? thermalDevice = thermal ? _body!.GetComponentInParent<ThermalVisionDevice>() : null;
         ThermalVisionComponent? thermalItem = thermal ? player.ThermalVisionObserver?.Component : null;
         Behaviour? renderer = !thermal && UseBrnvg ? NightRenderer(cameras?.NightVision) : null;
-        // BRNVG draws no filter in the hideout (it puts no renderer on the camera there): set to choose by itself, the
-        // lenses then show the game's picture, as without BRNVG.
-        bool brnvg = !thermal && UseBrnvg && (renderer != null || Picture == PictureBrnvg || player is not HideoutPlayer);
+        // BRNVG draws no filter in the hideout (it puts no renderer on the camera there): the lenses then show the
+        // game's picture, as without BRNVG.
+        bool brnvg = !thermal && UseBrnvg && (renderer != null || player is not HideoutPlayer);
         bool present = _body != null && _body.gameObject.activeInHierarchy;
         bool worn = present && EyepieceImageReady(cameras) && (thermal ? EnsureThermalCamera() : !brnvg || renderer != null);
         bool switchedOn = worn && (thermal ? thermalItem?.Togglable != null && thermalItem.Togglable.On : nightItem?.Togglable != null ? nightItem.Togglable.On : device != null && SwitchedOn(device));

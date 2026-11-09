@@ -160,12 +160,14 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             new ConfigDescription("按住时把头盔前沿往上抬（只转头盔和挂在上面的夜视仪，头和镜头不动）。每顶头盔各自记住自己的角度，像夜视仪支架一样。只在腰射（没有瞄准）时有效，瞄准时同样的键调瞄准距离。", null, new ConfigurationManagerAttributes { Order = -10 }));
         ConfigEntry<KeyboardShortcut> headwearDown = SettingsLayout.Bind(Config, "头戴式成像装备", "头部装备俯下", HeadwearTilt.Down,
             new ConfigDescription("按住时把头盔前沿往回放（最低回到原位）。", null, new ConfigurationManagerAttributes { Order = -11 }));
-        // Saved as "BRNVG", or by its full name with or without "[未安装]": the option as it is named now.
+        // Saved as "BRNVG", or by its full name with or without "[未安装]": the option as it is named now. "自动" is gone:
+        // the game's.
         SettingsLayout.MapSaved(Config, "头戴式成像装备", "夜视画面来源", saved =>
-            OtherMods.IsChoice(saved, OtherMods.BrnvgGuid, OtherMods.BrnvgName, "BRNVG") ? NightVisionEyepieces.PictureBrnvg : null);
+            OtherMods.IsChoice(saved, OtherMods.BrnvgGuid, OtherMods.BrnvgName, "BRNVG") ? NightVisionEyepieces.PictureBrnvg
+            : saved == "自动" ? NightVisionEyepieces.PictureGame : null);
         ConfigEntry<string> picture = SettingsLayout.Bind(Config, "头戴式成像装备", "夜视画面来源", NightVisionEyepieces.PictureGame,
-            new ConfigDescription("头戴夜视仪和热成像只在自己的目镜里成像，目镜以外是不带夜视的原样画面，设备模型照常画出。支持 GPNVG-18、PNV-10T、PNV-57E、Armasight N-15、AN/PVS-14（单筒）、模组物品 PVS-31A 和 T-7 热成像；其他型号仍是游戏原样的全屏滤镜。这一项选目镜里的夜视画面用谁做。自动：装了 Borkel's Realistic NVGs（BRNVG）就用它，没装就用游戏原版的夜视滤镜。Borkel's Realistic NVGs：用它的画面，它的 F12 设置（增益、颜色、噪点、泛光、近处虚焦等）都会作用到目镜里；没装时这一项后面写着 [未安装]，选了也按原版。原版：用游戏自己的夜视滤镜（绿色、噪点），装了 BRNVG 也不用它的画面。热成像设备不受这个选项影响。",
-                new AcceptableValueList<string>(NightVisionEyepieces.PictureAuto, NightVisionEyepieces.PictureBrnvg, NightVisionEyepieces.PictureGame),
+            new ConfigDescription("头戴夜视仪和热成像只在自己的目镜里成像，目镜以外是不带夜视的原样画面，设备模型照常画出。支持 GPNVG-18、PNV-10T、PNV-57E、Armasight N-15、AN/PVS-14（单筒）、模组物品 PVS-31A 和 T-7 热成像；其他型号仍是游戏原样的全屏滤镜。这一项选目镜里的夜视画面用谁做，游戏里随时可以来回切换。Borkel's Realistic NVGs：用它的画面，它的 F12 设置（增益、颜色、噪点、泛光、近处虚焦等）都会作用到目镜里；没装时这一项后面写着 [未安装]，选了也按原版。原版：用游戏自己的夜视滤镜（绿色、噪点），装了 BRNVG 也不用它的画面。热成像设备不受这个选项影响。",
+                new AcceptableValueList<string>(NightVisionEyepieces.PictureBrnvg, NightVisionEyepieces.PictureGame),
                 new ConfigurationManagerAttributes { Order = 3 }));
         ConfigEntry<bool> glow = SettingsLayout.Bind(Config, "头戴式成像装备", "目镜光晕", false,
             new ConfigDescription("夜视开着时，镜片的光往四周晕开，照在镜片玻璃边缘和眼罩内侧的那一圈光。关掉后只剩镜片里的画面。热成像也一样。",

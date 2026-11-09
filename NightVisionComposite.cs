@@ -40,14 +40,14 @@ namespace EFTNewCamera;
 //     6 Compose                the eyepieces laid over the naked eye's frame (NvgBinocular.shader).
 internal static partial class NightVisionEyepieces
 {
-    internal const string PictureAuto = "自动", PictureGame = "原版";
+    internal const string PictureGame = "原版";
     // BRNVG's picture, by its full name ("[未安装]" after it when it is not installed).
     internal static readonly string PictureBrnvg = OtherMods.Label(OtherMods.BrnvgGuid, OtherMods.BrnvgName);
 
-    internal static string Picture = PictureAuto;
+    internal static string Picture = PictureGame;
 
-    // BRNVG's picture: chosen (or left to choice) and BRNVG there.
-    private static bool UseBrnvg => Picture != PictureGame && BodyVisibility.NightRendererType != null;
+    // BRNVG's picture: chosen, and BRNVG there (chosen without it, the game's).
+    private static bool UseBrnvg => Picture == PictureBrnvg && BodyVisibility.NightRendererType != null;
 
     private static EyepieceImage? _eyepieceImage;
 
