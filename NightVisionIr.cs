@@ -163,6 +163,16 @@ internal static partial class NightVisionEyepieces
     private static bool IkLightPreCullPrefix(IkLight __instance, Camera cam)
     {
         Light? light = __instance.Light;
+        // The scope's camera, the sight looked through bare (OpticSeesNightVision): the IR lights light nothing there. The game
+        // lights them for it whenever the goggle is on.
+        if (cam != null && IrWanted && OpticPicture.IsCamera(cam) && !OpticSeesNightVision())
+        {
+            if (light != null)
+                light.intensity = 0f;
+            if (__instance.FlareLight != null)
+                __instance.FlareLight.SetAlpha(-1f);
+            return false;
+        }
         if (cam == null || cam != EFT.CameraControl.CameraManager.Instance?.Camera || !IrWanted)
             return true;
         if (_irLightsFrame != Time.frameCount)
@@ -526,13 +536,21 @@ internal static partial class NightVisionEyepieces
     {
         if (!IrWanted || !OpticPicture.IsCamera(camera))
             return;
-        var manager = EFT.CameraControl.CameraManager.Instance;
-        bool on = manager?.NightVision != null && manager.NightVision.On
-            || manager?.OpticCameraManager?.NightVision != null && manager.OpticCameraManager.NightVision.On;
-        if (!on)
+        if (!OpticSeesNightVision())
             return;
         Shader.SetGlobalFloat(NightVisionOnId, 1f);
         _opticIr = true;
+    }
+
+    // Whether the scope's picture is a night-vision one: the sight's own night vision, or the goggle's, but the goggle's only when it is
+    // before the aiming eye (the sight looked through with it, ScopePull). A monocular before the other eye leaves the aiming eye to look
+    // through the sight bare: no IR there, and lasers as the naked eye sees them.
+    private static bool OpticSeesNightVision()
+    {
+        var manager = EFT.CameraControl.CameraManager.Instance;
+        if (manager?.OpticCameraManager?.NightVision != null && manager.OpticCameraManager.NightVision.On)
+            return true;
+        return manager?.NightVision != null && manager.NightVision.On && ScopePullback > 0.005f;
     }
 
     internal static void OnOpticPostRenderIr(Camera camera)
