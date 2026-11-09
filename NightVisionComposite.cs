@@ -20,16 +20,17 @@ namespace EFTNewCamera;
 // 目镜成像流水线, each frame (with a magnified sight looked through with the goggle down, its lens's part in each step;
 // 倍镜状态 _scope, NightVisionScope.cs, is the only place that says whether, where and how bright):
 //   Before any camera renders  ScopePull: _scope.Through, the camera to the goggle's objective.
-//   The sight's camera         its picture a night-vision one or not (OpticSeesNightVision: IR lights, _NightVisionOn,
-//                              lasers, NightVisionIr.cs); what is near in it blurred by its own objective and its
+//   The sight's camera         IR lights through the goggle or its own night vision (OpticSeesNightVision); IR lasers
+//                              drawn by us, visible ones at their own light, unless its picture is its own night-vision
+//                              one (OpticOwnNightVision: the game's _NightVisionOn, NightVisionIr.cs); what is near in it blurred by its own objective and its
 //                              vials' discs laid on (NightVisionScopeTritium.cs). The game lays it on the sight's lens.
-//   The main camera, before    NoteScope: _scope's lens and Light. The IR layer and the naked eye's lasers, drawn from
+//   The main camera, before    NoteScope: _scope's lens and Light. The IR layer (IR lights and IR lasers), drawn from
 //                              the eyes, sight or no sight (NightVisionIr.cs).
 //   Its image effect (here, EyepieceRenderImage):
 //     1 ScopeLensStep          the lens's mask (NightVisionObjective.cs, DrawScopeLens).
 //     2 ForTube                the light that reaches the tube (NvgIrLight.shader pass 1): out of the lens, the frame
-//                              with the IR layer added and the naked eye's lasers taken out; in it, the sight's picture
-//                              (the naked eye's lasers taken out) at _scope.Light, and nothing past the sight. The one
+//                              with the IR layer added (visible lasers in it at their own light, as everything the tube
+//                              amplifies); in it, the sight's picture at _scope.Light, and nothing past the sight. The one
 //                              place the sight's light is cut, whatever else is switched on.
 //     3 ThroughObjective       the objective's blur of what is near (NvgObjective.shader): the lens sharp, the
 //                              eyepiece's rim blurred over its edge, the lens's picture kept out of what lies behind

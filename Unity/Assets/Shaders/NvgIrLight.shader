@@ -2,8 +2,8 @@
 // 0: an IR spot light on the frame's surfaces, as the game's deferred pass lights them (Unity's standard BRDF on the
 //    G-buffer, the light's cookie and falloff), added into the layer. Shadowed lights are drawn right after their
 //    shadow map, which is then the current target's: the view-projection still set is the one it was drawn with.
-// 1: the light that reaches the tube (ForTube): the frame with the layer added and the naked eye's look of the visible
-//    lasers taken out; over a magnified sight's lens looked through, the layer left out and the sight's light at the
+// 1: the light that reaches the tube (ForTube): the frame with the layer added (visible lasers are in the frame at their
+//    own light, which the tube amplifies); over a magnified sight's lens looked through, the layer left out and the sight's light at the
 //    share of it that reaches the tube (_ScopeLight), the one place it is cut.
 // 2: lasers drawn apart added onto the upscaled frame.
 // 3: the layer held over frames as TAA holds a frame: this frame's (its jitter taken out) blended into the last
@@ -121,17 +121,15 @@ Shader "Justachae/NVG/IrLight" {
    #pragma vertex vert_img
    #pragma fragment frag
    #include "UnityCG.cginc"
-   sampler2D _MainTex, _IrLayer, _IrNaked, _ScopeLens;
+   sampler2D _MainTex, _IrLayer, _ScopeLens;
    float _ScopeOn, _ScopeLight;
    float4 frag (v2f_img i) : SV_Target {
     float4 frame = tex2D(_MainTex, i.uv);
-    // The visible lasers as the naked eye sees them taken out, as night vision does put in.
-    float3 naked = tex2D(_IrNaked, i.uv).rgb;
     // A magnified sight's lens (_ScopeOn, NightVisionScope.cs): the sight's own picture there, with the lasers and IR its
     // camera sees, at the share of its light that reaches the tube; the layer's, past the sight as seen from the eye, left out.
     if (_ScopeOn > 0.5 && tex2D(_ScopeLens, i.uv).r > 0.5)
-     return float4(max(frame.rgb - naked, 0) * _ScopeLight, frame.a);
-    return float4(max(frame.rgb + tex2D(_IrLayer, i.uv).rgb - naked, 0), frame.a);
+     return float4(frame.rgb * _ScopeLight, frame.a);
+    return float4(frame.rgb + tex2D(_IrLayer, i.uv).rgb, frame.a);
    }
    ENDCG
   }
