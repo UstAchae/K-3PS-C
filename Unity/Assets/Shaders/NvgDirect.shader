@@ -222,19 +222,36 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 5: no motion on the screen where the device is: it goes with the head, and what lay behind it moved otherwise.
+  // 5: the device's own motion on the screen, as the game works it out for what it draws: where this bit of the mesh stood from the
+  // eye last frame against where it stands now. Over each half's own depth, only where that half is the one seen.
   Pass {
-   Cull Off ZWrite Off ZTest Always
+   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
    CGPROGRAM
-   #pragma vertex vert
+   #pragma vertex motionVert
    #pragma fragment frag
    #pragma target 3.5
-   float4 frag (v2f i) : SV_Target {
+   float4x4 _DirectNowVP, _DirectOldVP, _DirectOldM;
+   float _DirectHalf;
+   struct m2f { float4 pos : SV_POSITION; float4 screen : TEXCOORD0; float4 now : TEXCOORD1; float4 old : TEXCOORD2; };
+   m2f motionVert (float4 v : POSITION) {
+    m2f o;
+    o.pos = UnityObjectToClipPos(v);
+    o.screen = ComputeScreenPos(o.pos);
+    o.now = mul(_DirectNowVP, mul(unity_ObjectToWorld, v));
+    o.old = mul(_DirectOldVP, mul(_DirectOldM, v));
+    return o;
+   }
+   float4 frag (m2f i) : SV_Target {
     float2 uv = i.screen.xy / i.screen.w;
     float toRight;
-    if (coverage(uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight) <= 0)
+    if (coverage(uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight) <= 0 || (_DirectHalf < 0.5) != (toRight < 0.5))
      discard;
-    return 0;
+    float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
+    #if UNITY_UV_STARTS_AT_TOP
+    now.y = 1 - now.y;
+    old.y = 1 - old.y;
+    #endif
+    return float4(now - old, 0, 1);
    }
    ENDCG
   }

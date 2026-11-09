@@ -220,6 +220,50 @@ internal static partial class NightVisionEyepieces
         return true;
     }
 
+    private static readonly int DirectNowVP = Shader.PropertyToID("_DirectNowVP"), DirectOldVP = Shader.PropertyToID("_DirectOldVP"), DirectOldM = Shader.PropertyToID("_DirectOldM"), DirectHalf = Shader.PropertyToID("_DirectHalf");
+    private static readonly Dictionary<Renderer, Matrix4x4> _oldPieces = new Dictionary<Renderer, Matrix4x4>();
+    private static readonly Vector3[] _oldShifts = new Vector3[2];
+    private static Matrix4x4 _oldVP;
+    private static int _motionFrame = -100;
+
+    private static void DrawMotion(CommandBuffer buffer, Camera main, Matrix4x4 turned, Matrix4x4 projection, Vector3 leftShift, Vector3 rightShift)
+    {
+        Matrix4x4 nowVP = main.nonJitteredProjectionMatrix * turned;
+        // After a gap there is no last frame to go by: as if it had not moved.
+        bool continued = _motionFrame == Time.frameCount - 1;
+        _motionFrame = Time.frameCount;
+        if (!continued)
+        {
+            _oldPieces.Clear();
+            _oldVP = nowVP;
+            _oldShifts[0] = leftShift;
+            _oldShifts[1] = rightShift;
+        }
+        buffer.SetViewProjectionMatrices(turned, projection);
+        buffer.SetGlobalMatrix(DirectNowVP, nowVP);
+        buffer.SetGlobalMatrix(DirectOldVP, _oldVP);
+        for (int half = 0; half < 2; half++)
+        {
+            Matrix4x4 fromEye = Matrix4x4.Translate(-(half == 0 ? leftShift : rightShift)), fromOldEye = Matrix4x4.Translate(-_oldShifts[half]);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.MotionVectors, half == 0 ? DirectLeftDepth : DirectRightDepth);
+            buffer.SetGlobalFloat(DirectHalf, half);
+            foreach (Piece piece in _pieces)
+            {
+                Matrix4x4 old = _oldPieces.TryGetValue(piece.Renderer, out Matrix4x4 was) ? was : piece.FromCamera;
+                buffer.SetGlobalMatrix(DirectOldM, fromOldEye * old);
+                for (int s = 0; s < piece.Mesh.subMeshCount; s++)
+                    buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, _directMaterial!, s, 5);
+            }
+        }
+        buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
+        buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        foreach (Piece piece in _pieces)
+            _oldPieces[piece.Renderer] = piece.FromCamera;
+        _oldVP = nowVP;
+        _oldShifts[0] = leftShift;
+        _oldShifts[1] = rightShift;
+    }
+
     private static void ClearDirect()
     {
         _directBuffer?.Clear();
@@ -438,14 +482,10 @@ internal static partial class NightVisionEyepieces
         buffer.SetRenderTarget(_mainSurface, BuiltinRenderTextureType.CameraTarget);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 2);
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-        // No motion on the screen where the device is: it goes with the head, and left to itself it had what lay behind it, so
-        // what is carried from frame to frame by the motion (the reflections, the upscaler) drifted over it like mist.
+        // The device's own motion on the screen: it goes with the head, and left to itself it had what lay behind it, so what is
+        // carried from frame to frame by the motion (the reflections, the upscaler) drifted over it like mist.
         if ((main.depthTextureMode & DepthTextureMode.MotionVectors) != 0)
-        {
-            _directMotion.SetRenderTarget(BuiltinRenderTextureType.MotionVectors);
-            _directMotion.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 5);
-            _directMotion.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-        }
+            DrawMotion(_directMotion, main, turned, projection, leftShift, rightShift);
         // Once all is lit: the fade. The textures are let go only after this.
         buffer = _directEnd;
         buffer.SetGlobalVector(DirectTexel, new Vector4(1f / Mathf.Max(width, 1), 1f / Mathf.Max(height, 1), 0f, 0f));
