@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// Whose recoil the gun has (F12 「瞄准」 → 使用 Recoil Rework): the game's own, all of it as its first person has it, put on
+// Whose recoil the gun has (F12 「瞄准」 → 后坐力, SPTRecoilReworkLegacy or 原版): the game's own, all of it as its first person has it, put on
 // the third-person gun and view (AimArms: Recoil, FollowGun, CameraRecoil), or the game's with SPTRecoilReworkLegacy, as
 // the game is with that mod installed: on the springs it sets, the view's turn after the gun stopped as it stops it,
 // its pull of the look, and its shake of the first-person camera put on ours (ReworkCameraShake), with no strength of
@@ -45,6 +45,8 @@ internal static class RecoilMode
     // taken before it first does (the game's), so going back from it gives the game's again.
     private static NewRecoilShotEffect? _savedFor;
     private static float _cameraIntensity, _cameraReturn, _cameraDamping, _handsIntensity, _handsReturn, _handsDamping;
+
+    internal const string Game = "原版";            // the choice of the game's own recoil
 
     internal static bool ReworkInstalled => _rework != null;
 

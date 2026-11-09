@@ -391,16 +391,20 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void BindAimDistance()
     {
         RecoilMode.Find();
-        ConfigEntry<bool> useRework = SettingsLayout.Bind(Config, "瞄准", "使用 Recoil Rework", false,
-            new ConfigDescription("关：原版后坐力，游戏自己的后坐力按原版第一人称的整套做法放到第三人称的枪和镜头上：枪往后顶、枪口上翻（腰射也翻，子弹跟着枪口），瞄准时镜头追着瞄具、跟着枪口转过去，再加上镜头自己的那一下，力度由下面的“后坐力力度”决定。开：别人的后坐力 mod SPTRecoilReworkLegacy，和不装本 mod、只装它时一样：枪和镜头按它调过的数值走，镜头不跟着枪口转（它把这一下关掉），它把视角往上拉、它给镜头的抖动都照常有，“后坐力力度”不起作用。没装它时这一项名字后面写着 [未安装]，不能打开；关着时它的改动全部撤下，打开时再装回去。它的服务端部分改了一些枪的后坐数值，那部分在这里关不掉，关着时也带着。局内可以随时切换，切换后换一次枪才完全生效。",
-                null, new ConfigurationManagerAttributes
-                {
-                    // Shown by the mod's full name; not installed, marked so and not changeable.
-                    DispName = OtherMods.Label(OtherMods.ReworkGuid, OtherMods.ReworkName),
-                    ReadOnly = !RecoilMode.ReworkInstalled,
-                }));
-        useRework.SettingChanged += (_, _) => RecoilMode.Set(useRework.Value);
-        RecoilMode.Set(useRework.Value);
+        // Whose recoil, chosen as the eyepieces' picture is (夜视画面来源): SPTRecoilReworkLegacy by its full name, or 原版.
+        string rework = OtherMods.Label(OtherMods.ReworkGuid, OtherMods.ReworkName);
+        // Saved as the switch it was (使用 Recoil Rework), or as the list before that (后坐力: 旧版后坐力, Recoil Rework, ...).
+        string? wasSwitch = SettingsLayout.TakeSaved(Config, "03 瞄准", "使用 Recoil Rework") ?? SettingsLayout.TakeSaved(Config, "瞄准", "使用 Recoil Rework");
+        if (wasSwitch != null)
+            SettingsLayout.PutSaved(Config, "瞄准", "后坐力", string.Equals(wasSwitch.Trim(), "true", System.StringComparison.OrdinalIgnoreCase) ? rework : RecoilMode.Game);
+        else
+            SettingsLayout.MapSaved(Config, "瞄准", "后坐力", saved =>
+                OtherMods.IsChoice(saved, OtherMods.ReworkGuid, OtherMods.ReworkName, "Recoil Rework") ? rework : saved == RecoilMode.Game ? null : RecoilMode.Game);
+        ConfigEntry<string> recoil = SettingsLayout.Bind(Config, "瞄准", "后坐力", RecoilMode.Game,
+            new ConfigDescription("后坐力用谁的，游戏里随时可以来回切换。原版：游戏自己的后坐力按原版第一人称的整套做法放到第三人称的枪和镜头上：枪往后顶、枪口上翻（腰射也翻，子弹跟着枪口），瞄准时镜头追着瞄具、跟着枪口转过去，再加上镜头自己的那一下，力度由下面的“后坐力力度”决定。SPTRecoilReworkLegacy：别人的后坐力 mod，和不装本 mod、只装它时一样：枪和镜头按它调过的数值走，镜头不跟着枪口转（它把这一下关掉），它把视角往上拉、它给镜头的抖动都照常有，“后坐力力度”不起作用；没装它时这一项后面写着 [未安装]，选了也按原版。选原版时它的改动全部撤下，选它时再装回去；它的服务端部分改了一些枪的后坐数值，那部分在这里关不掉，选原版时也带着。切换后换一次枪才完全生效。",
+                new AcceptableValueList<string>(rework, RecoilMode.Game)));
+        recoil.SettingChanged += (_, _) => RecoilMode.Set(recoil.Value == rework);
+        RecoilMode.Set(recoil.Value == rework);
         _aimDistance = SettingsLayout.Bind(Config, "瞄准", "前后距离", -0.05f,
             new ConfigDescription("瞄准后沿镜头前方向移动枪，单位为米。负值让枪离镜头更近。",
                 new AcceptableValueRange<float>(AimDistanceMin, AimDistanceMax)));
@@ -409,7 +413,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         _aimDistanceCloser = SettingsLayout.Bind(Config, "瞄准", "前后距离调近快捷键", new KeyboardShortcut(KeyCode.Minus),
             "瞄准时按住，瞄准的前后距离慢慢变小，枪离镜头更近。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
         ConfigEntry<float> recoilStrength = SettingsLayout.Bind(Config, "瞄准", "后坐力力度", 1f,
-            new ConfigDescription("原版后坐力的力度：枪往后顶、枪口上翻、镜头跟着枪口转、镜头自己的那一下，一起按这个数放大或缩小。1 是原版第一人称，0 是都没有。子弹跟着枪口走。打开“使用 Recoil Rework”时不起作用（那时按它自己的设置）。",
+            new ConfigDescription("原版后坐力的力度：枪往后顶、枪口上翻、镜头跟着枪口转、镜头自己的那一下，一起按这个数放大或缩小。1 是原版第一人称，0 是都没有。子弹跟着枪口走。“后坐力”选 SPTRecoilReworkLegacy 时不起作用（那时按它自己的设置）。",
                 new AcceptableValueRange<float>(0f, 2f)));
         recoilStrength.SettingChanged += (_, _) => AimArms.RecoilStrength = recoilStrength.Value;
         AimArms.RecoilStrength = recoilStrength.Value;

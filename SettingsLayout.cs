@@ -17,7 +17,7 @@ internal static class SettingsLayout
         ("", new[] { "总开关", "骨架" }),
         ("01 镜头", new[] { "水平", "垂直", "前后", "瞄准时移到瞄准眼", "瞄准眼离中线（米）", "近裁剪面（米）" }),
         ("02 前庭平衡", new[] { "总开关", "强度", "扭转补偿" }),
-        ("03 瞄准", new[] { "使用 Recoil Rework", "后坐力力度", "前后距离", "前后距离调远快捷键", "前后距离调近快捷键" }),
+        ("03 瞄准", new[] { "后坐力", "后坐力力度", "前后距离", "前后距离调远快捷键", "前后距离调近快捷键" }),
         ("04 瞄准摆动-平时", new[] { "摆动", "跟随头部", "呼吸" }),
         ("05 瞄准摆动-屏息", new[] { "摆动", "跟随头部", "呼吸" }),
         ("06 瞄准摆动-没体力", new[] { "摆动", "跟随头部", "呼吸" }),
@@ -84,6 +84,30 @@ internal static class SettingsLayout
             {
                 Order = place.Order, Browsable = given?.Browsable, DispName = given?.DispName, ReadOnly = given?.ReadOnly,
             }));
+    }
+
+    // A value saved under a setting that is gone, taken out of the file (its section as the file has it); null when none.
+    internal static string? TakeSaved(ConfigFile config, string section, string key)
+    {
+        PropertyInfo? property = typeof(ConfigFile).GetProperty("OrphanedEntries", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (property?.GetValue(config) is not Dictionary<ConfigDefinition, string> orphans)
+            return null;
+        var definition = new ConfigDefinition(section, key);
+        if (!orphans.TryGetValue(definition, out string value))
+            return null;
+        orphans.Remove(definition);
+        return value;
+    }
+
+    // A value for a setting, as if saved, before it is bound (where the layout puts it).
+    internal static void PutSaved(ConfigFile config, string section, string key, string value)
+    {
+        PropertyInfo? property = typeof(ConfigFile).GetProperty("OrphanedEntries", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (property?.GetValue(config) is not Dictionary<ConfigDefinition, string> orphans)
+            return;
+        string placed = Places.TryGetValue(Id(section, key), out (string Section, int Order) place) ? place.Section : section;
+        orphans.Remove(new ConfigDefinition(section, key));
+        orphans[new ConfigDefinition(placed, key)] = value;
     }
 
     // A value saved as the setting had it before (an option since renamed), given as it is now, before it is bound.
