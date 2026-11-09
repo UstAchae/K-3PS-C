@@ -125,6 +125,8 @@ internal static partial class NightVisionEyepieces
     private static Camera? _directCamera;
     private static int _arrangedCount = -1;
     private static bool _direct;
+    private const int PlacesPass = 17;
+    private static readonly int ShadeLeftCupId = Shader.PropertyToID("_ShadeLeftCup");
     private static bool? _drawNoted;
     private static int _layersNoted = -1;
     private const int LayerColourPass = 14, LayerDepthPass = 15, LayerStencilPass = 16;
@@ -726,7 +728,11 @@ internal static partial class NightVisionEyepieces
         // The sealed eyecups' insides go dark as the device comes down: from where each half of the device stands, not from the
         // main camera's depth, which holds what is nearest at its near plane.
         Vector3 leftOf = leftShift, rightOf = rightShift;
-        Transform lensLeft = _lensNodes[CentreLensA];
+        // The eyecup on the left of the frame is the left eye's half's, whichever of the device's it is.
+        Transform lensA = _lensNodes[CentreLensA], lensB = _lensNodes[Mathf.Min(CentreLensB, _lensNodes.Length - 1)];
+        bool aIsLeft = Vector3.Dot(FromCamera(lensA, place).GetColumn(3), main.transform.right) <= Vector3.Dot(FromCamera(lensB, place).GetColumn(3), main.transform.right);
+        Transform lensLeft = aIsLeft ? lensA : lensB;
+        Shader.SetGlobalFloat(ShadeLeftCupId, aIsLeft ? 0f : 1f);
         ShadeCamera(2, main, main.nonJitteredProjectionMatrix, t => (Vector3)FromCamera(t, place).GetColumn(3) - (t == lensLeft ? leftOf : rightOf));
         _shadeMainCamera = main;
         if (_device.Sealed && _shadeMaterial != null && ShadeKeep < 0.999f)
@@ -743,10 +749,11 @@ internal static partial class NightVisionEyepieces
             for (int half = 0; half < 2; half++)
             {
                 Matrix4x4 fromEye = Matrix4x4.Translate(-(half == 0 ? leftShift : rightShift));
+                buffer.SetGlobalFloat(DirectHalf, half);
                 foreach (Piece piece in _pieces)
                 {
                     for (int s = 0; s < piece.Mesh.subMeshCount; s++)
-                        buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, _shadeMaterial, s, 1);
+                        buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, _directMaterial, s, PlacesPass);
                 }
             }
         }

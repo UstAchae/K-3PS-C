@@ -435,5 +435,40 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
+  // 17: for a sealed eyecup's dark (NvgShade.shader), where the device seen at each pixel stands from its own eye and which way it faces:
+  // only what is seen there, so the same half as the surface, and nothing through a lens. w: 1 the left eye's half, 2 the right's.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex placeVert
+   #pragma fragment frag
+   #pragma target 3.5
+   float _DirectHalf;
+   struct p2f { float4 pos : SV_POSITION; float4 screen : TEXCOORD0; float3 place : TEXCOORD1; float3 n : TEXCOORD2; };
+   p2f placeVert (float4 v : POSITION, float3 n : NORMAL) {
+    p2f o;
+    o.pos = UnityObjectToClipPos(v);
+    o.screen = ComputeScreenPos(o.pos);
+    o.place = mul(unity_ObjectToWorld, v).xyz;
+    o.n = UnityObjectToWorldNormal(n);
+    return o;
+   }
+   struct placed { float4 place : SV_Target0; float4 n : SV_Target1; };
+   placed frag (p2f i) {
+    float2 uv = i.screen.xy / i.screen.w;
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
+    float toRight;
+    if (!pick(i.pos.xy, uv, rawL, rawR, toRight) || (_DirectHalf < 0.5) != (toRight < 0.5))
+     discard;
+    float own = _DirectHalf < 0.5 ? rawL : rawR;
+    if (abs(own - i.pos.z) > max(own * 0.002, 0.000001))
+     discard;
+    placed o;
+    o.place = float4(i.place, _DirectHalf + 1);
+    o.n = float4(normalize(i.n), 0);
+    return o;
+   }
+   ENDCG
+  }
  }
 }

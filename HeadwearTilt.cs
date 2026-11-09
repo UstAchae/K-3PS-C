@@ -26,7 +26,7 @@ internal static class HeadwearTilt
     private static Vector3 _restPosition;
     private static Quaternion _restRotation;
     private static bool _turned;
-    private static string? _helmetId;
+    private static string? _helmetId, _helmetKind;
 
     private static readonly string HelmetsPath = Path.Combine(BepInEx.Paths.ConfigPath, "justachae.thirdpersoncamera.helmets.txt");
     private static Dictionary<string, float>? _saved;   // by the helmet item's id
@@ -62,6 +62,8 @@ internal static class HeadwearTilt
         if (_helmetId == null || _saved == null)
             return;
         _saved[_helmetId] = Mathf.Round(Degrees * 10f) / 10f;
+        if (_helmetKind != null)
+            _shownByKind[_helmetKind] = _saved[_helmetId];
         var lines = new List<string>();
         foreach (KeyValuePair<string, float> e in _saved)
             lines.Add(string.Format(CultureInfo.InvariantCulture, "{0} {1:R}", e.Key, e.Value));
@@ -97,7 +99,10 @@ internal static class HeadwearTilt
                 // This helmet's own tilt.
                 Item? helmet = EquipmentIds.Worn(player)?.GetSlot(EquipmentSlot.Headwear).ContainedItem;
                 _helmetId = helmet?.Id.ToString();
+                _helmetKind = helmet?.TemplateId.ToString();
                 Degrees = Mathf.Clamp(SavedFor(_helmetId), 0f, Range);
+                if (_helmetKind != null)
+                    _shownByKind[_helmetKind] = Degrees;
             }
             _model = model;
         }
@@ -160,7 +165,11 @@ internal static class HeadwearTilt
         if (degrees < 0.01f)
             return;
         Forget(model);
-        _shown.Add(new Shown { Model = model, Head = head, RestPosition = model.localPosition, RestRotation = model.localRotation, Degrees = degrees });
+        var shown = new Shown { Model = model, Head = head, RestPosition = model.localPosition, RestRotation = model.localRotation, Degrees = degrees };
+        _shown.Add(shown);
+        // At once, not from the next LateUpdate: a frame at rest was seen as a jump. The model hangs from the head, so however the head
+        // is posed yet, it comes out the same about the head.
+        Turn(shown);
     }
 
     internal static void Forget(Transform model)
@@ -187,10 +196,15 @@ internal static class HeadwearTilt
                 _shown.RemoveAt(i);
                 continue;
             }
-            s.Model.SetLocalPositionAndRotation(s.RestPosition, s.RestRotation);
-            Quaternion camera = CameraDirection.Resolve(s.Head.rotation);
-            s.Model.RotateAround(s.Head.position + camera * Vector3.up * SkullMiddle, camera * Vector3.right, -s.Degrees);
+            Turn(s);
         }
+    }
+
+    private static void Turn(Shown s)
+    {
+        s.Model.SetLocalPositionAndRotation(s.RestPosition, s.RestRotation);
+        Quaternion camera = CameraDirection.Resolve(s.Head.rotation);
+        s.Model.RotateAround(s.Head.position + camera * Vector3.up * SkullMiddle, camera * Vector3.right, -s.Degrees);
     }
 
     // The helmet back where the game has it.

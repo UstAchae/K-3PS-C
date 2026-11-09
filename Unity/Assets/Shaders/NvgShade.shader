@@ -20,6 +20,7 @@ Shader "Justachae/NVG/Shade" {
    sampler2D _ShadeNow;          // the frame as lit
    sampler2D _ShadePlace, _ShadeFacing;   // where the eyes put the device in themselves: its place from the eye (w 1 where drawn) and its normal
    float _ShadePlaced;          // 1 where those are given (an eye drawing the device itself), 0 to work it out from the depth
+   float _ShadeLeftCup;         // which eyecup is the left eye's half's, where they are given
    float4x4 _ShadeInvProj;      // this camera's projection, inverted (not jittered)
    float4x4 _ShadeViewToWorld;  // its view turned to the world's axes (no translation)
    float4 _ShadeCup0, _ShadeCup1;     // xyz each eyecup's lens centre from this camera; w 1 where there is one
@@ -99,11 +100,18 @@ Shader "Justachae/NVG/Shade" {
     float2 uv = i.pos.xy / _ScreenParams.xy;
     float4 now = tex2D(_ShadeNow, uv);
     float3 p, n;
+    bool may0 = true, may1 = true;
     if (_ShadePlaced > 0.5) {
      float4 placed = tex2D(_ShadePlace, uv);
      if (placed.w < 0.5) return now;
      p = placed.xyz;
      n = normalize(tex2D(_ShadeFacing, uv).xyz);
+     // Each half stands from its own eye: only its own eyecup is where it is, the other's coming to the same place only as the two are
+     // brought together. One eyecup alone (a device with one) is both's.
+     if (_ShadeCup1.w > 0) {
+      may0 = (placed.w < 1.5) == (_ShadeLeftCup < 0.5);
+      may1 = !may0;
+     }
     } else {
      float depth = LinearEyeDepth(tex2D(_CameraDepthTexture, uv).r);
      float4 v = mul(_ShadeInvProj, float4(uv * 2 - 1, 1, 1));
@@ -111,8 +119,8 @@ Shader "Justachae/NVG/Shade" {
      p = mul((float3x3)_ShadeViewToWorld, ray * (depth / -ray.z));
      n = normalize(tex2D(_CameraGBufferTexture2, uv).xyz * 2 - 1);
     }
-    bool in0 = _ShadeCup0.w > 0 && within(p, n, _ShadeCup0.xyz, _ShadeAxis0.xyz);
-    bool in1 = _ShadeCup1.w > 0 && within(p, n, _ShadeCup1.xyz, _ShadeAxis1.xyz);
+    bool in0 = may0 && _ShadeCup0.w > 0 && within(p, n, _ShadeCup0.xyz, _ShadeAxis0.xyz);
+    bool in1 = may1 && _ShadeCup1.w > 0 && within(p, n, _ShadeCup1.xyz, _ShadeAxis1.xyz);
     if (!in0 && !in1) return now;
     float3 lit = (in0 ? lensLight(p, n, _ShadeCup0.xyz, _ShadeAxis0.xyz, _ShadeLight0.rgb) : 0)
                + (in1 ? lensLight(p, n, _ShadeCup1.xyz, _ShadeAxis1.xyz, _ShadeLight1.rgb) : 0);
