@@ -33,6 +33,7 @@ namespace EFTNewCamera;
 internal static partial class NightVisionEyepieces
 {
     internal static bool EyepieceGlow = true;   // the lenses' light spread over the glass and eyecups (F12)
+    internal static float EyeShift = 0.8f;      // how far each half of the device comes in, as a share of the way from its centre lens
     internal static bool LensReflections = true;    // the device's glass drawn at the eyes, with what it reflects (F12)
     internal static float MonocularSeeThrough = 0.5f;   // a monocular to the other eye: 0 not faded, 0.5 as it was, 1 faded fastest (F12)
 
@@ -258,7 +259,7 @@ internal static partial class NightVisionEyepieces
 
         // Looked for again while none is worn, or the one found has been put away (a device swapped for another stays
         // in the scene, hidden).
-        if ((_body == null || !_body.gameObject.activeInHierarchy) && Time.frameCount - _searchedFrame >= 30)
+        if ((_body == null || !_body.gameObject.activeInHierarchy || _body.root != player.gameObject.transform.root) && Time.frameCount - _searchedFrame >= 30)
         {
             Device was = _device;
             Transform? found = FindDevice(player);
@@ -314,6 +315,9 @@ internal static partial class NightVisionEyepieces
 
     internal static void Release()
     {
+        ShowDeviceAgain();
+        ClearDirect();
+        _direct = false;
         ReleaseShade();
         Active = false;
         ReleaseMount();
@@ -452,6 +456,8 @@ internal static partial class NightVisionEyepieces
                 _irLightShader = shader;
             else if (shader.name == "Justachae/Fisheye")
                 _fisheyeShader = shader;
+            else if (shader.name == "Justachae/NVG/Direct")
+                _directShader = shader;
             else if (shader.name == "Justachae/NVG/Objective")
                 _objectiveShader = shader;
         }

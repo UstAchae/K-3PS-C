@@ -190,6 +190,9 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<float> tritium = SettingsLayout.Bind(Config, "头戴式成像装备", "氚光亮度", 0.6f,
             new ConfigDescription("透过夜视仪看氚光机瞄（以及游戏里做了氚光的其他瞄具）：每个氚光点被物镜散成一个亮度均匀、边缘清楚的圆盘，离眼睛越近圆盘越大、越暗。这一项调这些圆盘有多亮，0 是不画。",
                 new AcceptableValueRange<float>(0f, 4f), new ConfigurationManagerAttributes { Order = 0 }));
+        ConfigEntry<float> eyeShift = SettingsLayout.Bind(Config, "头戴式成像装备", "双眼平移比例", 0.8f,
+            new ConfigDescription("两个目镜往中间合多少：1 是各自正好对准画面中间，0 是不合。画面里的景物始终完整，这里只改变目镜的样子。",
+                new AcceptableValueRange<float>(0f, 1.2f), new ConfigurationManagerAttributes { Order = 1 }));
         void Refresh()
         {
             NightVisionEyepieces.Picture = picture.Value;
@@ -202,6 +205,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             NightVisionEyepieces.EyepieceGlow = glow.Value;
             NightVisionEyepieces.LensReflections = reflections.Value;
             NightVisionEyepieces.MonocularSeeThrough = monocularSeeThrough.Value;
+            NightVisionEyepieces.EyeShift = eyeShift.Value;
             NightVisionEyepieces.RaiseMount = raiseMount.Value;
             NightVisionEyepieces.LowerMount = lowerMount.Value;
             NightVisionEyepieces.TiltUp = tiltUp.Value;
@@ -210,6 +214,8 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             NightVisionEyepieces.SlideBack = slideBack.Value;
         }
 
+        eyeShift.SettingChanged += (_, _) => Refresh();
+        NvgDump.Install(Config);
         picture.SettingChanged += (_, _) => Refresh();
         nearBlur.SettingChanged += (_, _) => Refresh();
         tritium.SettingChanged += (_, _) => Refresh();
@@ -550,6 +556,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     };
     private static readonly Camera.CameraCallback PostRender = camera =>
     {
+        Guarded(NightVisionEyepieces.OnCameraPostRender, camera, "post-render (eyepieces)");
         Guarded(NightVisionEyepieces.OnCameraPostRenderIr, camera, "post-render (IR)");
         Guarded(OpticElevation.Restore, camera, "post-render (optic)");
         Guarded(NightVisionEyepieces.OnOpticPostRenderIr, camera, "post-render (optic IR)");

@@ -35,8 +35,26 @@ internal static partial class NightVisionEyepieces
 
     private static Shader? _shadeShader;
     private static Material? _shadeMaterial;
+    private static readonly RenderTexture?[] _shadePlaces = new RenderTexture?[2], _shadeFacings = new RenderTexture?[2];
     private static readonly CommandBuffer?[] _shadeApply = new CommandBuffer?[3];   // each eye, and the main camera
     private static Camera? _shadeMainCamera;
+
+    // A texture for where the device is, made (again) to the frame's size.
+    private static RenderTexture ShadeTexture(RenderTexture?[] kept, int side, int width, int height, int depth, RenderTextureFormat format)
+    {
+        RenderTexture? texture = kept[side];
+        if (texture != null && texture.width == width && texture.height == height)
+            return texture;
+        if (texture != null)
+        {
+            texture.Release();
+            Object.Destroy(texture);
+        }
+        texture = new RenderTexture(width, height, depth, format) { name = "Justachae NVG eyecup places", filterMode = FilterMode.Point };
+        texture.Create();
+        kept[side] = texture;
+        return texture;
+    }
 
     // How much of its light an eyecup's inside keeps now: all flipped up, next to none down against the face.
     private static float ShadeKeep => Mathf.Lerp(1f, SealedKeep, Mathf.SmoothStep(0f, 1f, _flip));
@@ -53,7 +71,7 @@ internal static partial class NightVisionEyepieces
             return;
         _shadeMaterial ??= new Material(_shadeShader) { name = "Justachae NVG eyecups sealed", hideFlags = HideFlags.DontSave };
         // An eye drawing the device itself has its places (NightVisionPrecise); the main camera works them out.
-        const bool placed = false;
+        bool placed = _direct && _precise;
         if (keep >= 0.999f)
         {
             return;
@@ -119,6 +137,18 @@ internal static partial class NightVisionEyepieces
 
     private static void ReleaseShade()
     {
+        for (int side = 0; side < 2; side++)
+        {
+            foreach (RenderTexture?[] kept in new[] { _shadePlaces, _shadeFacings })
+            {
+                if (kept[side] != null)
+                {
+                    kept[side]!.Release();
+                    Object.Destroy(kept[side]);
+                    kept[side] = null;
+                }
+            }
+        }
         if (_shadeMainCamera != null)
             ShadeMain(_shadeMainCamera, false);
         if (_depthAddedTo != null)

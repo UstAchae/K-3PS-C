@@ -10,6 +10,9 @@ float4 _TubeField;                // x cosine of the field's half angle, y of wh
 float4 _Power;                    // z frame
 float4 _TubePower, _TubeMottle;   // each tube's output (0 off, 1 on), and how mottled while it settles
 float _Overscan;                  // how far past the split each eye's view reaches, as a share of the frame
+float _MergedEyes;                // 1: the device in the main camera (NvgDirect): the strip by what each eye has there
+sampler2D _DirectChoice;          // b, a: each eye's lens hidden by the other eyepiece before it (NvgDirect.shader)
+float4 _MergedRange;              // across the frame, x from where the right eye's half of the device reaches, y to where the left's does
 float _Split;                     // where across the frame the left eye's view gives way to the right's (0.5 with the camera between the eyes)
 float4 _EyeSpan;                  // x the left eye's view's share of the frame's width, y the right's (1: the whole frame)
 float4 _Monocular;                // x 1 for a monocular, whose one eye (y: 0 left, 1 right) sees the whole frame; the other half fades toward its edge, z as this power (0 not at all)
@@ -91,8 +94,12 @@ void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover, out fl
   dark *= shown;
   return;
  }
- if (toRight <= 0) { eyeSide(uv, false, eye, light, cover, dark); return; }
- if (toRight >= 1) { eyeSide(uv, true, eye, light, cover, dark); return; }
+ // With the device in the main camera both eyes are asked further out than the strip: as far as each eye's half of the
+ // device reaches (NvgDirect.shader goes by the same range).
+ if (_MergedEyes < 0.5 || uv.x < _MergedRange.x || uv.x >= _MergedRange.y) {
+  if (toRight <= 0) { eyeSide(uv, false, eye, light, cover, dark); return; }
+  if (toRight >= 1) { eyeSide(uv, true, eye, light, cover, dark); return; }
+ }
  float4 leftEye, rightEye; float4 leftLight, rightLight; float leftCover, rightCover, leftDark, rightDark;
  eyeSide(uv, false, leftEye, leftLight, leftCover, leftDark);
  eyeSide(uv, true, rightEye, rightLight, rightCover, rightDark);
@@ -100,6 +107,22 @@ void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover, out fl
  light = lerp(leftLight, rightLight, toRight);
  cover = lerp(leftCover, rightCover, toRight);
  dark = lerp(leftDark, rightDark, toRight);
+ if (_MergedEyes > 0.5) {
+  float4 choice = tex2D(_DirectChoice, uv);
+  leftLight *= 1 - choice.b;
+  leftCover *= 1 - choice.b;
+  rightLight *= 1 - choice.a;
+  rightCover *= 1 - choice.a;
+  // The lenses' shape is neither eased, which showed their edges crossing with the scene through them, nor cut at the split,
+  // which is not quite where the two outlines meet and left a step. It is both lenses together: they join where they
+  // really cross. Only the picture is eased, where both eyes have one.
+  float shape = max(leftLight.w, rightLight.w);
+  float a = (1 - toRight + 1e-3) * leftLight.w, b = (toRight + 1e-3) * rightLight.w;
+  float3 picture = (leftLight.rgb / max(leftLight.w, 1e-4) * a + rightLight.rgb / max(rightLight.w, 1e-4) * b) / max(a + b, 1e-4);
+  light = float4(picture * shape, shape);
+  cover = max(leftCover, rightCover);
+  dark = min(leftDark, rightDark);
+ }
 }
 
 void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover) {

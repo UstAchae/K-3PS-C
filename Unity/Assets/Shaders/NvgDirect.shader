@@ -1,0 +1,203 @@
+// The device, drawn apart for each eye into G-buffers of its own, put into the main camera's: the left's on the left, the
+// right's on the right, eased from one to the other across the strip in the middle, as the composite does the eyes' views.
+// What is seen through a lens is left out (as NvgEyeOptics does), so the scene stays there for the lenses' picture.
+// The device is drawn with a near plane of its own: its depth is turned into the main camera's here, what is nearer than
+// that camera's near plane kept at it, so nothing of it is cut off and the main camera's own plane is left as it is.
+Shader "Justachae/NVG/Direct" {
+ CGINCLUDE
+ #include "UnityCG.cginc"
+ sampler2D _DirectL0, _DirectL1, _DirectL2, _DirectL3, _DirectR0, _DirectR1, _DirectR2, _DirectR3, _DirectLens0, _DirectLens1;
+ sampler2D _DirectChoice;   // r, g: a hole for each eye's lens in the device; b, a: that eye's lens hidden by the other eyepiece before it
+ float _DirectFront;        // which eyepiece stands before the other: -1 the left, 1 the right, 0 neither
+ sampler2D _DirectMaskL, _DirectMaskR;   // where each copy's surface is its own half of the device
+ UNITY_DECLARE_DEPTH_TEXTURE(_DirectLD);
+ UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
+ float _DirectSplit, _DirectStrip, _DirectBehind;
+ float4x4 _EyeInvVP0, _EyeInvVP1;
+ float4 _TubeField, _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;
+ float4 _DirectRange;    // across the frame, x from where the right eye's half of the device reaches, y to where the left's does
+ float4 _DirectInset;    // how far past the lens's edge the device goes, as a share of the frame
+ float4 _DirectPlanes;   // x its near plane's 1/depth, y its far plane's, z the main camera's near plane's, w its far plane's
+
+ // 1/depth from the device's own depth.
+ float inverseDepth (float raw) {
+  #if !defined(UNITY_REVERSED_Z)
+  raw = 1 - raw;
+  #endif
+  return raw * (_DirectPlanes.x - _DirectPlanes.y) + _DirectPlanes.y;
+ }
+
+ // The main camera's depth at that.
+ float mainDepth (float inverse) {
+  float d = saturate((inverse - _DirectPlanes.w) / (_DirectPlanes.z - _DirectPlanes.w));
+  #if !defined(UNITY_REVERSED_Z)
+  d = 1 - d;
+  #endif
+  return d;
+ }
+
+ struct v2f { float4 pos : SV_POSITION; float4 screen : TEXCOORD0; };
+
+ v2f vert (float4 v : POSITION) {
+  v2f o;
+  o.pos = float4(v.xy, UNITY_NEAR_CLIP_VALUE, 1);
+  o.screen = ComputeScreenPos(o.pos);
+  return o;
+ }
+
+ // Well within a lens: all round this pixel too. The device goes on a few pixels past the lens's edge, under the
+ // composite's glass: the main camera's frame is jittered and upscaled, the lens's edge is not, and a gap between the two
+ // showed the bare scene, flickering.
+ // By what the composite shows there: a lens's map as far as its tube's field reaches (NvgEyes.cginc), not the map alone,
+ // which goes on past it over the housing.
+ bool open (sampler2D map, float2 uv, float4 fields) {
+  return dot(tex2D(map, uv) * fields, 1) > 0.01;
+ }
+
+ bool within (sampler2D map, float2 uv, float4x4 inverse) {
+  float4 far = mul(inverse, float4(uv * 2 - 1, 1, 1));
+  float3 ray = normalize(far.xyz / far.w);
+  float4 fields = float4(smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis0.xyz)),
+      smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis1.xyz)),
+      smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis2.xyz)),
+      smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis3.xyz)));
+  if (!open(map, uv, fields)) return false;
+  float2 d = _DirectInset.xy;
+  return open(map, uv + float2(d.x, 0), fields) && open(map, uv - float2(d.x, 0), fields)
+      && open(map, uv + float2(0, d.y), fields) && open(map, uv - float2(0, d.y), fields)
+      && open(map, uv + d, fields) && open(map, uv - d, fields)
+      && open(map, uv + float2(d.x, -d.y), fields) && open(map, uv + float2(-d.x, d.y), fields);
+ }
+
+ // Drawn there.
+ bool shown (float raw) {
+  #if defined(UNITY_REVERSED_Z)
+  return raw > 0;
+  #else
+  return raw < 1;
+  #endif
+ }
+
+ // How much of the device is here, and how far over to the right eye's it is. Across the strip one eye's half fades as the
+ // other comes in, all of the device as the lenses' picture does: where both have it, it is all there and eased from one to
+ // the other; where one has it, it goes with that eye's share. With one eyepiece before the other that one is simply seen.
+ // Whatever is through a lens is left out (_DirectChoice).
+ float coverage (float2 uv, float rawL, float rawR, out float toRight) {
+  float strip = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
+  float front = saturate(abs(_DirectFront));
+  toRight = lerp(strip, _DirectFront > 0 ? 1 : 0, front);
+  float4 choice = tex2D(_DirectChoice, uv);
+  if (choice.r > 0.5 || choice.g > 0.5)
+   return 0;
+  bool left = shown(rawL) && tex2D(_DirectMaskL, uv).r > 0.5, right = shown(rawR) && tex2D(_DirectMaskR, uv).r > 0.5;
+  if (left && right) return 1;
+  if (left) { toRight = 0; return lerp(1 - strip, 1, front); }
+  if (right) { toRight = 1; return lerp(strip, 1, front); }
+  return 0;
+ }
+
+ // A half fading away is kept whole at some pixels and left out at the others, more of them left out the further it fades. Mixed
+ // into the G-buffer it had no depth of its own: the lights took it for what lay behind, and the strip ended in a hard edge.
+ bool kept (float2 pixel, float c) {
+  if (c >= 1) return true;
+  if (c <= 0) return false;
+  static const float grid[16] = { 0.5, 8.5, 2.5, 10.5, 12.5, 4.5, 14.5, 6.5, 3.5, 11.5, 1.5, 9.5, 15.5, 7.5, 13.5, 5.5 };
+  int x = (int)fmod(pixel.x, 4), y = (int)fmod(pixel.y, 4);
+  return c * 16 > grid[y * 4 + x];
+ }
+ ENDCG
+ SubShader {
+  Pass {
+   Cull Off ZWrite On ZTest LEqual
+   // Lit as anything the main camera draws, as the device is when it is up. All of the stencil: the other bits are what lay behind it (the gun, the hands), and the light passes go by them.
+   Stencil { Ref [_StencilNonBackground] WriteMask 255 Comp Always Pass Replace }
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   struct output {
+    float4 g0 : SV_Target0;
+    float4 g1 : SV_Target1;
+    float4 g2 : SV_Target2;
+    float4 g3 : SV_Target3;
+    float depth : SV_Depth;
+   };
+
+   output frag (v2f i) {
+    float2 uv = i.screen.xy / i.screen.w;
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
+    float toRight;
+    if (!kept(i.pos.xy, coverage(uv, rawL, rawR, toRight)))
+     discard;
+    output o;
+    o.g0 = lerp(tex2D(_DirectL0, uv), tex2D(_DirectR0, uv), toRight);
+    o.g1 = lerp(tex2D(_DirectL1, uv), tex2D(_DirectR1, uv), toRight);
+    o.g2 = lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
+    o.g3 = lerp(tex2D(_DirectL3, uv), tex2D(_DirectR3, uv), toRight);
+    o.depth = mainDepth(lerp(inverseDepth(rawL), inverseDepth(rawR), toRight));
+    return o;
+   }
+   ENDCG
+  }
+  // 1: over a copy's own depth, where its surface lies on its own side of the device's middle: the two eyepieces' copies are
+  // parted by the model itself, whatever the view. A line down the frame cannot: this close, the middle is not one place on it.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
+   CGPROGRAM
+   #pragma vertex planeVert
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 _DirectPlane;   // xyz across the device, toward the right eyepiece; w where its middle is along that
+   float _DirectKeep;     // -1 this copy keeps what is left of the middle, 1 what is right of it
+   struct p2f { float4 pos : SV_POSITION; float side : TEXCOORD0; };
+   p2f planeVert (float4 v : POSITION) {
+    p2f o;
+    o.pos = UnityObjectToClipPos(v);
+    o.side = dot(mul(unity_ObjectToWorld, v).xyz, _DirectPlane.xyz) - _DirectPlane.w;
+    return o;
+   }
+   float4 frag (p2f i) : SV_Target { return i.side * _DirectKeep >= 0 ? 1 : 0; }
+   ENDCG
+  }
+  // 2: the device's surface again, once the game's decals are done: they are thrown on whatever the depth holds, and what is
+  // put in after the G-buffer is not marked as what they leave alone. The dirt of the ground lay on it, other with each move.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   struct surface { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; };
+   surface frag (v2f i) {
+    float2 uv = i.screen.xy / i.screen.w;
+    float toRight;
+    if (!kept(i.pos.xy, coverage(uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight)))
+     discard;
+    surface o;
+    o.g0 = lerp(tex2D(_DirectL0, uv), tex2D(_DirectR0, uv), toRight);
+    o.g1 = lerp(tex2D(_DirectL1, uv), tex2D(_DirectR1, uv), toRight);
+    o.g2 = lerp(tex2D(_DirectL2, uv), tex2D(_DirectR2, uv), toRight);
+    return o;
+   }
+   ENDCG
+  }
+  // 3: for this frame, which lens shows where. With the head turned one eyepiece stands before the other, and hides its lens.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
+    bool left = shown(rawL) && tex2D(_DirectMaskL, uv).r > 0.5, right = shown(rawR) && tex2D(_DirectMaskR, uv).r > 0.5;
+    bool hideLeft = _DirectFront > 0.5 && right, hideRight = _DirectFront < -0.5 && left;
+    bool holeLeft = !hideLeft && uv.x < _DirectRange.y && within(_DirectLens0, uv, _EyeInvVP0);
+    bool holeRight = !hideRight && uv.x > _DirectRange.x && within(_DirectLens1, uv, _EyeInvVP1);
+    return float4(holeLeft ? 1 : 0, holeRight ? 1 : 0, hideLeft ? 1 : 0, hideRight ? 1 : 0);
+   }
+   ENDCG
+  }
+ }
+}
