@@ -13,7 +13,7 @@ namespace EFTNewCamera;
 internal static class NvgDump
 {
     private static readonly string[] Starting = { "mesh", "game", "renderer" };
-    private static readonly string[] Down = { "mesh", "no_tracesix", "no_area", "no_postprocess", "no_hbao", "no_sun_shadow", "near_005", "mesh_again", "game" };
+    private static readonly string[] Down = { "mesh", "no_tracesix", "no_area", "no_postprocess", "no_hbao", "no_sun_shadow", "near_005", "zero_motion", "mesh_again", "game" };
     private const int HeldFrames = 40;
     private const int SmallWidth = 480, SmallHeight = 300;
     private static readonly List<RenderTexture> _held = new List<RenderTexture>();
@@ -34,6 +34,7 @@ internal static class NvgDump
     private static LightShadows _sunShadows;
 
     internal static bool GameDraws;
+    internal static bool ZeroMotion;
     internal static bool UseRenderer;
     private static bool Shooting => _running != null && _frame == 1;
 
@@ -115,6 +116,17 @@ internal static class NvgDump
                 _nearWas = camera.nearClipPlane;
                 camera.nearClipPlane = 0.005f;
                 break;
+            case "zero_motion":
+            {
+                ZeroMotion = true;
+                CommandBuffer[] all = camera.GetCommandBuffers(CameraEvent.BeforeImageEffectsOpaque);
+                _stripped.Add((CameraEvent.BeforeImageEffectsOpaque, all));
+                camera.RemoveCommandBuffers(CameraEvent.BeforeImageEffectsOpaque);
+                camera.AddCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, NightVisionEyepieces.MotionBuffer);
+                foreach (CommandBuffer b in all)
+                    camera.AddCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, b);
+                break;
+            }
             case "no_hbao":
                 Disable(camera.GetComponent("HBAO") as Behaviour);
                 break;
@@ -300,6 +312,7 @@ internal static class NvgDump
         }
         GameDraws = false;
         UseRenderer = false;
+        ZeroMotion = false;
     }
 
     private static void Next(Camera camera)

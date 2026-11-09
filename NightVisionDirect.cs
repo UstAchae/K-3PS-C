@@ -220,6 +220,8 @@ internal static partial class NightVisionEyepieces
         return true;
     }
 
+    internal static readonly CommandBuffer MotionBuffer = new CommandBuffer { name = "Justachae NVG device's motion" };
+
     private static void ClearDirect()
     {
         _directBuffer?.Clear();
@@ -428,6 +430,14 @@ internal static partial class NightVisionEyepieces
         buffer.SetRenderTarget(_mainSurface, BuiltinRenderTextureType.CameraTarget);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 2);
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        // Temporary: only while the capture tries it, ahead of the effects that read the motion.
+        MotionBuffer.Clear();
+        if (NvgDump.ZeroMotion)
+        {
+            MotionBuffer.SetRenderTarget(BuiltinRenderTextureType.MotionVectors);
+            MotionBuffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 5);
+            MotionBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        }
         // Once all is lit: the fade. The textures are let go only after this.
         buffer = _directEnd;
         buffer.SetGlobalVector(DirectTexel, new Vector4(1f / Mathf.Max(width, 1), 1f / Mathf.Max(height, 1), 0f, 0f));

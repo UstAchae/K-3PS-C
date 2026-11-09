@@ -222,5 +222,21 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
+  // 5: no motion on the screen where the device is: it goes with the head, and what lay behind it moved otherwise.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    float toRight;
+    if (coverage(uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight) <= 0)
+     discard;
+    return 0;
+   }
+   ENDCG
+  }
  }
 }
