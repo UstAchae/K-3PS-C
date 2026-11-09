@@ -93,6 +93,57 @@ internal static partial class NightVisionEyepieces
                 FromCamera = FromCamera(r.transform, Vector3.zero),
             });
         }
+        HideTwins();
+    }
+
+    // Another copy of the same model on the player, outside the device's own slot: left to itself it was seen beside the device
+    // drawn here, four eyepieces. Looked for twice a second, not every frame: the player has many renderers.
+    private const int TwinSearchFrames = 30;
+    private static readonly List<MeshRenderer> _bodyRenderers = new List<MeshRenderer>();
+    private static readonly List<Renderer> _twins = new List<Renderer>();
+    private static readonly HashSet<string> _deviceNames = new HashSet<string>();
+    private static int _twinFrame = -1000, _twinsNoted = -1;
+
+    private static void HideTwins()
+    {
+        if (Time.frameCount - _twinFrame >= TwinSearchFrames)
+        {
+            _twinFrame = Time.frameCount;
+            _twins.Clear();
+            _deviceNames.Clear();
+            foreach (Renderer r in _slotRenderers)
+                _deviceNames.Add(r.name);
+            Transform slot = DeviceSlot();
+            slot.root.GetComponentsInChildren(false, _bodyRenderers);
+            foreach (MeshRenderer r in _bodyRenderers)
+            {
+                if (_deviceNames.Contains(r.name) && !r.transform.IsChildOf(slot))
+                    _twins.Add(r);
+            }
+            if (_twins.Count != _twinsNoted)
+            {
+                _twinsNoted = _twins.Count;
+                Log($"NVG twins: {_twins.Count} other renderers of the device's model on the player; the device's slot is {PathOf(slot)}");
+                foreach (Renderer r in _twins)
+                    Log($"NVG twin: {PathOf(r.transform)}, enabled {r.enabled}, shadows {r.shadowCastingMode}");
+            }
+        }
+        foreach (Renderer r in _twins)
+        {
+            if (r == null)
+                continue;
+            _hidden.Add((r, r.shadowCastingMode));
+            r.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
+        }
+    }
+
+    private static string PathOf(Transform t)
+    {
+        var text = new System.Text.StringBuilder(t.name);
+        int steps = 0;
+        for (Transform? at = t.parent; at != null && steps < 8; at = at.parent, steps++)
+            text.Insert(0, at.name + "/");
+        return text.ToString();
     }
 
     private static void ShowDeviceAgain()
