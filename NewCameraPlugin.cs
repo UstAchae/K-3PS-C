@@ -191,7 +191,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             new ConfigDescription("目镜里用游戏原版夜视滤镜成像时（“夜视画面来源”是原版，或没装 Borkel's Realistic NVGs），画面的亮度乘以这个数，只作用于目镜里。原版夜视打开时会把整个场景的环境光换成更亮的一套，本模组让目镜以外保持肉眼看到的样子，目镜里也就少了这份提亮；这一项用放大亮度来补，但它只能把有光的地方放大，原本全黑的地方还是黑的。亮处会不会过曝由下一项控制。1 是不放大。热成像和 Borkel's Realistic NVGs 的画面不受影响，Borkel's Realistic NVGs 用它自己的 F12 设置。",
                 new AcceptableValueRange<float>(1f, 8f), new ConfigurationManagerAttributes { Order = 2 }));
         ConfigEntry<float> gameLensCompress = SettingsLayout.Bind(Config, "头戴式成像装备", "原版夜视目镜亮处压缩", 0f,
-            new ConfigDescription("和上一项一起用：越亮的地方放大得越少，像真实夜视管那样，亮处慢慢逼近上限而不是直接过曝；暗处的放大不受影响。0 是不压缩（亮度一律按增益放大），1 是完全按夜视管的饱和曲线：最亮处逼近原版滤镜能显示的白色，不会一片过曝。只作用于目镜里原版夜视滤镜的画面，不影响 Borkel's Realistic NVGs。",
+            new ConfigDescription("和上一项一起用：越亮的地方放大得越少，像真实夜视管那样，亮处慢慢逼近上限而不是直接过曝；暗处的放大不受影响。0 是不压缩（亮度一律按增益放大），1 是完全按夜视管的饱和曲线。只作用于目镜里原版夜视滤镜的画面，不影响 Borkel's Realistic NVGs。",
                 new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 2 }));
         gameLensGain.SettingChanged += (_, _) => NightVisionEyepieces.GameLensGain = gameLensGain.Value;
         gameLensCompress.SettingChanged += (_, _) => NightVisionEyepieces.GameLensCompress = gameLensCompress.Value;

@@ -3,15 +3,12 @@
 // wide, seen from the lens, as the aperture over its distance from it; here the blur's radius is a limit's share,
 // half of it at a set distance from the lens, more the nearer and less the further, so that it grows along the gun.
 // Made of smooth Gaussian blurs at a few sizes, at a quarter of the frame's size and smaller (nothing is gathered pixel
-// by pixel, so nothing shows as noise or blocks), in two layers, as a lens makes them: what is near (blurred by more
-// than a quarter-size pixel and a half) is cut out with how much of each pixel it covers and blurred as wide as it is
-// spread (a disc of radius r as a Gaussian of spread r / 2), and laid over the rest (premultiplied: over), which keeps
-// its own small blur. What lies behind a near thing's soft edge is seen sharp, only less of it; what its outline hid
-// is filled in from the scene about it (the layers of what is not near), not the frame blurred whole, so that the
-// scene beside it stays as it is however wide the blur. Step 3 of the eyepieces' picture (the steps are at the head of NightVisionComposite.cs), on the
+// by pixel, so nothing shows as noise or blocks), in two layers: what is near (blurred by more than a quarter-size
+// pixel and a half) is cut out with how much of each pixel it covers and blurred as wide as it is spread, and laid
+// over the rest, which is blurred by its own small amount: a near thing's blur covers what lies behind it softly, and
+// leaves it sharp. Step 3 of the eyepieces' picture (the steps are at the head of NightVisionComposite.cs), on the
 // light that reaches the tube (step 2: NvgIrLight.shader pass 1).
-// Pass 0: the frame at a quarter of its size, premultiplied by what of it is neither near nor a magnified sight's lens
-//         (alpha): the scene behind what is near.
+// Pass 0: the frame at a quarter of its size, premultiplied by what of it is out of a magnified sight's lens (alpha).
 // Pass 1: a Gaussian across (_Step: one texel across), its spread a texel and a half. Pass 2: the same, up.
 // Pass 3: the frame, with what is near laid over it.
 // Pass 4: what is near, at a quarter of the size, premultiplied by how much of each of the sixteen pixels under it it
@@ -50,8 +47,9 @@ Shader "Justachae/NVG/Objective" {
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
   }
-  // A layer of the scene behind (pass 0's, premultiplied) as its light; otherwise where none of it is about.
-  float3 Behind(float4 c, float3 otherwise) {
+  // A layer of everything blurred (pass 0's, premultiplied by what of it is out of the lens) as the light out of the
+  // lens; otherwise where none of it is.
+  float3 OutOfLens(float4 c, float3 otherwise) {
    return c.a > 1e-3 ? c.rgb / c.a : otherwise;
   }
 
@@ -103,8 +101,8 @@ Shader "Justachae/NVG/Objective" {
     for (int y = 0; y < 2; y++)
      for (int x = 0; x < 2; x++) {
       float2 uv = i.uv + (float2(x, y) * 2 - 1) * texel;
-      float behind = InLens(uv) ? 0 : 1 - Near(Blur(uv));
-      sum += float4(tex2D(_MainTex, uv).rgb * behind, behind);
+      float outside = InLens(uv) ? 0 : 1;
+      sum += float4(tex2D(_MainTex, uv).rgb * outside, outside);
      }
     return sum / 4;
    }
@@ -134,21 +132,27 @@ Shader "Justachae/NVG/Objective" {
     float own = Blur(i.uv);
     // What is near around here, as wide as it is spread there (its radius averaged over what of it is about).
     float2 nearBlur = _NearBlur.Sample(sampler_linear_clamp, i.uv).rg;
-    float radius = max(nearBlur.g > 1e-4 ? nearBlur.r / nearBlur.g : 0, 3);
-    float4 near = Level(radius, _Near0.Sample(sampler_linear_clamp, i.uv), _Near1.Sample(sampler_linear_clamp, i.uv),
-     _Near2.Sample(sampler_linear_clamp, i.uv), _Near3.Sample(sampler_linear_clamp, i.uv), _Near4.Sample(sampler_linear_clamp, i.uv));
-    // What lies behind: the scene as the frame has it, what is not near blurred by its own small amount; where this
-    // pixel is itself near, what it hides, from the scene about it as far as the near thing is spread.
+    float radius = nearBlur.g > 1e-4 ? nearBlur.r / nearBlur.g : 0;
+    float4 n0 = _Near0.Sample(sampler_linear_clamp, i.uv), n1 = _Near1.Sample(sampler_linear_clamp, i.uv), n2 = _Near2.Sample(sampler_linear_clamp, i.uv), n3 = _Near3.Sample(sampler_linear_clamp, i.uv), n4 = _Near4.Sample(sampler_linear_clamp, i.uv);
+    float4 near = Level(max(radius, 3), n0, n1, n2, n3, n4);
+    // What lies behind: what is not near blurred by its own small amount; under what is near, everything blurred as
+    // that is. The one eases into the other as smoothly as the near's blurred cover does, not pixel by pixel: a sharp
+    // step from blurred to sharp along a near thing's outline would show through its soft edge as a line.
     float4 all0 = _All0.Sample(sampler_linear_clamp, i.uv);
-    float3 a0 = Behind(all0, frame.rgb);
+    float3 a0 = OutOfLens(all0, frame.rgb);
     float3 still = lerp(frame.rgb, a0, saturate(min(own, 3) / 3));
-    float3 hidden = Behind(Level(radius, all0, _All1.Sample(sampler_linear_clamp, i.uv), _All2.Sample(sampler_linear_clamp, i.uv),
-     _All3.Sample(sampler_linear_clamp, i.uv), _All4.Sample(sampler_linear_clamp, i.uv)), a0);
+    // Beside what is near, the scene goes a little soft too, so that the near's soft edge does not stand out against it.
+    float4 widest = Level(max(radius, 3) * 2, n0, n1, n2, n3, n4);
+    still = lerp(still, a0, 0.5 * saturate(widest.a * 3));
+    float3 under = OutOfLens(Level(max(radius, 3), all0, _All1.Sample(sampler_linear_clamp, i.uv), _All2.Sample(sampler_linear_clamp, i.uv), _All3.Sample(sampler_linear_clamp, i.uv), _All4.Sample(sampler_linear_clamp, i.uv)), a0);
     // A magnified sight's lens: its own picture, sharp.
-    float3 behind = InLens(i.uv) ? frame.rgb : lerp(still, hidden, Near(own));
-    // The near thing's light, spread, over what lies behind as much as it covers.
-    float cover = saturate(near.a);
-    float3 light = near.a > 1e-4 ? near.rgb / near.a : behind;
+    float3 behind = InLens(i.uv) ? frame.rgb : lerp(still, under, saturate(near.a));
+    // An out-of-focus edge fades over the whole of its disc: how much the near covers is taken from a blur twice as
+    // wide as its light, so that its outline goes soft without its inside getting any blurrier.
+    float4 wide = Level(max(radius, 3) * 2, n0, n1, n2, n3, n4);
+    float3 wideLight = wide.a > 1e-4 ? wide.rgb / wide.a : behind;
+    float3 light = lerp(wideLight, near.a > 1e-4 ? near.rgb / near.a : wideLight, saturate(near.a * 2));
+    float cover = saturate(wide.a);
     return float4(lerp(behind, light, cover), frame.a);
    }
    ENDCG
@@ -192,10 +196,10 @@ Shader "Justachae/NVG/Objective" {
    #pragma target 3.0
    float4 frag (v2f_img i) : SV_Target {
     float2 nearBlur = _NearBlur.Sample(sampler_linear_clamp, i.uv).rg;
-    float radius = max(nearBlur.g > 1e-4 ? nearBlur.r / nearBlur.g : 0, 3);
-    float4 near = Level(radius, _Near0.Sample(sampler_linear_clamp, i.uv), _Near1.Sample(sampler_linear_clamp, i.uv),
+    float radius = nearBlur.g > 1e-4 ? nearBlur.r / nearBlur.g : 0;
+    float4 wide = Level(max(radius, 3) * 2, _Near0.Sample(sampler_linear_clamp, i.uv), _Near1.Sample(sampler_linear_clamp, i.uv),
      _Near2.Sample(sampler_linear_clamp, i.uv), _Near3.Sample(sampler_linear_clamp, i.uv), _Near4.Sample(sampler_linear_clamp, i.uv));
-    return max(saturate(near.a), saturate(Blur(i.uv) / 3));
+    return max(saturate(wide.a), saturate(Blur(i.uv) / 3));
    }
    ENDCG
   }
