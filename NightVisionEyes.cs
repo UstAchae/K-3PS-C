@@ -138,7 +138,6 @@ internal static partial class NightVisionEyepieces
         float fade = seeThrough <= 0.5f ? seeThrough * 2f : 1f + (seeThrough - 0.5f) * 6f;
         binocular.SetVector(MonocularId, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
         binocular.SetFloat(LensClearId, LensReflections ? 0f : 1f);
-        binocular.SetFloat(MergedEyesId, _direct && monocular < 0 ? 1f : 0f);
         binocular.SetVector(EyeSpanId, new Vector4(1f, 1f, 0f, 0f));
         binocular.SetFloat(OverscanId, Overscan);
         _eyesFrame = Time.frameCount;
@@ -190,7 +189,7 @@ internal static partial class NightVisionEyepieces
             binocular.SetVector(EyePosIds[side], new Vector4(eye.x, eye.y, eye.z, eyeBack));
         }
         if (_direct)
-            DrawDirect(camera, leftShift, rightShift, split, 0.5f * (leftPlace + rightPlace), (rightPlace - leftPlace).normalized, Vector3.Dot(leftPlace - rightPlace, view.forward), monocular >= 0);
+            DrawDirect(camera, leftShift, rightShift, split);
     }
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.

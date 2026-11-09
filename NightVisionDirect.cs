@@ -12,7 +12,6 @@ internal static partial class NightVisionEyepieces
 {
     private const float DirectFar = 100f;
     private const float DirectDepthRatio = 2e5f;  // the device's own depth kept to this ratio: below it the lights flickered on it
-    private const float FrontBy = 0.012f;         // m: how much nearer an eyepiece has to stand to be all before the other
     private const float DirectInsetPixels = 6f;   // of the screen: past a pixel of the upscaler's render and its jitter
     private static float DirectNear => Mathf.Max(EyeNear, DirectFar / DirectDepthRatio);
 
@@ -36,15 +35,10 @@ internal static partial class NightVisionEyepieces
 
     private static readonly int[] DirectLeft = { Shader.PropertyToID("_DirectL0"), Shader.PropertyToID("_DirectL1"), Shader.PropertyToID("_DirectL2"), Shader.PropertyToID("_DirectL3") };
     private static readonly int[] DirectRight = { Shader.PropertyToID("_DirectR0"), Shader.PropertyToID("_DirectR1"), Shader.PropertyToID("_DirectR2"), Shader.PropertyToID("_DirectR3") };
-    private static readonly int[] DirectMasks = { Shader.PropertyToID("_DirectMaskL"), Shader.PropertyToID("_DirectMaskR") };
     private static readonly int[] DirectLens = { Shader.PropertyToID("_DirectLens0"), Shader.PropertyToID("_DirectLens1") };
     private static readonly int DirectLeftDepth = Shader.PropertyToID("_DirectLD"), DirectRightDepth = Shader.PropertyToID("_DirectRD");
     private static readonly int DirectPlanes = Shader.PropertyToID("_DirectPlanes"), DirectInset = Shader.PropertyToID("_DirectInset");
     private static readonly int DirectSplit = Shader.PropertyToID("_DirectSplit"), DirectStrip = Shader.PropertyToID("_DirectStrip");
-    private static readonly int DirectRange = Shader.PropertyToID("_DirectRange"), MergedRangeId = Shader.PropertyToID("_MergedRange");
-    private static readonly int DirectPlane = Shader.PropertyToID("_DirectPlane"), DirectKeep = Shader.PropertyToID("_DirectKeep");
-    private static readonly int DirectChoiceId = Shader.PropertyToID("_DirectChoice"), DirectFront = Shader.PropertyToID("_DirectFront");
-    private static readonly int MergedEyesId = Shader.PropertyToID("_MergedEyes");
     private static readonly int CameraPlaceId = Shader.PropertyToID("_WorldSpaceCameraPos");
     private static readonly RenderTextureFormat[] DirectFormats = { RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB2101010, RenderTextureFormat.DefaultHDR };
     private static readonly RenderTargetIdentifier[][] _directTargets = { new RenderTargetIdentifier[4], new RenderTargetIdentifier[4] };
@@ -61,7 +55,6 @@ internal static partial class NightVisionEyepieces
     private static CommandBuffer? _directBuffer, _directAgain, _directEnd, _directMotion;
     private static readonly int DirectLitNow = Shader.PropertyToID("_DirectLitNow"), DirectTexel = Shader.PropertyToID("_DirectTexel");
     private static Camera? _directCamera;
-    private static RenderTexture? _directChoice;
     private static int _arrangedCount = -1;
     private static bool _direct;
 
@@ -272,7 +265,7 @@ internal static partial class NightVisionEyepieces
         _directMotion?.Clear();
     }
 
-    private static void DrawDirect(Camera main, Vector3 leftShift, Vector3 rightShift, float split, Vector3 middle, Vector3 across, float nearerRight, bool monocular)
+    private static void DrawDirect(Camera main, Vector3 leftShift, Vector3 rightShift, float split)
     {
         _directBuffer ??= new CommandBuffer { name = "Justachae NVG device in the main camera" };
         _directAgain ??= new CommandBuffer { name = "Justachae NVG device after the decals" };
@@ -327,13 +320,6 @@ internal static partial class NightVisionEyepieces
             };
         }
         int width = main.pixelWidth, height = main.pixelHeight;
-        // Each lens as far past the split as it can reach; all the frame with one eyepiece before the other, nearer and larger.
-        float front = monocular ? 0f : Mathf.Clamp(nearerRight / FrontBy, -1f, 1f);
-        float reach = 0.15f + 0.85f * Mathf.Abs(front);
-        Vector4 range = monocular ? new Vector4(0f, 1f, 0f, 0f) : new Vector4(Mathf.Clamp01(split - reach), Mathf.Clamp01(split + reach), 0f, 0f);
-        buffer.SetGlobalVector(DirectRange, range);
-        _binocularMaterial!.SetVector(MergedRangeId, range);
-
         Vector3 place = main.transform.position;
         Matrix4x4 turned = main.worldToCameraMatrix;
         turned.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));
@@ -387,25 +373,6 @@ internal static partial class NightVisionEyepieces
                         buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, piece.Materials[s], s, piece.Passes[s], _pieceBlock);
                 }
             }
-            // Which of what it drew is its own half, by the model's own middle: this close the middle is not one line down the frame.
-            int mask = DirectMasks[half];
-            buffer.GetTemporaryRT(mask, width, height, 0, FilterMode.Point, RenderTextureFormat.R8, RenderTextureReadWrite.Linear);
-            buffer.SetRenderTarget(mask, depth);
-            buffer.ClearRenderTarget(false, true, Color.clear);
-            Vector3 point = byRenderer ? place + middle : middle - shift;
-            buffer.SetGlobalVector(DirectPlane, new Vector4(across.x, across.y, across.z, Vector3.Dot(point, across)));
-            buffer.SetGlobalFloat(DirectKeep, monocular ? 0f : half == 0 ? -1f : 1f);
-            foreach (Piece piece in _pieces)
-            {
-                for (int s = 0; s < piece.Mesh.subMeshCount; s++)
-                {
-                    if (byRenderer)
-                        buffer.DrawRenderer(piece.Renderer, _directMaterial, s, 1);
-                    else
-                        buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, _directMaterial, s, 1);
-                }
-            }
-            buffer.SetGlobalTexture(mask, mask);
             for (int t = 0; t < 4; t++)
                 buffer.SetGlobalTexture(ids[t], ids[t]);
             buffer.SetGlobalTexture(depth, depth);
@@ -414,19 +381,6 @@ internal static partial class NightVisionEyepieces
         // The camera's place given back before anything else is drawn.
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
 
-        // Which lens shows where, for this frame's device and for the composite after it.
-        if (_directChoice == null || _directChoice.width != width || _directChoice.height != height)
-        {
-            if (_directChoice != null)
-            {
-                _directChoice.Release();
-                Object.Destroy(_directChoice);
-            }
-            _directChoice = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) { name = "Justachae NVG lens choice", filterMode = FilterMode.Point };
-            _directChoice.Create();
-            Shader.SetGlobalTexture(DirectChoiceId, _directChoice);
-        }
-        buffer.SetGlobalFloat(DirectFront, front);
         buffer.SetGlobalFloat(DirectSplit, split);
         buffer.SetGlobalFloat(DirectStrip, Overscan);
         buffer.SetGlobalVector(DirectInset, new Vector4(DirectInsetPixels / Mathf.Max(Screen.width, 1), DirectInsetPixels / Mathf.Max(Screen.height, 1), 0f, 0f));
@@ -442,8 +396,6 @@ internal static partial class NightVisionEyepieces
         for (int i = 0; i < TubeAxisIds.Length; i++)
             _directMaterial.SetVector(TubeAxisIds[i], composite.GetVector(TubeAxisIds[i]));
         _directMaterial.SetVector(TubeFieldId, composite.GetVector(TubeFieldId));
-        buffer.SetRenderTarget(_directChoice);
-        buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 3);
 
         // The sealed eyecups' insides go dark as the device comes down: from where each half of the device stands, not from the
         // main camera's depth, which holds what is nearest at its near plane.
@@ -500,8 +452,6 @@ internal static partial class NightVisionEyepieces
             buffer.ReleaseTemporaryRT(DirectLeft[t]);
             buffer.ReleaseTemporaryRT(DirectRight[t]);
         }
-        buffer.ReleaseTemporaryRT(DirectMasks[0]);
-        buffer.ReleaseTemporaryRT(DirectMasks[1]);
         buffer.ReleaseTemporaryRT(DirectLeftDepth);
         buffer.ReleaseTemporaryRT(DirectRightDepth);
     }

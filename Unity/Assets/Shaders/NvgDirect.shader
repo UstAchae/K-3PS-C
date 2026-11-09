@@ -7,15 +7,11 @@ Shader "Justachae/NVG/Direct" {
  CGINCLUDE
  #include "UnityCG.cginc"
  sampler2D _DirectL0, _DirectL1, _DirectL2, _DirectL3, _DirectR0, _DirectR1, _DirectR2, _DirectR3, _DirectLens0, _DirectLens1;
- sampler2D _DirectChoice;   // r, g: a hole for each eye's lens in the device; b, a: that eye's lens hidden by the other eyepiece before it
- float _DirectFront;        // which eyepiece stands before the other: -1 the left, 1 the right, 0 neither
- sampler2D _DirectMaskL, _DirectMaskR;   // where each copy's surface is its own half of the device
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectLD);
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
  float _DirectSplit, _DirectStrip, _DirectBehind;
  float4x4 _EyeInvVP0, _EyeInvVP1;
  float4 _TubeField, _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;
- float4 _DirectRange;    // across the frame, x from where the right eye's half of the device reaches, y to where the left's does
  float4 _DirectInset;    // how far past the lens's edge the device goes, as a share of the frame
  float4 _DirectPlanes;   // x its near plane's 1/depth, y its far plane's, z the main camera's near plane's, w its far plane's
 
@@ -78,21 +74,19 @@ Shader "Justachae/NVG/Direct" {
   #endif
  }
 
- // How much of the device is here, and how far over to the right eye's it is. Across the strip one eye's half fades as the
- // other comes in, all of the device as the lenses' picture does: where both have it, it is all there and eased from one to
- // the other; where one has it, it goes with that eye's share. With one eyepiece before the other that one is simply seen.
- // Whatever is through a lens is left out (_DirectChoice).
+ // How much of the device is here, and how far over to the right eye's it is. As the composite takes the eyes' views: the left eye's
+ // on the left of the line, the right's on the right, and across the strip about it the one gives way to the other. All that goes
+ // past the line is gone. Through a lens the device is left out, however near (the tube behind the glass is within a hand of the
+ // eye), so the scene stays there for the picture; but where the other eye still has the housing that goes on over it, or
+ // what is under the lens's fading picture would be the bare scene.
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
-  float strip = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
-  float front = saturate(abs(_DirectFront));
-  toRight = lerp(strip, _DirectFront > 0 ? 1 : 0, front);
-  float4 choice = tex2D(_DirectChoice, uv);
-  if (choice.r > 0.5 || choice.g > 0.5)
-   return 0;
-  bool left = shown(rawL) && tex2D(_DirectMaskL, uv).r > 0.5, right = shown(rawR) && tex2D(_DirectMaskR, uv).r > 0.5;
+  float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
+  toRight = t;
+  bool holeL = t < 1 && within(_DirectLens0, uv, _EyeInvVP0), holeR = t > 0 && within(_DirectLens1, uv, _EyeInvVP1);
+  bool left = t < 1 && shown(rawL) && !holeL, right = t > 0 && shown(rawR) && !holeR;
   if (left && right) return 1;
-  if (left) { toRight = 0; return lerp(1 - strip, 1, front); }
-  if (right) { toRight = 1; return lerp(strip, 1, front); }
+  if (left) { toRight = 0; return holeR ? 1 : 1 - t; }
+  if (right) { toRight = 1; return holeL ? 1 : t; }
   return 0;
  }
 
@@ -139,24 +133,11 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 1: over a copy's own depth, where its surface lies on its own side of the device's middle: the two eyepieces' copies are
-  // parted by the model itself, whatever the view. A line down the frame cannot: this close, the middle is not one place on it.
-  Pass {
-   Cull Off ZWrite Off ZTest LEqual Offset -1, -64
-   CGPROGRAM
-   #pragma vertex planeVert
+  // 1: unused, the passes keep their numbers.
+  Pass { ColorMask 0 ZWrite Off ZTest Never CGPROGRAM
+   #pragma vertex vert
    #pragma fragment frag
-   #pragma target 3.5
-   float4 _DirectPlane;   // xyz across the device, toward the right eyepiece; w where its middle is along that
-   float _DirectKeep;     // -1 this copy keeps what is left of the middle, 1 what is right of it
-   struct p2f { float4 pos : SV_POSITION; float side : TEXCOORD0; };
-   p2f planeVert (float4 v : POSITION) {
-    p2f o;
-    o.pos = UnityObjectToClipPos(v);
-    o.side = dot(mul(unity_ObjectToWorld, v).xyz, _DirectPlane.xyz) - _DirectPlane.w;
-    return o;
-   }
-   float4 frag (p2f i) : SV_Target { return i.side * _DirectKeep >= 0 ? 1 : 0; }
+   float4 frag (v2f i) : SV_Target { return 0; }
    ENDCG
   }
   // 2: the device's surface again, once the game's decals are done: they are thrown on whatever the depth holds, and what is
@@ -181,22 +162,11 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 3: for this frame, which lens shows where. With the head turned one eyepiece stands before the other, and hides its lens.
-  Pass {
-   Cull Off ZWrite Off ZTest Always
-   CGPROGRAM
+  // 3: unused, the passes keep their numbers.
+  Pass { ColorMask 0 ZWrite Off ZTest Never CGPROGRAM
    #pragma vertex vert
    #pragma fragment frag
-   #pragma target 3.5
-   float4 frag (v2f i) : SV_Target {
-    float2 uv = i.screen.xy / i.screen.w;
-    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
-    bool left = shown(rawL) && tex2D(_DirectMaskL, uv).r > 0.5, right = shown(rawR) && tex2D(_DirectMaskR, uv).r > 0.5;
-    bool hideLeft = _DirectFront > 0.5 && right, hideRight = _DirectFront < -0.5 && left;
-    bool holeLeft = !hideLeft && uv.x < _DirectRange.y && within(_DirectLens0, uv, _EyeInvVP0);
-    bool holeRight = !hideRight && uv.x > _DirectRange.x && within(_DirectLens1, uv, _EyeInvVP1);
-    return float4(holeLeft ? 1 : 0, holeRight ? 1 : 0, hideLeft ? 1 : 0, hideRight ? 1 : 0);
-   }
+   float4 frag (v2f i) : SV_Target { return 0; }
    ENDCG
   }
   // 4: where a half is fading, once all is lit: its pixels kept and left out (kept) evened into one fade, over the pattern's width.
