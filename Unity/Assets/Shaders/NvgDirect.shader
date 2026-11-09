@@ -199,5 +199,28 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
+  // 4: where a half is fading, once all is lit: its pixels kept and left out (kept) evened into one fade, over the pattern's width.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   sampler2D _DirectLitNow;
+   float4 _DirectTexel;
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    float toRight;
+    float c = coverage(uv, SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight);
+    if (c <= 0 || c >= 1)
+     discard;
+    float3 sum = 0;
+    for (int y = -2; y < 2; y++)
+     for (int x = -2; x < 2; x++)
+      sum += tex2Dlod(_DirectLitNow, float4(uv + (float2(x, y) + 0.5) * _DirectTexel.xy, 0, 0)).rgb;
+    return float4(sum / 16, 1);
+   }
+   ENDCG
+  }
  }
 }

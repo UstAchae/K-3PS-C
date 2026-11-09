@@ -58,7 +58,8 @@ internal static partial class NightVisionEyepieces
     private static Shader? _directShader;
     private static Material? _directMaterial;
     private static Mesh? _directQuad;
-    private static CommandBuffer? _directBuffer, _directAgain;
+    private static CommandBuffer? _directBuffer, _directAgain, _directEnd;
+    private static readonly int DirectLitNow = Shader.PropertyToID("_DirectLitNow"), DirectTexel = Shader.PropertyToID("_DirectTexel");
     private static Camera? _directCamera;
     private static RenderTexture? _directChoice;
     private static int _arrangedCount = -1;
@@ -172,15 +173,18 @@ internal static partial class NightVisionEyepieces
     {
         _directBuffer?.Clear();
         _directAgain?.Clear();
+        _directEnd?.Clear();
     }
 
     private static void DrawDirect(Camera main, Vector3 leftShift, Vector3 rightShift, float split, Vector3 middle, Vector3 across, float nearerRight, bool monocular)
     {
         _directBuffer ??= new CommandBuffer { name = "Justachae NVG device in the main camera" };
         _directAgain ??= new CommandBuffer { name = "Justachae NVG device after the decals" };
+        _directEnd ??= new CommandBuffer { name = "Justachae NVG device's fade evened" };
         CommandBuffer buffer = _directBuffer;
         buffer.Clear();
         _directAgain.Clear();
+        _directEnd.Clear();
         if (_directShader == null)
             return;
         if (_directCamera != main)
@@ -189,6 +193,7 @@ internal static partial class NightVisionEyepieces
             {
                 _directCamera.RemoveCommandBuffer(CameraEvent.AfterGBuffer, buffer);
                 _directCamera.RemoveCommandBuffer(CameraEvent.BeforeLighting, _directAgain);
+                _directCamera.RemoveCommandBuffer(CameraEvent.AfterImageEffectsOpaque, _directEnd);
             }
             main.AddCommandBuffer(CameraEvent.AfterGBuffer, buffer);
             _directCamera = main;
@@ -199,6 +204,8 @@ internal static partial class NightVisionEyepieces
         {
             main.RemoveCommandBuffer(CameraEvent.BeforeLighting, _directAgain);
             main.AddCommandBuffer(CameraEvent.BeforeLighting, _directAgain);
+            main.RemoveCommandBuffer(CameraEvent.AfterImageEffectsOpaque, _directEnd);
+            main.AddCommandBuffer(CameraEvent.AfterImageEffectsOpaque, _directEnd);
             _arrangedCount = main.commandBufferCount;
         }
         _directMaterial ??= new Material(_directShader) { name = "Justachae NVG device in the main camera", hideFlags = HideFlags.DontSave };
@@ -370,6 +377,15 @@ internal static partial class NightVisionEyepieces
         buffer.SetRenderTarget(_mainSurface, BuiltinRenderTextureType.CameraTarget);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 2);
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        // Once all is lit: the fade. The textures are let go only after this.
+        buffer = _directEnd;
+        buffer.SetGlobalVector(DirectTexel, new Vector4(1f / Mathf.Max(width, 1), 1f / Mathf.Max(height, 1), 0f, 0f));
+        buffer.GetTemporaryRT(DirectLitNow, width, height, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
+        buffer.Blit(BuiltinRenderTextureType.CameraTarget, DirectLitNow);
+        buffer.SetGlobalTexture(DirectLitNow, DirectLitNow);
+        buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, 4);
+        buffer.ReleaseTemporaryRT(DirectLitNow);
         for (int t = 0; t < 4; t++)
         {
             buffer.ReleaseTemporaryRT(DirectLeft[t]);
