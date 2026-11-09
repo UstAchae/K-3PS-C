@@ -99,6 +99,98 @@ internal static partial class NightVisionEyepieces
 
     // The renderers as they are this frame, not as they were found once: a device whose renderers had been made anew was
     // not hidden, and four eyepieces were seen.
+    // Temporary: with the game drawing the device and nothing of ours over it, one frame of the surface the game wrote and the one we
+    // wrote, kept as they are for working out what differs; and all that the materials are made of.
+    private const int ProbeFrames = 30;
+    private static int _probeWait;
+    private static readonly string[] ProbeNames = { "game0", "game1", "game2", "game1_after_decals", "ours0", "ours1", "ours2" };
+    private static readonly RenderTexture?[] _probes = new RenderTexture?[7];
+
+    private static bool ProbeDue()
+    {
+        bool plain = NvgDump.Layered;
+        for (int l = 0; l < 8; l++)
+            plain &= !NvgDump.Layer(l);
+        if (!plain || _pieces.Count == 0)
+        {
+            _probeWait = 0;
+            return false;
+        }
+        if (++_probeWait != ProbeFrames)
+            return false;
+        NoteMaterials();
+        return true;
+    }
+
+    private static void ProbeCopy(CommandBuffer buffer, RenderTargetIdentifier from, int which, int width, int height)
+    {
+        RenderTexture? target = _probes[which];
+        if (target == null || target.width != width || target.height != height)
+        {
+            if (target != null)
+            {
+                target.Release();
+                Object.Destroy(target);
+            }
+            target = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear) { name = "Justachae NVG probe " + ProbeNames[which], filterMode = FilterMode.Point };
+            _probes[which] = target;
+        }
+        buffer.Blit(from, target);
+    }
+
+    private static void ProbeRead(CommandBuffer buffer, int width, int height)
+    {
+        string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgprobe");
+        System.IO.Directory.CreateDirectory(folder);
+        for (int i = 0; i < _probes.Length; i++)
+        {
+            string file = System.IO.Path.Combine(folder, $"{ProbeNames[i]}_{width}_{height}.bin");
+            buffer.RequestAsyncReadback(_probes[i]!, request =>
+            {
+                if (request.hasError)
+                {
+                    Log($"NVG probe: reading {file} failed");
+                    return;
+                }
+                System.IO.File.WriteAllBytes(file, request.GetData<byte>().ToArray());
+                Log($"NVG probe: wrote {file}");
+            });
+        }
+    }
+
+    private static void NoteMaterials()
+    {
+        foreach (Piece piece in _pieces)
+        {
+            Renderer r = piece.Renderer;
+            r.GetPropertyBlock(_pieceBlock);
+            Log($"NVG probe: renderer {r.name}, mesh {piece.Mesh.name} with {piece.Mesh.subMeshCount} parts, layer {r.gameObject.layer}, rendering layers {r.renderingLayerMask}, light probes {r.lightProbeUsage}, reflection probes {r.reflectionProbeUsage}, lightmap {r.lightmapIndex}, property block empty {_pieceBlock.isEmpty}, motion {r.motionVectorGenerationMode}, priority {r.rendererPriority}");
+            for (int m = 0; m < piece.Materials.Length; m++)
+            {
+                Material material = piece.Materials[m];
+                if (material == null)
+                    continue;
+                var text = new System.Text.StringBuilder();
+                text.Append($"NVG probe: material {m} {material.name}, shader {material.shader.name}, queue {material.renderQueue}, used pass {piece.Passes[m]}, keywords [{string.Join(" ", material.shaderKeywords)}], passes:");
+                for (int p = 0; p < material.passCount; p++)
+                    text.Append($" {p}={material.GetPassName(p)}/{material.shader.FindPassTagValue(p, new ShaderTagId("LightMode")).name}/{(material.GetShaderPassEnabled(material.GetPassName(p)) ? "on" : "off")}");
+                text.Append("; floats:");
+                foreach (string name in material.GetPropertyNames(MaterialPropertyType.Float))
+                    text.Append($" {name}={material.GetFloat(name):G5}");
+                text.Append("; colours:");
+                foreach (string name in material.GetPropertyNames(MaterialPropertyType.Vector))
+                    text.Append($" {name}={material.GetVector(name)}");
+                text.Append("; textures:");
+                foreach (string name in material.GetTexturePropertyNames())
+                {
+                    Texture? texture = material.GetTexture(name);
+                    text.Append($" {name}={(texture != null ? texture.name : "none")}");
+                }
+                Log(text.ToString());
+            }
+        }
+    }
+
     private static void HideDevice(Camera camera)
     {
         _pieces.Clear();
@@ -566,6 +658,16 @@ internal static partial class NightVisionEyepieces
             }
         }
 
+        bool probing = ProbeDue();
+        if (probing)
+        {
+            ProbeCopy(buffer, BuiltinRenderTextureType.GBuffer0, 0, width, height);
+            ProbeCopy(buffer, BuiltinRenderTextureType.GBuffer1, 1, width, height);
+            ProbeCopy(buffer, BuiltinRenderTextureType.GBuffer2, 2, width, height);
+            ProbeCopy(buffer, DirectLeft[0], 4, width, height);
+            ProbeCopy(buffer, DirectLeft[1], 5, width, height);
+            ProbeCopy(buffer, DirectLeft[2], 6, width, height);
+        }
         _directMaterial.SetFloat(DirectStencilRefId, _stencilRef);
         _directMaterial.SetFloat("_DirectNoEmission", NvgDump.NoEmission ? 1f : 0f);
         buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
@@ -577,6 +679,11 @@ internal static partial class NightVisionEyepieces
 
         // After the decals, which are thrown on whatever the depth holds. The textures are let go only after this.
         buffer = _directAgain;
+        if (probing)
+        {
+            ProbeCopy(buffer, BuiltinRenderTextureType.GBuffer1, 3, width, height);
+            ProbeRead(buffer, width, height);
+        }
         buffer.SetRenderTarget(_mainSurface, BuiltinRenderTextureType.CameraTarget);
         if (NvgDump.Layered)
             DrawLayers(buffer, true);
