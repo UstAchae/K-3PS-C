@@ -381,6 +381,19 @@ internal static partial class NightVisionEyepieces
         buffer.ReleaseTemporaryRT(DirectRightDepth);
     }
 
+    // Temporary: why a device down does or does not go this way, each time any of it changes.
+    private static int _stateNoted = -1;
+    private static void NoteState(bool present, bool worn, bool switchedOn, bool renderer, bool brnvg, bool settled, bool on, bool filter)
+    {
+        bool down = _flip >= 0.999f, moving = _flip > 0.001f && !down, image = _eyepieceImage != null && _eyepieceImage.enabled;
+        int state = (present ? 1 : 0) | (worn ? 2 : 0) | (switchedOn ? 4 : 0) | (renderer ? 8 : 0) | (brnvg ? 16 : 0) | (settled ? 32 : 0) | (on ? 64 : 0)
+            | (filter ? 128 : 0) | (down ? 256 : 0) | (moving ? 512 : 0) | (image ? 1024 : 0) | (_direct ? 2048 : 0) | (_precise ? 4096 : 0) | (Active ? 8192 : 0);
+        if (state == _stateNoted)
+            return;
+        _stateNoted = state;
+        Log($"NVG state: present {present}, worn {worn}, switched on {switchedOn}, BRNVG renderer {renderer}, wants BRNVG {brnvg}, settled {settled}, tubes on {on}, game's filter {filter}, flip {_flip:F2}, image {image}, direct {_direct}, precise {_precise}, body {(_body != null ? _body.name : "none")}");
+    }
+
     // Temporary: what the capture needs to know.
     internal static float FlipNow => _flip;
 
