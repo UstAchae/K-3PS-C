@@ -1722,7 +1722,7 @@ internal static class AimArms
         foreach (Transform t in weapon.GetComponentsInChildren<Transform>(true))
             if (t.name.Contains("mod_align_"))
                 text.Append($" {t.parent?.name}/{t.name} {(t.gameObject.activeInHierarchy ? "on" : "off")} {Local(weapon, t.position)}");
-        WeaponPrefab.AimPlane? plane = animation._currentAimingPlane ?? animation.HandsContainer?.DefaultAimPlane;
+        WeaponPrefab.AimPlane? plane = AimPlane(animation);
         float depth = plane != null ? plane.Depth : float.NaN;
         text.Append($"; aim plane {depth:F3}");
         NewCameraPlugin.Log?.LogInfo(text.ToString());
@@ -1740,16 +1740,28 @@ internal static class AimArms
             scope.AlignIfAvailable, scope.IsOptic, out position, out forward);
     }
 
+    // The aim plane for the sight aimed through, worked out as the game works it out (FindCameraDepth): the sight's own, when it names
+    // one, else the gun's default (a magnified sight's too, as this mod places it). Not the plane the game last set: that is set only as
+    // the sight changes, and with a sight taken off in a raid it was still the magnified one's, and the eye went a third of a metre back.
+    private static WeaponPrefab.AimPlane? AimPlane(ProceduralWeaponAnimation animation)
+    {
+        var hands = animation.HandsContainer;
+        if (hands == null)
+            return null;
+        string? named = Scopes.Current(animation)?.Mod?.CustomAimPlane;
+        if (!string.IsNullOrEmpty(named) && hands.CustomAimPlanes != null)
+            foreach (WeaponPrefab.AimPlane plane in hands.CustomAimPlanes)
+                if (plane != null && plane.Name == named)
+                    return plane;
+        return hands.DefaultAimPlane;
+    }
+
     private static float SightRelief(ProceduralWeaponAnimation animation, Transform bone)
     {
         if (animation.HandsContainer == null || animation.HandsContainer.Weapon == null)
             return 0f;
 
-        WeaponPrefab.AimPlane? plane = animation._currentAimingPlane;
-        if (Scopes.Current(animation) is { IsOptic: true })
-            plane = animation.HandsContainer.DefaultAimPlane;
-        if (plane == null)
-            plane = animation.HandsContainer.DefaultAimPlane;
+        WeaponPrefab.AimPlane? plane = AimPlane(animation);
         if (plane == null)
             return 0f;
 
