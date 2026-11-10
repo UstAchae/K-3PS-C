@@ -354,6 +354,7 @@ internal static class AimArms
                 Vector3 placed = sightPosition + target;
                 target = steadyPosition + delay * (placed - bodyPosition) - sightPosition;
                 turn = delay * turn;
+                NoteAim(animation, bone, ironAligned, sightForward, turn, sightId);
             }
             else if (!aiming && FollowDelay > 0f && player.HandsController is Player.FirearmController && bones.Weapon_Root_Anim != null)
             {
@@ -1687,6 +1688,31 @@ internal static class AimArms
         if (Mathf.Abs(yaw) < 0.01f && Mathf.Abs(down) < 0.01f)
             return Quaternion.identity;
         return LookTurn(player.MovementContext, yaw, down);
+    }
+
+    // Temporary: the sight the gun is placed by as it is aimed, and what the gun is turned by, the first frames after it changes.
+    private static int _notedSight, _notedFrames;
+    private static void NoteAim(ProceduralWeaponAnimation animation, Transform bone, bool ironAligned, Vector3 sightForward, Quaternion turn, int sightId)
+    {
+        if (sightId != _notedSight)
+        {
+            _notedSight = sightId;
+            _notedFrames = 0;
+            Transform? weapon = animation.HandsContainer?.Weapon;
+            Transform? root = animation.HandsContainer?.WeaponRootAnim;
+            var scope = Scopes.Current(animation);
+            var names = new System.Text.StringBuilder();
+            foreach (var s in animation.ScopeAimTransforms)
+                names.Append(s.Bone != null ? s.Bone.name : "null").Append(s.Mod != null ? "(" + s.Mod.Item.Template._name + ")" : "(no mod)").Append(' ');
+            string path = bone.name;
+            for (Transform? t = bone.parent; t != null && t != root; t = t.parent)
+                path = t.name + "/" + path;
+            float along = weapon != null ? Vector3.Angle(sightForward, -weapon.up) : -1f;
+            NewCameraPlugin.Log?.LogInfo($"Aim check: sight {path}, under the gun {(root != null && bone.IsChildOf(root))}, active {bone.gameObject.activeInHierarchy}, mod {(scope?.Mod != null ? scope.Mod.Item.Template._name : "none")}, optic {scope?.IsOptic}, align {scope?.AlignIfAvailable}, iron aligned {ironAligned}, its line off the barrel {along:F1} deg, sights [{names}]");
+        }
+        if (_notedFrames < 90 && _notedFrames % 15 == 0)
+            NewCameraPlugin.Log?.LogInfo($"Aim check: frame {_notedFrames}, the gun turned {Quaternion.Angle(Quaternion.identity, turn):F1} deg, the sight's line off the barrel {(animation.HandsContainer?.Weapon != null ? Vector3.Angle(sightForward, -animation.HandsContainer.Weapon.up) : -1f):F1} deg");
+        _notedFrames++;
     }
 
     private static bool ResolveIronSight(ProceduralWeaponAnimation animation, Transform bone, out Vector3 position, out Vector3 forward)
