@@ -12,7 +12,7 @@
 // Pass 4: each pixel of a level drawn as its disc (procedural, six vertices a pixel), added; only radii in its band.
 // Pass 5: the frame as the lens lays it on the tube: what is near, spread, over what lies behind it, the more solid
 //         the more thickly its discs cover (a thin thing faint and spread). Behind a near thing the frame has only the
-//         thing itself: what is about it, blurred wide, stands for what lies behind it.
+//         thing itself: what is about it, spread as wide as the discs, stands for what lies behind it.
 // Pass 6: how much of each part of the frame is spread (0 to 1), for the tube's grain (EaseGrain).
 // Pass 7: a level halved: four bilinear taps a texel apart, the four by four under it weighted as a tent, smoother
 //         from frame to frame than the two by two alone.
@@ -181,17 +181,16 @@ Shader "Justachae/NVG/Defocus" {
     float3 behind = f.rgb;
     float near = Nearness(r);
     if (near > 0) {
-     // Behind a near thing: what is about it, blurred far wider than the discs (the coarsest level spread again over
-     // three of its pixels each way), so nothing in it slides like water as the view sways.
-     float w3, h3;
-     _Far3.GetDimensions(w3, h3);
-     float2 t3 = 1 / float2(w3, h3);
-     float4 far = 0;
-     for (int y = -1; y <= 1; y++)
-      for (int x = -1; x <= 1; x++)
-       far += Far(3, i.uv + float2(x, y) * 1.5 * t3) * ((2 - abs(x)) * (2 - abs(y)));
-     if (far.a > 0.05)
-      behind = lerp(f.rgb, far.rgb / far.a, near);
+     // Behind a near thing: what is about it, spread about as wide as its discs (each level's pixel is 1, 2, 4, 8
+     // quarter-size ones), from the first level that has any of it.
+     int start = (int)clamp(floor(log2(max(r, 1) / 6)), 0, 3);
+     for (int level = start; level < 4; level++) {
+      float4 far = Far(level, i.uv);
+      if (far.a > 0.05) {
+       behind = lerp(f.rgb, far.rgb / far.a, near);
+       break;
+      }
+     }
     }
     // How solid the spread thing shows, by how thickly its discs cover here: a thick thing solid to past its edge, a
     // thin one (its light spread thin) faint, and fainter the thinner; an opening's middle left to what lies beyond.
