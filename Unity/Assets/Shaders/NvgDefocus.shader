@@ -27,7 +27,7 @@ Shader "Justachae/NVG/Defocus" {
   float4 _MainTex_TexelSize;
   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
   Texture2D _ScopeLens, _Src, _Coc;
-  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide, _Cover, _CoverWide;
+  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide, _Cover, _CoverWide, _FarSoft;
   float2 _Step;   // a Gaussian's direction, in texels
   SamplerState sampler_linear_clamp, sampler_point_clamp;
   float _ScopeOn;
@@ -238,7 +238,14 @@ Shader "Justachae/NVG/Defocus" {
     fill = found > 1e-3 ? lerp(colour, fill / found, saturate(found * 2)) : colour;
     // Behind: the frame's own where it is far; where the frame has the thing itself (and easing in toward its edge, so
     // its sharp outline is not drawn), what is about it filled in.
-    float3 behind = lerp(f.rgb, fill, max(Nearness(r), smoothstep(0, 0.5, blocked)));
+    // What lies behind seen through the thing's soft edge, blurred as the thing is (what is not near only, at an eighth
+    // of the size blurred wide): the more the nearer the thing is, all of it a little out from where it begins to
+    // show, back to the frame as sharp as the thing's blur ends. As at a table, where what is about it is blurred too,
+    // a sight's outline no longer stands against a sharp, bright scene.
+    float4 farSoft = _FarSoft.SampleLevel(sampler_linear_clamp, i.uv, 0);
+    float3 soft = farSoft.a > 1e-3 ? lerp(fill, farSoft.rgb / farSoft.a, saturate(farSoft.a * 4)) : fill;
+    float3 seen = lerp(f.rgb, soft, smoothstep(0, 0.4, max(blocked, saturate(coverWide))));
+    float3 behind = lerp(seen, fill, max(Nearness(r), smoothstep(0, 0.5, blocked)));
     if (_DefocusShow > 2.5) return float4(blocked.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
     if (_DefocusShow > 0.5) return float4(behind, 1);
