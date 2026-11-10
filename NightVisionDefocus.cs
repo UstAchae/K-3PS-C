@@ -44,7 +44,6 @@ internal static partial class NightVisionEyepieces
     private static readonly int CoverId = Shader.PropertyToID("_Cover");
     private static readonly int CoverWideId = Shader.PropertyToID("_CoverWide");
     private static readonly int FarSoftId = Shader.PropertyToID("_FarSoft");
-    private static readonly int FrameSoftId = Shader.PropertyToID("_FrameSoft");
 
     // A level blurred wide and smooth (three Gaussians each way), and the same at half its size blurred again: twice as
     // wide.
@@ -159,16 +158,6 @@ internal static partial class NightVisionEyepieces
         Smoothed(_levelFar[1]!, defocus, out RenderTexture farSoft, out RenderTexture farWide);
         RenderTexture.ReleaseTemporary(farWide);
         defocus.SetTexture(FarSoftId, farSoft);
-        // The scene as though a metre off: the frame at a quarter of the size, blurred a little (2.2 quarter-size
-        // pixels, as a disc a metre off spreads).
-        RenderTexture frameSoft = Temporary(width, height), frameAcross = Temporary(width, height);
-        Graphics.Blit(frame, frameSoft, defocus, 7);
-        defocus.SetVector(StepId, new Vector2(0.55f, 0f));
-        Graphics.Blit(frameSoft, frameAcross, defocus, 8);
-        defocus.SetVector(StepId, new Vector2(0f, 0.55f));
-        Graphics.Blit(frameAcross, frameSoft, defocus, 8);
-        RenderTexture.ReleaseTemporary(frameAcross);
-        defocus.SetTexture(FrameSoftId, frameSoft);
         Graphics.Blit(frame, made, defocus, 5);
         DumpDefocus(frame, made, defocus); // TEMP DIAG
         AddTritium(view, made);
@@ -180,8 +169,6 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(CoverId, Texture2D.blackTexture);
         defocus.SetTexture(CoverWideId, Texture2D.blackTexture);
         defocus.SetTexture(FarSoftId, Texture2D.blackTexture);
-        defocus.SetTexture(FrameSoftId, Texture2D.blackTexture);
-        RenderTexture.ReleaseTemporary(frameSoft);
         RenderTexture.ReleaseTemporary(farSoft);
         RenderTexture.ReleaseTemporary(soft);
         RenderTexture.ReleaseTemporary(wide);
@@ -219,7 +206,7 @@ internal static partial class NightVisionEyepieces
         string folder = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump", _dumps.ToString());
         System.IO.Directory.CreateDirectory(folder);
         Save(frame, System.IO.Path.Combine(folder, "0-frame.png"));
-        string[] names = { "", "1-scene-soft.png", "2-mixed-colour.png", "3-shown.png", "5-radius.png" };
+        string[] names = { "", "1-behind.png", "2-near-colour.png", "3-shown.png", "5-radius.png" };
         for (int show = 1; show <= 4; show++)
         {
             RenderTexture layer = RenderTexture.GetTemporary(frame.width, frame.height, 0, RenderTextureFormat.ARGBHalf);
