@@ -692,7 +692,6 @@ internal static class NewCameraSwitch
         ChooseSkeleton(player);
         CameraNear.Apply();
         ChestStance.Update(player);
-        Scopes.FindAgainIfChanged(player);
         CameraPosition.UpdateAimEye(player);
         AimArms.Apply(player);
         HideoutCinemachine.Update(player);
