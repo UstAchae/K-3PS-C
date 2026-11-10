@@ -22,6 +22,47 @@ internal static partial class NightVisionEyepieces
     private static readonly MaterialPropertyBlock _nearDiscs = new MaterialPropertyBlock();
     private static bool _defocusNoted;
 
+    // TEMP DIAG: whether the discs are drawn and keep the light (the near layer's cover summed before and after),
+    // and how wide they are; a few times, seconds apart.
+    private static float _diagDefocusAt;
+    private static int _diagDefocusCount;
+    private static void DiagDefocus(RenderTexture nearColor, RenderTexture coc, RenderTexture nearAcc, RenderTexture frame, float pixelsPerRadian, float ahead)
+    {
+        if (_diagDefocusCount >= 4 || Time.time - _diagDefocusAt < 3f)
+            return;
+        _diagDefocusAt = Time.time;
+        _diagDefocusCount++;
+        int n = _diagDefocusCount;
+        string head = $"frame {frame.width}x{frame.height}, quarter {nearColor.width}x{nearColor.height}, px/rad {pixelsPerRadian:F0}, objective ahead {ahead:F3} m, lens y {0.5f * DefocusAperture * pixelsPerRadian:F2}";
+        float srcCover = -1f, maxR = 0f, sumR = 0f;
+        int nearTexels = 0;
+        UnityEngine.Rendering.AsyncGPUReadback.Request(nearColor, 0, TextureFormat.RGBAFloat, r =>
+        {
+            if (r.hasError) return;
+            var d = r.GetData<Color>();
+            float sum = 0f;
+            for (int i = 0; i < d.Length; i++) { sum += d[i].a; if (d[i].a > 0f) nearTexels++; }
+            srcCover = sum;
+        });
+        UnityEngine.Rendering.AsyncGPUReadback.Request(coc, 0, TextureFormat.RGBAFloat, r =>
+        {
+            if (r.hasError) return;
+            var d = r.GetData<Color>();
+            int k = 0;
+            for (int i = 0; i < d.Length; i++) { if (d[i].r > 0f) { maxR = Mathf.Max(maxR, d[i].r); sumR += d[i].r; k++; } }
+            sumR = k > 0 ? sumR / k : 0f;
+        });
+        UnityEngine.Rendering.AsyncGPUReadback.Request(nearAcc, 0, TextureFormat.RGBAFloat, r =>
+        {
+            if (r.hasError) { NewCameraPlugin.Log?.LogInfo($"TEMP DIAG defocus {n}: read back failed"); return; }
+            var d = r.GetData<Color>();
+            float sum = 0f, max = 0f;
+            int lit = 0;
+            for (int i = 0; i < d.Length; i++) { sum += d[i].a; max = Mathf.Max(max, d[i].a); if (d[i].a > 1e-4f) lit++; }
+            NewCameraPlugin.Log?.LogInfo($"TEMP DIAG defocus {n}: {head}; near texels {nearTexels}, their cover {srcCover:F1}; radius mean {sumR:F2} max {maxR:F2} (quarter px); after the discs cover {sum:F1} (kept {(srcCover > 0f ? sum / srcCover : 0f):F3}), max {max:F3}, texels reached {lit}");
+        });
+    }
+
     private static readonly int DefocusLensId = Shader.PropertyToID("_DefocusLens");
     private static readonly int SrcId = Shader.PropertyToID("_Src");
     private static readonly int CocId = Shader.PropertyToID("_Coc");
@@ -61,6 +102,7 @@ internal static partial class NightVisionEyepieces
         discs.DrawProcedural(Matrix4x4.identity, defocus, 4, MeshTopology.Triangles, width * height * 6, 1, _nearDiscs);
         Graphics.ExecuteCommandBuffer(discs);
 
+        DiagDefocus(nearColor, coc, nearAcc, frame, pixelsPerRadian, ahead); // TEMP DIAG
         defocus.SetTexture(NearAccId, nearAcc);
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
         Graphics.Blit(frame, made, defocus, 5);

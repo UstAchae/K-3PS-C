@@ -27,15 +27,16 @@ Shader "Justachae/NVG/Defocus" {
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
   }
-  // A disc's radius (quarter-size pixels) for what the frame shows at uv: none through a sight's lens, nor for what is
-  // behind the objective.
+  // A disc's radius (quarter-size pixels) for what the frame shows at uv: none through a sight's lens. What the frame
+  // has nearer than a centimetre from the objective, or behind it (the objective's place is the model's far end, an
+  // estimate; a gun's rail came that near when aimed and was left sharp), is spread as if a centimetre off: the most.
   float Radius(float2 uv) {
    if (InLens(uv))
     return 0;
    float z = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
    float2 ray = (uv * 2 - 1) * _TanHalf;
    float d = z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z;
-   return d <= 0.003 ? 0 : min(_DefocusLens.y * abs(1 / d - _DefocusLens.x), _DefocusLens.w);
+   return min(_DefocusLens.y * abs(1 / max(d, 0.01) - _DefocusLens.x), _DefocusLens.w);
   }
   bool IsNear(float r) { return r > 1; }
  ENDCG
