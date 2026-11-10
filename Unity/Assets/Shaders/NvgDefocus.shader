@@ -205,8 +205,11 @@ Shader "Justachae/NVG/Defocus" {
      found += take;
      need -= take;
     }
-    float soft = saturate(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0).a);
-    float3 colour = n.a > 1e-3 ? n.rgb / n.a : f.rgb;
+    // The near shape blurred wide (premultiplied): how solid it shows, and its colour, blurred alike, so the thing is
+    // one soft shade with no structure left in it, as its outline is.
+    float4 shape = _Shape.SampleLevel(sampler_linear_clamp, i.uv, 0);
+    float soft = saturate(shape.a);
+    float3 colour = shape.a > 1e-3 ? shape.rgb / shape.a : (n.a > 1e-3 ? n.rgb / n.a : f.rgb);
     // Where little or nothing of what is about it was found (all about it is near too), its own colour, eased in.
     fill = found > 1e-3 ? lerp(colour, fill / found, saturate(found * 2)) : colour;
     // The frame's own where nothing near is; what is filled in where something is and all about it, as far as the
