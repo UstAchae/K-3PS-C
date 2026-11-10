@@ -246,6 +246,13 @@ Shader "Justachae/NVG/Defocus" {
     float3 soft = farSoft.a > 1e-3 ? lerp(fill, farSoft.rgb / farSoft.a, saturate(farSoft.a * 4)) : fill;
     float3 seen = lerp(f.rgb, soft, smoothstep(0, 0.4, max(blocked, saturate(coverWide))));
     float3 behind = lerp(seen, fill, max(Nearness(r), smoothstep(0, 0.5, blocked)));
+    // As at a table: there what is about a near thing counts in its blurred colour as the table does (the table half a
+    // metre off: about 0.15 against the gun's nearest 1), so a sight's top, the gun's farther part, is half the table's
+    // shade and goes into it. A far scene here counts as that table, blurred, by how much of it is about: a sight's top
+    // against a far scene took the gun's dark alone, nearly solid, and its outline stood.
+    float about = 0.15 * saturate(1 - coverNarrow);
+    if (shape.a + about > 1e-4)
+     colour = (shape.rgb + about * soft) / (shape.a + about);
     if (_DefocusShow > 2.5) return float4(blocked.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
     if (_DefocusShow > 0.5) return float4(behind, 1);
