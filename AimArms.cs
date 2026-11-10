@@ -1722,9 +1722,7 @@ internal static class AimArms
         foreach (Transform t in weapon.GetComponentsInChildren<Transform>(true))
             if (t.name.Contains("mod_align_"))
                 text.Append($" {t.parent?.name}/{t.name} {(t.gameObject.activeInHierarchy ? "on" : "off")} {Local(weapon, t.position)}");
-        WeaponPrefab.AimPlane? plane = AimPlane(animation);
-        float depth = plane != null ? plane.Depth : float.NaN;
-        text.Append($"; aim plane {depth:F3}");
+        text.Append($"; aim plane {animation._currentAimingPlane?.Name} {(animation._currentAimingPlane != null ? animation._currentAimingPlane.Depth : float.NaN):F3}, far {(animation._farPlane != null ? animation._farPlane.Depth : float.NaN):F3}, the gun's shift {animation.HandsContainer.Weapon.localPosition.y:F3}, the eye at {EyeDepth(animation):F3}");
         NewCameraPlugin.Log?.LogInfo(text.ToString());
     }
 
@@ -1740,20 +1738,22 @@ internal static class AimArms
             scope.AlignIfAvailable, scope.IsOptic, out position, out forward);
     }
 
-    // The aim plane for the sight aimed through, worked out as the game works it out (FindCameraDepth): the sight's own, when it names
-    // one, else the gun's default (a magnified sight's too, as this mod places it). Not the plane the game last set: that is set only as
-    // the sight changes, and with a sight taken off in a raid it was still the magnified one's, and the eye went a third of a metre back.
-    private static WeaponPrefab.AimPlane? AimPlane(ProceduralWeaponAnimation animation)
+    // Where the eye is along the gun's bore (in the gun's frame, m), as the game puts the first-person camera there: at the aim plane the
+    // game chose for the sight (FindCameraDepth: the sight's own, a magnified sight's far plane, else the gun's default; that plane is
+    // in the gun root's frame), no further forward than the far plane allows (UpdateFarPlane: just behind the nearest magnified
+    // sight's eyepiece, its eye guard off it). The game works those out again as the sights change only in first person; this mod's
+    // view is third person, and they are worked out for it as the sights change (Scopes.DepthAsFirstPerson).
+    private static float EyeDepth(ProceduralWeaponAnimation animation)
     {
         var hands = animation.HandsContainer;
-        if (hands == null)
-            return null;
-        string? named = Scopes.Current(animation)?.Mod?.CustomAimPlane;
-        if (!string.IsNullOrEmpty(named) && hands.CustomAimPlanes != null)
-            foreach (WeaponPrefab.AimPlane plane in hands.CustomAimPlanes)
-                if (plane != null && plane.Name == named)
-                    return plane;
-        return hands.DefaultAimPlane;
+        WeaponPrefab.AimPlane? plane = animation._currentAimingPlane ?? hands.DefaultAimPlane;
+        if (plane == null)
+            return float.NaN;
+        float shift = hands.Weapon.localPosition.y;
+        float depth = plane.Depth;
+        if (animation._farPlane != null)
+            depth = Mathf.Min(depth, animation._farPlane.Depth - shift);
+        return depth + shift;
     }
 
     private static float SightRelief(ProceduralWeaponAnimation animation, Transform bone)
@@ -1761,12 +1761,12 @@ internal static class AimArms
         if (animation.HandsContainer == null || animation.HandsContainer.Weapon == null)
             return 0f;
 
-        WeaponPrefab.AimPlane? plane = AimPlane(animation);
-        if (plane == null)
+        float eye = EyeDepth(animation);
+        if (float.IsNaN(eye))
             return 0f;
 
         float boneDepth = 0f - animation.HandsContainer.Weapon.InverseTransformPoint(bone.position).y;
-        return boneDepth - plane.Depth;
+        return boneDepth - eye;
     }
 
     internal static void Release(Player? player)

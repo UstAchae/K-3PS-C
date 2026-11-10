@@ -23,6 +23,8 @@ internal static class AimPatches
             prefix: Hook(typeof(AimArms), nameof(AimArms.SetAimingPrefix)));
         Patch(harmony, AccessTools.Method(typeof(ProceduralWeaponAnimation), "FindAimTransforms"),
             postfix: Hook(typeof(IronSightAlignment), nameof(IronSightAlignment.Invalidate)));
+        Patch(harmony, AccessTools.Method(typeof(ProceduralWeaponAnimation), "FindAimTransforms"),
+            postfix: Hook(typeof(Scopes), nameof(Scopes.DepthAsFirstPerson)));
         Patch(harmony, AccessTools.Method(typeof(PlayerBones), nameof(PlayerBones.RotateHead)),
             prefix: Hook(typeof(AimArms), nameof(AimArms.RotateHeadPrefix)),
             postfix: Hook(typeof(AimArms), nameof(AimArms.RotateHeadPostfix), Priority.Last));
