@@ -8,7 +8,7 @@ internal static class DiagBreath
 {
     private static float _start = -1f;
     private static int _frames;
-    private static Vector2 _headMin, _headMax, _camMin, _camMax, _lineMin, _lineMax, _placeMin, _placeMax;
+    private static Vector2 _rawHeadMin, _rawHeadMax, _headMin, _headMax, _camMin, _camMax, _lineMin, _lineMax, _placeMin, _placeMax;
 
     private static void Take(Vector2 v, ref Vector2 min, ref Vector2 max, bool first)
     {
@@ -70,6 +70,7 @@ internal static class DiagBreath
         }
         _frames++;
         Take(Angles(Quaternion.Inverse(look) * headRotation), ref _headMin, ref _headMax, first);
+        Take(Angles(AimArms.DiagRawHead), ref _rawHeadMin, ref _rawHeadMax, first);
         Take(Angles(Quaternion.Inverse(look) * cameraRotation), ref _camMin, ref _camMax, first);
         Transform? bone = Scopes.Current(player.ProceduralWeaponAnimation)?.Bone;
         if (bone != null)
@@ -91,7 +92,7 @@ internal static class DiagBreath
                     + $" overweight={physical.Overweight:F2}";
         }
         catch (System.Exception e) { body = " body? " + e.Message; }
-        NewCameraPlugin.Log?.LogInfo($"DiagBreath holding={holding} frames={_frames} sway={AimArms.DiagSway}"
+        NewCameraPlugin.Log?.LogInfo($"DiagBreath holding={holding} frames={_frames} {AimArms.DiagState} sway={AimArms.DiagSway} rawHead={_rawHeadMax - _rawHeadMin:F3}"
             + $" head(p,y)={_headMax - _headMin:F3} cam={_camMax - _camMin:F3} line={_lineMax - _lineMin:F3} deg place(x,y)={_placeMax - _placeMin:F2} mm"
             + $" camMean={(_camMax + _camMin) * 0.5f:F2}" + body + PartsText());
         _start = -1f;

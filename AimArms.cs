@@ -1487,6 +1487,8 @@ internal static class AimArms
     }
 
     internal static Quaternion DiagLook => _smoothLook;  // TEMPORARY (DiagBreath)
+    internal static Quaternion DiagRawHead => _headTurnRaw;
+    internal static string DiagState => $"chest={ChestStance.Active} freeLook={_smoothedHead.magnitude:F3} release={_release:F2}";
     internal static string DiagSway => $"gun {Now.GunMove:F2}/{Now.GunTurn:F2} arm {Now.ArmMove:F2}/{Now.ArmTurn:F2} head {Now.HeadFollow:F2} breath {Now.Breath:F2} lock {_headLock:F2}";
 
     private static Quaternion AimTurn()
