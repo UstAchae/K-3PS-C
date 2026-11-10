@@ -274,7 +274,6 @@ internal static class AimArms
         _mounted = player.MovementContext != null && player.MovementContext.IsInMountedState;
         UpdateHandAction(player);
         PlayerBones bones = player.PlayerBones;
-        PutBackUnposedWeapon(bones?.Weapon_Root_Anim);
         bool aiming = player.HandsController != null && player.HandsController.IsAiming;
         int sightId = 0;
         Vector3 target = Vector3.zero;
@@ -355,6 +354,7 @@ internal static class AimArms
                 Vector3 placed = sightPosition + target;
                 target = steadyPosition + delay * (placed - bodyPosition) - sightPosition;
                 turn = delay * turn;
+                NoteAim(animation, bone, ironAligned, sightForward, turn, sightId);
             }
             else if (!aiming && FollowDelay > 0f && player.HandsController is Player.FirearmController && bones.Weapon_Root_Anim != null)
             {
@@ -506,41 +506,11 @@ internal static class AimArms
 
         if (weapon == null)
             return;
-        _weaponBefore = weapon;
-        _weaponBeforePosition = weapon.position;
-        _weaponBeforeRotation = weapon.rotation;
         weapon.SetPositionAndRotation(weaponPosition, weaponRotation);
-        _weaponSetPosition = weapon.position;
-        _weaponSetRotation = weapon.rotation;
-        _weaponSetFrame = Time.frameCount;
         _shotFrame = Time.frameCount;
         _shotFireport = player.HandsController is Player.FirearmController firearm && firearm.CurrentFireport?.Original != null
             ? firearm.CurrentFireport.Original.position
             : (Vector3?)null;
-    }
-
-    // The gun's root as the game's animation left it, before this mod carried it, and as carried. A gun whose parts were changed in a raid
-    // was found not posed again by the game's animation the next frame: still where it had been carried, it was carried on from there,
-    // and the gun and the hands with it went round and round. So, found just as it was left, it is put back as the animation had it.
-    private static Transform? _weaponBefore;
-    private static Vector3 _weaponBeforePosition, _weaponSetPosition;
-    private static Quaternion _weaponBeforeRotation = Quaternion.identity, _weaponSetRotation = Quaternion.identity;
-    private static int _weaponSetFrame = -10;
-    private static Transform? _unposedNoted;
-
-    private static void PutBackUnposedWeapon(Transform? weapon)
-    {
-        if (weapon == null || !ReferenceEquals(weapon, _weaponBefore) || _weaponSetFrame != Time.frameCount - 1)
-            return;
-        if (weapon.position != _weaponSetPosition || weapon.rotation != _weaponSetRotation)
-            return;
-        weapon.SetPositionAndRotation(_weaponBeforePosition, _weaponBeforeRotation);
-        // Temporary: that this happens.
-        if (!ReferenceEquals(_unposedNoted, weapon))
-        {
-            _unposedNoted = weapon;
-            NewCameraPlugin.Log?.LogInfo($"Aim check: the gun's root {weapon.name} was not posed again by the game's animation; put back before carrying it");
-        }
     }
 
     private static void StartHandAction(float minSeconds)
@@ -1718,6 +1688,31 @@ internal static class AimArms
         if (Mathf.Abs(yaw) < 0.01f && Mathf.Abs(down) < 0.01f)
             return Quaternion.identity;
         return LookTurn(player.MovementContext, yaw, down);
+    }
+
+    // Temporary: the sight the gun is placed by as it is aimed, and what the gun is turned by, the first frames after it changes.
+    private static int _notedSight, _notedFrames;
+    private static void NoteAim(ProceduralWeaponAnimation animation, Transform bone, bool ironAligned, Vector3 sightForward, Quaternion turn, int sightId)
+    {
+        if (sightId != _notedSight)
+        {
+            _notedSight = sightId;
+            _notedFrames = 0;
+            Transform? weapon = animation.HandsContainer?.Weapon;
+            Transform? root = animation.HandsContainer?.WeaponRootAnim;
+            var scope = Scopes.Current(animation);
+            var names = new System.Text.StringBuilder();
+            foreach (var s in animation.ScopeAimTransforms)
+                names.Append(s.Bone != null ? s.Bone.name : "null").Append(s.Mod != null ? "(" + s.Mod.Item.Template._name + ")" : "(no mod)").Append(' ');
+            string path = bone.name;
+            for (Transform? t = bone.parent; t != null && t != root; t = t.parent)
+                path = t.name + "/" + path;
+            float along = weapon != null ? Vector3.Angle(sightForward, -weapon.up) : -1f;
+            NewCameraPlugin.Log?.LogInfo($"Aim check: sight {path}, under the gun {(root != null && bone.IsChildOf(root))}, active {bone.gameObject.activeInHierarchy}, mod {(scope?.Mod != null ? scope.Mod.Item.Template._name : "none")}, optic {scope?.IsOptic}, align {scope?.AlignIfAvailable}, iron aligned {ironAligned}, its line off the barrel {along:F1} deg, sights [{names}]");
+        }
+        if (_notedFrames < 90 && _notedFrames % 15 == 0)
+            NewCameraPlugin.Log?.LogInfo($"Aim check: frame {_notedFrames}, the gun turned {Quaternion.Angle(Quaternion.identity, turn):F1} deg, the sight's line off the barrel {(animation.HandsContainer?.Weapon != null ? Vector3.Angle(sightForward, -animation.HandsContainer.Weapon.up) : -1f):F1} deg");
+        _notedFrames++;
     }
 
     private static bool ResolveIronSight(ProceduralWeaponAnimation animation, Transform bone, out Vector3 position, out Vector3 forward)
