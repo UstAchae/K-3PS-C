@@ -181,29 +181,29 @@ Shader "Justachae/NVG/Defocus" {
     if (n.a < 1e-4)
      return f;
     float r = Radius(i.uv);
-    float3 behind = f.rgb;
     // Behind a near thing (where the frame has only the thing itself): what is about it, filled in from its edge
-    // inward, from the finest level that has enough of it here to the coarsest: by its edge as sharp as the frame's
-    // own just past it, so no line is left where a thin thing was; further in, blurred wider and wider.
-    float near = Nearness(r);
-    if (near > 0) {
-     float3 fill = 0;
-     float need = 1;
-     for (int level = 0; level < 4 && need > 1e-3; level++) {
-      float4 far = Far(level, i.uv);
-      if (far.a < 1e-3)
-       continue;
-      float take = need * saturate(far.a * 2);
-      fill += far.rgb / far.a * take;
-      need -= take;
-     }
-     fill += (n.a > 1e-4 ? n.rgb / n.a : f.rgb) * need;
-     behind = lerp(f.rgb, fill, near);
+    // inward, finest level first, each level taken as far as it has any of it, and all of it taken as the mean of
+    // what was found: never the thing's own colour (a dark thing's colour made in there drew its outline back).
+    float3 fill = 0;
+    float found = 0, need = 1;
+    for (int level = 0; level < 4 && need > 1e-3; level++) {
+     float4 far = Far(level, i.uv);
+     if (far.a < 1e-3)
+      continue;
+     float take = need * saturate(far.a * 2);
+     fill += far.rgb / far.a * take;
+     found += take;
+     need -= take;
     }
+    float soft = saturate(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0).a);
+    float3 colour = n.a > 1e-3 ? n.rgb / n.a : f.rgb;
+    fill = found > 1e-3 ? fill / found : colour;
+    // The frame's own where nothing near is; what is filled in where something is, eased between them by the same
+    // soft shape, so no line is drawn where the frame's own gives way.
+    float3 behind = lerp(f.rgb, fill, max(Nearness(r), saturate(soft * 2)));
     // How solid the spread thing shows: its own shape (what of the frame is near), blurred wide and smooth, so its
     // outline fades softly both ways and a thin part, a narrow line in it, all but goes; its colour the discs'.
-    float solid = saturate(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0).a);
-    float3 colour = n.a > 1e-3 ? n.rgb / n.a : behind;
+    float solid = soft;
     if (_DefocusShow > 2.5) return float4(solid.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
     if (_DefocusShow > 0.5) return float4(behind, 1);

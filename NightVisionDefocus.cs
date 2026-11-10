@@ -150,7 +150,7 @@ internal static partial class NightVisionEyepieces
         return true;
     }
 
-    // TEMP DIAG: once, five seconds into the defocus, each of its layers saved as a picture (BepInEx/defocus-dump):
+    // TEMP DIAG: once, three seconds into an aim through the defocus, each of its layers saved as a picture (BepInEx/defocus-dump):
     // the frame, what stands behind, the discs' colour, how solid, and the frame as made. Each scaled so its brightest
     // hundredth is white, as the frame is dark before the tube's gain.
     private static float _dumpStart = -1f;
@@ -160,9 +160,16 @@ internal static partial class NightVisionEyepieces
     {
         if (_dumped)
             return;
+        // Taken once the gun has been aimed for three seconds.
+        bool aimed = Comfort.Common.Singleton<EFT.GameWorld>.Instance?.MainPlayer?.HandsController?.IsAiming == true;
+        if (!aimed)
+        {
+            _dumpStart = -1f;
+            return;
+        }
         if (_dumpStart < 0f)
             _dumpStart = Time.time;
-        if (Time.time - _dumpStart < 5f)
+        if (Time.time - _dumpStart < 3f)
             return;
         _dumped = true;
         string folder = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump");
