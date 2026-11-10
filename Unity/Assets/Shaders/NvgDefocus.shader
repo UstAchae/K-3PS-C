@@ -198,9 +198,10 @@ Shader "Justachae/NVG/Defocus" {
     float soft = saturate(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0).a);
     float3 colour = n.a > 1e-3 ? n.rgb / n.a : f.rgb;
     fill = found > 1e-3 ? fill / found : colour;
-    // The frame's own where nothing near is; what is filled in where something is, eased between them by the same
-    // soft shape, so no line is drawn where the frame's own gives way.
-    float3 behind = lerp(f.rgb, fill, max(Nearness(r), saturate(soft * 2)));
+    // The frame's own where nothing near is; what is filled in where something is and all about it, as far as the
+    // soft shape reaches (an opening's edge too: a sight's window kept the frame's own sharp scene to a line along
+    // its edge, against what was filled in under its frame).
+    float3 behind = lerp(f.rgb, fill, max(Nearness(r), smoothstep(0, 0.35, soft)));
     // How solid the spread thing shows: its own shape (what of the frame is near), blurred wide and smooth, so its
     // outline fades softly both ways and a thin part, a narrow line in it, all but goes; its colour the discs'.
     float solid = soft;
