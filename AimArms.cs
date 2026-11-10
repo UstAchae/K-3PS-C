@@ -530,9 +530,19 @@ internal static class AimArms
             && ReferenceEquals(firearm.FirearmsAnimator, animator);
     }
 
-    internal static void FireModePostfix(FirearmsAnimator __instance, bool skipAnimation)
+    // A switch of the fire mode, not the mode set again as it was: other mods (an animator updater) set it every frame, and each call
+    // taken as a switch kept the aimed gun chasing its place, the sway through it whatever the settings (the breath held, 跟随头部).
+    private static FirearmsAnimator? _fireModeOf;
+    private static int _fireMode = -1;
+
+    internal static void FireModePostfix(FirearmsAnimator __instance, Weapon.EFireMode __0, bool skipAnimation)
     {
-        if (NewCameraSwitch.Enabled && !skipAnimation && IsMainFirearmsAnimator(__instance))
+        if (!NewCameraSwitch.Enabled || !IsMainFirearmsAnimator(__instance))
+            return;
+        bool switched = ReferenceEquals(_fireModeOf, __instance) && _fireMode != (int)__0;
+        _fireModeOf = __instance;
+        _fireMode = (int)__0;
+        if (switched && !skipAnimation)
             StartHandAction(FireModeMinSeconds);
     }
 
