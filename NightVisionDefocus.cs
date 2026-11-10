@@ -141,10 +141,22 @@ internal static partial class NightVisionEyepieces
         }
         DiagDefocus(frame, pixelsPerRadian, ahead); // TEMP DIAG
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
-        // Its outline: the near shape (what of the frame is near, at an eighth of its size) blurred wide and smooth, and
-        // again twice as wide for thin parts; its colour (weighted toward what is nearer) blurred alike.
-        Smoothed(_levelColor[1]!, defocus, out RenderTexture soft, out RenderTexture wide);
-        Smoothed(_levelCoc[1]!, defocus, out RenderTexture cover, out RenderTexture coverWide);
+        // What is close (the gun, the hands, spread nearly the most): its shape at an eighth of the size blurred wide and
+        // smooth, and again twice as wide for thin parts; its colour (weighted toward the nearer) blurred alike. What is
+        // near but not close is spread by its own discs (above).
+        RenderTexture closeColour = Temporary(width, height), closeCover = Temporary(width, height);
+        Graphics.Blit(frame, closeColour, defocus, 9);
+        Graphics.Blit(frame, closeCover, defocus, 10);
+        RenderTexture closeColourHalf = Temporary(Mathf.Max(width / 2, 1), Mathf.Max(height / 2, 1)),
+            closeCoverHalf = Temporary(Mathf.Max(width / 2, 1), Mathf.Max(height / 2, 1));
+        Graphics.Blit(closeColour, closeColourHalf, defocus, 7);
+        Graphics.Blit(closeCover, closeCoverHalf, defocus, 7);
+        RenderTexture.ReleaseTemporary(closeColour);
+        RenderTexture.ReleaseTemporary(closeCover);
+        Smoothed(closeColourHalf, defocus, out RenderTexture soft, out RenderTexture wide);
+        Smoothed(closeCoverHalf, defocus, out RenderTexture cover, out RenderTexture coverWide);
+        RenderTexture.ReleaseTemporary(closeColourHalf);
+        RenderTexture.ReleaseTemporary(closeCoverHalf);
         defocus.SetTexture(ShapeId, soft);
         defocus.SetTexture(ShapeWideId, wide);
         defocus.SetTexture(CoverId, cover);
