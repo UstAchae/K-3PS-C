@@ -222,7 +222,10 @@ Shader "Justachae/NVG/Defocus" {
     // The frame's own where nothing near is; what is filled in where something is and all about it, as far as the
     // soft shape reaches (an opening's edge too: a sight's window kept the frame's own sharp scene to a line along
     // its edge, against what was filled in under its frame).
-    float3 behind = lerp(f.rgb, fill, max(Nearness(r), smoothstep(0, 0.35, soft)));
+    // Gently, as the square of how much the shape covers: taken whole wherever it covered at all, what was filled in
+    // (darker, softer) showed as a veil of the thing's shape out to the blur's last reach.
+    float reach = saturate(soft * 1.5);
+    float3 behind = lerp(f.rgb, fill, max(Nearness(r), reach * reach));
     // How solid the spread thing shows: its own shape (what of the frame is near), blurred wide and smooth, so its
     // outline fades softly both ways and a thin part, a narrow line in it, all but goes; its colour the discs'.
     float solid = soft;
