@@ -96,6 +96,9 @@ internal static partial class NightVisionEyepieces
     {
         if (NearBlurDistance <= 0f || NearBlurLimit <= 0f || !AtObjective(camera, out Camera view))
             return frame;
+        // As a lens makes it, with what lies behind the player's own drawn (NightVisionDefocus.cs).
+        if (DefocusThrough(view, frame, ref made))
+            return made!;
 
         float tanUp = Mathf.Tan(view.fieldOfView * 0.5f * Mathf.Deg2Rad);
         int width = Mathf.Max(frame.width / Scale, 1), height = Mathf.Max(frame.height / Scale, 1);

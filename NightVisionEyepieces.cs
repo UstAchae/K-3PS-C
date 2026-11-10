@@ -527,6 +527,8 @@ internal static partial class NightVisionEyepieces
                 _directShader = shader;
             else if (shader.name == "Justachae/NVG/Objective")
                 _objectiveShader = shader;
+            else if (shader.name == "Justachae/NVG/Defocus")
+                _defocusShader = shader;
             else if (shader.name == "Justachae/NVG/Tube")
                 _tubeShader = shader;
         }
@@ -537,6 +539,8 @@ internal static partial class NightVisionEyepieces
         _binocularMaterial = new Material(_binocularShader) { name = "Justachae NVG eyepieces", hideFlags = HideFlags.DontSave };
         if (_objectiveShader != null)
             _objective = new Material(_objectiveShader) { name = "Justachae NVG objective", hideFlags = HideFlags.DontSave };
+        if (_defocusShader != null)
+            _defocus = new Material(_defocusShader) { name = "Justachae NVG objective defocus", hideFlags = HideFlags.DontSave };
         return true;
     }
 

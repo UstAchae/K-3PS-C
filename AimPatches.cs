@@ -62,6 +62,8 @@ internal static class AimPatches
             prefix: Hook(typeof(CalibratedSight), nameof(CalibratedSight.TranslatePrefix)));
         Patch(harmony, AccessTools.Method(typeof(Player), nameof(Player.GetRotationMultiplier)),
             postfix: Hook(typeof(ChestStance), nameof(ChestStance.RotationPostfix)));
+        Patch(harmony, AccessTools.Method(typeof(Player), "OnItemAddedOrRemoved"),
+            postfix: Hook(typeof(NightVisionEyepieces), nameof(NightVisionEyepieces.ItemMovedPostfix)));
         Patch(harmony, AccessTools.Method(typeof(MovementContext), nameof(MovementContext.SetAimingSlowdown)),
             prefix: Hook(typeof(ChestStance), nameof(ChestStance.SlowdownPrefix)));
         Patch(harmony, AccessTools.Method(typeof(ProceduralWeaponAnimation), nameof(ProceduralWeaponAnimation.ProcessEffectors)),
