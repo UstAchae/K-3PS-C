@@ -14,6 +14,8 @@
 //         the lens's light as it blocks. Behind a near thing's own edge the frame has only the thing itself: what is
 //         about it, not near, spread as wide, stands for what lies behind it there.
 // Pass 6: how much of each part of the frame is spread (0 to 1), for the tube's grain (EaseGrain).
+// Pass 7: a level halved: four bilinear taps a texel apart, the four by four under it weighted as a tent, smoother
+//         from frame to frame than the two by two alone.
 // Pass 0 is left empty, so the others keep their numbers.
 Shader "Justachae/NVG/Defocus" {
  Properties { _MainTex ("frame", 2D) = "black" {} }
@@ -179,7 +181,7 @@ Shader "Justachae/NVG/Defocus" {
      // Behind a near thing: what is about it and not near, spread about as wide as its discs (each level's pixel is
      // 1, 2, 4, 8 quarter-size ones), from the first level that has any of it; none at all: the thing's own colour.
      behind = n.a > 1e-4 ? n.rgb / n.a : f.rgb;
-     int start = (int)clamp(floor(log2(max(r, 1) * 0.5)), 0, 3);
+     int start = (int)clamp(floor(log2(max(r, 1) / 6)), 0, 3);
      for (int level = start; level < 4; level++) {
       float4 far = Far(level, i.uv);
       if (far.a > 0.05) {
@@ -197,6 +199,17 @@ Shader "Justachae/NVG/Defocus" {
    #pragma vertex vert_img
    #pragma fragment frag
    float4 frag (v2f_img i) : SV_Target { return saturate(Near(i.uv).a); }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   float4 frag (v2f_img i) : SV_Target {
+    float2 t = _MainTex_TexelSize.xy;
+    return 0.25 * (tex2D(_MainTex, i.uv + float2(-t.x, -t.y)) + tex2D(_MainTex, i.uv + float2(t.x, -t.y))
+     + tex2D(_MainTex, i.uv + float2(-t.x, t.y)) + tex2D(_MainTex, i.uv + float2(t.x, t.y)));
+   }
    ENDCG
   }
  }

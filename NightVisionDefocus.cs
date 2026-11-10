@@ -10,7 +10,7 @@ namespace EFTNewCamera;
 // toward DefocusMostDegrees instead: the arms and the gun stay things seen, softly, the nearer the softer, never at a
 // fixed most. Each point near enough to be spread more than a quarter-size pixel is drawn as its disc
 // (NvgDefocus.shader): the small ones at a quarter of the frame's size, the larger at an eighth, a sixteenth and a
-// thirty-second, so no disc is more than a few pixels across where it is drawn. What is near is laid over what lies
+// thirty-second, each where its disc is 6 to 12 of that level's pixels across. What is near is laid over what lies
 // behind it with as much of the lens's light as it blocks: through a sight's window, the scene beyond, sharp; behind
 // its own edge, where the frame has nothing but the thing itself, what is about it spread as wide (NvgDefocus.shader).
 internal static partial class NightVisionEyepieces
@@ -18,7 +18,10 @@ internal static partial class NightVisionEyepieces
     private const float DefocusAperture = 0.0225f;      // the objective's, 27 mm at f/1.2 (as the tritium's)
     private const float DefocusMostDegrees = 3f;        // what a disc's radius eases toward, nearer and nearer
     private const int DefocusScale = 4;
-    private const int DefocusLevels = 4;                // radii up to 4, 8, 16 and beyond quarter-size pixels
+    private const int DefocusLevels = 4;                // radii up to 12, 24, 48 and beyond quarter-size pixels
+    // A disc is drawn where its radius is 6 to 12 of the level's pixels: coarser, a pixel's mean of what lies under it
+    // jumped from frame to frame as the view moved, and what was spread rippled like water.
+    private const float DefocusBand = 12f;
 
     private static Shader? _defocusShader;
     private static Material? _defocus;
@@ -72,9 +75,9 @@ internal static partial class NightVisionEyepieces
             }
             else
             {
-                Graphics.Blit(_levelColor[level - 1], _levelColor[level]);
-                Graphics.Blit(_levelCoc[level - 1], _levelCoc[level]);
-                Graphics.Blit(_levelFar[level - 1], _levelFar[level]);
+                Graphics.Blit(_levelColor[level - 1], _levelColor[level], defocus, 7);
+                Graphics.Blit(_levelCoc[level - 1], _levelCoc[level], defocus, 7);
+                Graphics.Blit(_levelFar[level - 1], _levelFar[level], defocus, 7);
             }
         }
 
@@ -94,7 +97,7 @@ internal static partial class NightVisionEyepieces
             // in quarter-size pixels.
             block.SetVector(GridId, new Vector4(acc.width, acc.height, flip, 1 << level));
             // The radii (quarter-size pixels) this level draws: above the last level's, up to twice that.
-            float least = level == 0 ? 0f : 4f * (1 << (level - 1)), most = level == DefocusLevels - 1 ? 1e6f : 4f * (1 << level);
+            float least = level == 0 ? 0f : DefocusBand * (1 << (level - 1)), most = level == DefocusLevels - 1 ? 1e6f : DefocusBand * (1 << level);
             block.SetVector(BandId, new Vector4(least, most, 0f, 0f));
             discs.DrawProcedural(Matrix4x4.identity, defocus, 4, MeshTopology.Triangles, acc.width * acc.height * 6, 1, block);
         }
