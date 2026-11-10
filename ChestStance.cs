@@ -24,7 +24,7 @@ internal static class ChestStance
     internal static bool Enabled = true;
     internal static KeyCode Key = KeyCode.Mouse1;  // the aim key as bound in the game (it does not report a release)
     internal static float HoldSeconds = 0.25f;
-    internal static float Drop = 0.17f, Ahead = 0.05f, Side = -0.05f;  // the gun's own origin from the eye's line (m)
+    internal static float Drop = 0.17f, Ahead = 0f, Side = -0.05f;  // the gun's own origin from the eye's line (m)
     internal static float Cant = 30f;                                   // the gun's turn about its line of sight (degrees, top to the left)
 
     internal static bool Active { get; private set; }

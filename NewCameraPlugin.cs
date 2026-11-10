@@ -409,56 +409,13 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
                 new AcceptableValueList<string>(rework, RecoilMode.Game)));
         recoil.SettingChanged += (_, _) => RecoilMode.Set(recoil.Value == rework);
         RecoilMode.Set(recoil.Value == rework);
-        _aimDistance = SettingsLayout.Bind(Config, "瞄准", "前后距离", -0.05f,
-            new ConfigDescription("瞄准后沿镜头前方向移动枪，单位为米。负值让枪离镜头更近。",
-                new AcceptableValueRange<float>(AimDistanceMin, AimDistanceMax)));
-        _aimDistanceFarther = SettingsLayout.Bind(Config, "瞄准", "前后距离调远快捷键", new KeyboardShortcut(KeyCode.Equals),
-            "瞄准时按住，瞄准的前后距离慢慢变大，枪离镜头更远。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
-        _aimDistanceCloser = SettingsLayout.Bind(Config, "瞄准", "前后距离调近快捷键", new KeyboardShortcut(KeyCode.Minus),
-            "瞄准时按住，瞄准的前后距离慢慢变小，枪离镜头更近。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
         ConfigEntry<float> recoilStrength = SettingsLayout.Bind(Config, "瞄准", "后坐力力度", 1f,
             new ConfigDescription("原版后坐力的力度：枪往后顶、枪口上翻、镜头跟着枪口转、镜头自己的那一下，一起按这个数放大或缩小。1 是原版第一人称，0 是都没有。子弹跟着枪口走。“后坐力”选 SPTRecoilReworkLegacy 时不起作用（那时按它自己的设置）。",
                 new AcceptableValueRange<float>(0f, 2f)));
         recoilStrength.SettingChanged += (_, _) => AimArms.RecoilStrength = recoilStrength.Value;
         AimArms.RecoilStrength = recoilStrength.Value;
-        _aimDistance.SettingChanged += (_, _) => AimArms.ForwardDistance = _aimDistance.Value;
-        AimArms.ForwardDistance = _aimDistance.Value;
     }
 
-    private const float AimDistanceMin = -0.10f;
-    private const float AimDistanceMax = 0f;
-    private const float AimDistanceSpeed = 0.05f;
-    private ConfigEntry<float>? _aimDistance;
-    private ConfigEntry<KeyboardShortcut>? _aimDistanceFarther;
-    private ConfigEntry<KeyboardShortcut>? _aimDistanceCloser;
-
-    private void AdjustAimDistance()
-    {
-        if (_aimDistance == null || _aimDistanceFarther == null || _aimDistanceCloser == null || !NewCameraSwitch.Enabled)
-            return;
-        // Only while aiming: the same keys set the helmet mount at the hip.
-        // Not in the stance at the chest (its place is set in the settings).
-        bool aiming = Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer?.ProceduralWeaponAnimation?.IsAiming == true && !ChestStance.Active;
-        float step = 0f;
-        if (aiming && _aimDistanceFarther.Value.IsPressed())
-            step += AimDistanceSpeed * Time.deltaTime;
-        if (aiming && _aimDistanceCloser.Value.IsPressed())
-            step -= AimDistanceSpeed * Time.deltaTime;
-
-        // Setting the config value saves the whole file, so it is written once when the key is let go.
-        if (step != 0f)
-        {
-            AimArms.ForwardDistance = Mathf.Clamp(AimArms.ForwardDistance + step, AimDistanceMin, AimDistanceMax);
-            _aimDistanceHeld = true;
-        }
-        else if (_aimDistanceHeld)
-        {
-            _aimDistanceHeld = false;
-            _aimDistance.Value = AimArms.ForwardDistance;
-        }
-    }
-
-    private bool _aimDistanceHeld;
 
     // The follow delay and the view's share of the recoil are the code's own (AimArms), with no settings.
     private void BindSway()
@@ -483,8 +440,8 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             new ConfigDescription("胸口抵肩时，枪身原点在视线下方多少（负数是在上方）。只看枪本身，和装了什么瞄具无关。", new AcceptableValueRange<float>(-0.1f, 0.4f)));
         ConfigEntry<float> side = SettingsLayout.Bind(Config, section, "枪身原点偏右（米）", -0.05f,
             new ConfigDescription("胸口抵肩时，枪身原点在视线右边多少（负数是往左）。只看枪本身，和装了什么瞄具无关。", new AcceptableValueRange<float>(-0.15f, 0.15f)));
-        ConfigEntry<float> ahead = SettingsLayout.Bind(Config, section, "枪身原点靠前（米）", 0.05f,
-            new ConfigDescription("胸口抵肩时，枪身原点比平时开镜的距离再往前多少（负数是往后）。只看枪本身，和装了什么瞄具无关。", new AcceptableValueRange<float>(-0.2f, 0.3f)));
+        ConfigEntry<float> ahead = SettingsLayout.Bind(Config, section, "枪身原点靠前（米）", 0f,
+            new ConfigDescription("胸口抵肩时，枪身原点在开镜时的前后位置上再往前多少（负数是往后）。0 是和开镜时一样远：前后位置和开镜一样，按原版对这把枪、这个瞄具的算法算出来。", new AcceptableValueRange<float>(-0.2f, 0.3f)));
         ConfigEntry<float> cant = SettingsLayout.Bind(Config, section, "倾斜（度）", 20f,
             new ConfigDescription("胸口抵肩时，枪绕着瞄准线转多少度，正数是枪的上面往左倒（向内），负数往右。", new AcceptableValueRange<float>(-60f, 60f)));
         // Two decimals: the slider's value rounded to hundredths of a second.
@@ -630,7 +587,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void Update()
     {
         OpticElevation.UpdateHeld();
-        AdjustAimDistance();
         DovetailSlots.Update();
     }
 
