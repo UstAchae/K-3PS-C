@@ -18,6 +18,9 @@ internal static partial class NightVisionEyepieces
     private const float DefocusAperture = 0.0225f;      // the objective's, 27 mm at f/1.2 (as the tritium's)
     private const float DefocusMostDegrees = 3f;        // what a disc's radius eases toward, nearer and nearer
     private const int DefocusScale = 4;
+    // How many times (each way) a near thing's shape and colour are blurred for its soft outline (F12 头戴式成像装备
+    // 近处轮廓模糊遍数): each one more widens it about as the square root of the count.
+    internal static int DefocusOutlinePasses = 3;
     private const int DefocusLevels = 4;                // radii up to 12, 24, 48 and beyond quarter-size pixels
     // A disc is drawn where its radius is 6 to 12 of the level's pixels: coarser, a pixel's mean of what lies under it
     // jumped from frame to frame as the view moved, and what was spread rippled like water.
@@ -59,7 +62,7 @@ internal static partial class NightVisionEyepieces
 
     private static void Gaussians(RenderTexture texture, RenderTexture across, Material defocus)
     {
-        for (int pass = 0; pass < 3; pass++)
+        for (int pass = 0; pass < DefocusOutlinePasses; pass++)
         {
             defocus.SetVector(StepId, new Vector2(1f, 0f));
             Graphics.Blit(texture, across, defocus, 8);
