@@ -194,7 +194,8 @@ Shader "Justachae/NVG/Defocus" {
    float4 frag (v2f_img i) : SV_Target {
     float4 f = tex2D(_MainTex, i.uv);
     float4 n = Near(i.uv);
-    if (n.a < 1e-4)
+    // Nothing near about it at all (its blur reaches past its discs, so taken from that): the frame as it is.
+    if (n.a < 1e-4 && _CoverWide.SampleLevel(sampler_linear_clamp, i.uv, 0).g < 1e-4 && _Cover.SampleLevel(sampler_linear_clamp, i.uv, 0).g < 1e-4)
      return f;
     float r = Radius(i.uv);
     // Behind a near thing (where the frame has only the thing itself): what is about it, filled in from its edge
@@ -222,30 +223,22 @@ Shader "Justachae/NVG/Defocus" {
     float coverWide = _CoverWide.SampleLevel(sampler_linear_clamp, i.uv, 0).g;
     float thin = (1 - smoothstep(0.2, 0.6, max(coverNarrow, coverWide))) * saturate(coverNarrow * 8);
     float4 shape = lerp(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0), _ShapeWide.SampleLevel(sampler_linear_clamp, i.uv, 0), thin);
-    float soft = saturate(lerp(coverNarrow, coverWide, thin));
+    // How much of the lens's light from a point behind the thing the thing blocks: its shape (what is near) blurred
+    // as its discs are, taken as it is (no curve on it): all within a thick thing, falling evenly through its edge to
+    // none as far out as its blur reaches; a thin part blocks little anywhere. What lies behind shows through as much
+    // as it is not blocked: sharp where it is far, only darker toward the thing, never a ring (one even fall).
+    float blocked = saturate(lerp(coverNarrow, coverWide, thin));
     float3 colour = shape.a > 1e-3 ? shape.rgb / shape.a : (n.a > 1e-3 ? n.rgb / n.a : f.rgb);
-    // Where little or nothing of what is about it was found (all about it is near too), its own colour, eased in.
+    // Where little or nothing of what is about it was found (all about it is near too, as at a table), its own colour,
+    // eased in: there all is the near things blurred together.
     fill = found > 1e-3 ? lerp(colour, fill / found, saturate(found * 2)) : colour;
-    // Behind: the frame's own far from the thing, easing into what was filled in (what is about it, never the thing
-    // itself) toward it, wholly that by its edge (where the soft shape is half), and on the thing itself. The whole
-    // frame blurred instead carried the thing's own dark out about it (a dark ring); the frame's own let onto the thing
-    // where it is thin left its sharp top showing; a switch right at its outline cut the scene behind there.
-    float3 behind = lerp(f.rgb, fill, max(Nearness(r), smoothstep(0, 0.5, soft)));
-    // How solid the spread thing shows: its own shape (what of the frame is near), blurred wide and smooth, so its
-    // outline fades softly both ways and a thin part, a narrow line in it, all but goes; its colour the discs'.
-    // Fading out from the thing both in how much it covers (an S: thin at its fringe, as before within) and in its
-    // shade (toward what lies behind as it thins): its spread colour is its own to the last of its fringe, and a faint
-    // but full black there drew a dark ring about it.
-    // Within the thing too: how deep in it a point is, from its cover blurred twice as wide (full only well within a
-    // thick thing, falling toward its edge), so it is darkest and most solid at its middle and fades out toward and
-    // past its edge, one gradient with the fringe outside it.
-    float depth = 0.5 * (soft + saturate(coverWide));
-    float solid = smoothstep(0, 1, depth);
-    colour = lerp(behind, colour, smoothstep(0, 0.8, depth));
-    if (_DefocusShow > 2.5) return float4(solid.xxx, 1);   // TEMP DIAG
+    // Behind: the frame's own where it is far; where the frame has the thing itself (and easing in toward its edge, so
+    // its sharp outline is not drawn), what is about it filled in.
+    float3 behind = lerp(f.rgb, fill, max(Nearness(r), smoothstep(0, 0.5, blocked)));
+    if (_DefocusShow > 2.5) return float4(blocked.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
     if (_DefocusShow > 0.5) return float4(behind, 1);
-    return float4(lerp(behind, colour, solid), f.a);
+    return float4(lerp(behind, colour, blocked), f.a);
    }
    ENDCG
   }
