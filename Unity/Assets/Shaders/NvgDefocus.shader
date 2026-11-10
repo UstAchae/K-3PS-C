@@ -182,17 +182,17 @@ Shader "Justachae/NVG/Defocus" {
      // Behind a near thing: what is about it and not near, spread about as wide as its discs (each level's pixel is
      // 1, 2, 4, 8 quarter-size ones), from the first level that has any of it; none at all: the thing's own colour.
      // Only along its edge (its discs' cover going from a half to three quarters): further in, the thing's own spread
-     // colour. What is about it slid along under its whole soft inside as the view swayed, like water.
+     // colour. And blurred far wider than the discs, from the coarsest level spread again over three of its pixels
+     // each way: what showed there kept its detail, and slid along under the edge as the view swayed, like water.
      float3 own = n.a > 1e-4 ? n.rgb / n.a : f.rgb;
-     behind = own;
-     int start = (int)clamp(floor(log2(max(r, 1) / 6)), 0, 3);
-     for (int level = start; level < 4; level++) {
-      float4 far = Far(level, i.uv);
-      if (far.a > 0.05) {
-       behind = lerp(far.rgb / far.a, own, saturate((n.a - 0.5) * 4));
-       break;
-      }
-     }
+     float w3, h3;
+     _Far3.GetDimensions(w3, h3);
+     float2 t3 = 1 / float2(w3, h3);
+     float4 far = 0;
+     for (int y = -1; y <= 1; y++)
+      for (int x = -1; x <= 1; x++)
+       far += Far(3, i.uv + float2(x, y) * 1.5 * t3) * ((2 - abs(x)) * (2 - abs(y)));
+     behind = far.a > 0.05 ? lerp(far.rgb / far.a, own, saturate((n.a - 0.5) * 4)) : own;
      behind = lerp(f.rgb, behind, near);
     }
     return float4(n.rgb + (1 - n.a) * behind, f.a);
