@@ -150,19 +150,15 @@ internal static partial class NightVisionEyepieces
         return true;
     }
 
-    // TEMP DIAG: five, fifteen and twenty-five seconds into the defocus, each of its layers saved as a picture (BepInEx/defocus-dump):
+    // TEMP DIAG: on F11, each of its layers saved as a picture (BepInEx/defocus-dump):
     // the frame, what stands behind, the discs' colour, how solid, and the frame as made. Each scaled so its brightest
     // hundredth is white, as the frame is dark before the tube's gain.
-    private static float _dumpStart = -1f;
     private static int _dumps;
     private static readonly int ShowId = Shader.PropertyToID("_DefocusShow");
     private static void DumpDefocus(RenderTexture frame, RenderTexture made, Material defocus)
     {
-        if (_dumps >= 3)
-            return;
-        if (_dumpStart < 0f)
-            _dumpStart = Time.time;
-        if (Time.time - _dumpStart < 5f + 10f * _dumps)
+        // On F11 (no other mod here binds it), as often as pressed.
+        if (!Input.GetKeyDown(KeyCode.F11))
             return;
         _dumps++;
         string folder = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump", _dumps.ToString());

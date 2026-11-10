@@ -39,11 +39,21 @@ Shader "Justachae/NVG/Defocus" {
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
   }
-  // A disc's radius (quarter-size pixels) for what the frame shows at uv: none through a sight's lens.
+  float4 _CameraDepthTexture_TexelSize;
+  // A disc's radius (quarter-size pixels) for what the frame shows at uv: none through a sight's lens. Taken from the
+  // nearest depth within two pixels each way: along a near thing's outline the frame's colour is the thing's and what
+  // lies beyond mixed (smoothed, scaled), while its depth is one or the other, and a ring of the thing's colour was
+  // left out of what is near and stayed sharp.
   float Radius(float2 uv) {
    if (InLens(uv))
     return 0;
-   float z = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
+   float2 o = 2 * _CameraDepthTexture_TexelSize.xy;
+   float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
+   float z = LinearEyeDepth(raw);
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(o.x, o.y))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(-o.x, o.y))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(o.x, -o.y))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(-o.x, -o.y))));
    float2 ray = (uv * 2 - 1) * _TanHalf;
    float d = max(z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z, 0.001);
    float lens = _DefocusLens.y * abs(1 / d - _DefocusLens.x);
@@ -197,7 +207,8 @@ Shader "Justachae/NVG/Defocus" {
     }
     float soft = saturate(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0).a);
     float3 colour = n.a > 1e-3 ? n.rgb / n.a : f.rgb;
-    fill = found > 1e-3 ? fill / found : colour;
+    // Where little or nothing of what is about it was found (all about it is near too), its own colour, eased in.
+    fill = found > 1e-3 ? lerp(colour, fill / found, saturate(found * 2)) : colour;
     // The frame's own where nothing near is; what is filled in where something is and all about it, as far as the
     // soft shape reaches (an opening's edge too: a sight's window kept the frame's own sharp scene to a line along
     // its edge, against what was filled in under its frame).
