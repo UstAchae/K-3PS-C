@@ -193,6 +193,7 @@ Shader "Justachae/NVG/Defocus" {
    #pragma target 3.5
    float4 frag (v2f_img i) : SV_Target {
     float4 f = tex2D(_MainTex, i.uv);
+    if (_DefocusShow > 3.5) return float4(Radius(i.uv) / _DefocusLens.w, InLens(i.uv) ? 1 : 0, 0, 1);   // TEMP DIAG
     float4 n = Near(i.uv);
     // Nothing near about it at all (its blur reaches past its discs, so taken from that): the frame as it is.
     if (n.a < 1e-4 && _CoverWide.SampleLevel(sampler_linear_clamp, i.uv, 0).g < 1e-4 && _Cover.SampleLevel(sampler_linear_clamp, i.uv, 0).g < 1e-4)

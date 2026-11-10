@@ -206,13 +206,13 @@ internal static partial class NightVisionEyepieces
         string folder = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump", _dumps.ToString());
         System.IO.Directory.CreateDirectory(folder);
         Save(frame, System.IO.Path.Combine(folder, "0-frame.png"));
-        string[] names = { "", "1-behind.png", "2-disc-colour.png", "3-solid.png" };
-        for (int show = 1; show <= 3; show++)
+        string[] names = { "", "1-behind.png", "2-disc-colour.png", "3-solid.png", "5-radius.png" };
+        for (int show = 1; show <= 4; show++)
         {
             RenderTexture layer = RenderTexture.GetTemporary(frame.width, frame.height, 0, RenderTextureFormat.ARGBHalf);
             defocus.SetFloat(ShowId, show);
             Graphics.Blit(frame, layer, defocus, 5);
-            Save(layer, System.IO.Path.Combine(folder, names[show]), show == 3);
+            Save(layer, System.IO.Path.Combine(folder, names[show]), show >= 3);
             RenderTexture.ReleaseTemporary(layer);
         }
         defocus.SetFloat(ShowId, 0f);
