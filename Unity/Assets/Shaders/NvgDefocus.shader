@@ -12,7 +12,7 @@
 // Pass 4: each pixel of a level drawn as its disc (procedural, six vertices a pixel), added; only radii in its band.
 // Pass 5: the frame as the lens lays it on the tube: what is near, spread, over what lies behind it, with as much of
 //         the lens's light as it blocks. Behind a near thing's own edge the frame has only the thing itself: what is
-//         about it, not near, spread as wide, stands for what lies behind it there.
+//         about it, not near, spread as wide, stands for what lies behind it there, along the edge only.
 // Pass 6: how much of each part of the frame is spread (0 to 1), for the tube's grain (EaseGrain).
 // Pass 7: a level halved: four bilinear taps a texel apart, the four by four under it weighted as a tent, smoother
 //         from frame to frame than the two by two alone.
@@ -180,12 +180,15 @@ Shader "Justachae/NVG/Defocus" {
     if (IsNear(r)) {
      // Behind a near thing: what is about it and not near, spread about as wide as its discs (each level's pixel is
      // 1, 2, 4, 8 quarter-size ones), from the first level that has any of it; none at all: the thing's own colour.
-     behind = n.a > 1e-4 ? n.rgb / n.a : f.rgb;
+     // Only along its edge (its discs' cover going from a half to three quarters): further in, the thing's own spread
+     // colour. What is about it slid along under its whole soft inside as the view swayed, like water.
+     float3 own = n.a > 1e-4 ? n.rgb / n.a : f.rgb;
+     behind = own;
      int start = (int)clamp(floor(log2(max(r, 1) / 6)), 0, 3);
      for (int level = start; level < 4; level++) {
       float4 far = Far(level, i.uv);
       if (far.a > 0.05) {
-       behind = far.rgb / far.a;
+       behind = lerp(far.rgb / far.a, own, saturate((n.a - 0.5) * 4));
        break;
       }
      }
