@@ -51,9 +51,18 @@ internal static class DiagBreath
         if (Time.time - _start < 0.5f)
             return;
         bool holding = player.Physical != null && player.Physical.HoldingBreath;
+        string body = "";
+        try
+        {
+            Physical? physical = player.Physical as Physical;
+            if (physical != null)
+                body = $" arms={physical.HandsStamina?.Current:F1} exhausted={physical.HandsStamina?.Exhausted} oxygen={physical.Oxygen?.Current:F1} legs={physical.Stamina?.Current:F1}"
+                    + $" overweight={physical.Overweight:F2}";
+        }
+        catch (System.Exception e) { body = " body? " + e.Message; }
         NewCameraPlugin.Log?.LogInfo($"DiagBreath holding={holding} frames={_frames} sway={AimArms.DiagSway}"
             + $" head(p,y)={_headMax - _headMin:F3} cam={_camMax - _camMin:F3} line={_lineMax - _lineMin:F3} deg place(x,y)={_placeMax - _placeMin:F2} mm"
-            + $" camMean={(_camMax + _camMin) * 0.5f:F2}");
+            + $" camMean={(_camMax + _camMin) * 0.5f:F2}" + body);
         _start = -1f;
     }
 }
