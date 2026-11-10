@@ -108,9 +108,23 @@ Shader "Justachae/NVG/Direct" {
 
  // Whether this pixel has the device, and whose: each pixel one eye's whole, more of them the other's across the strip. Evened over
  // the pattern once all is lit (pass 2), that is the two eyes' lit pictures eased into each other, as the eyes' cameras were.
+ // A monocular is before one eye only: toward the other eye's edge of the frame it fades out, as the composite once faded it (x 1 for
+ // a monocular, y its eye: 0 left, 1 right, z the fade's power, 0 not at all).
+ float4 _DirectMonocular;
+ float monocularShown (float2 uv) {
+  if (_DirectMonocular.x < 0.5 || _DirectMonocular.z <= 0)
+   return 1;
+  float s = smoothstep(0, 0.5 + _DirectStrip * 0.5, _DirectMonocular.y > 0.5 ? uv.x : 1 - uv.x);
+  return pow(max(s, 1e-5), _DirectMonocular.z);
+ }
+
  bool pick (float2 pixel, float2 uv, float rawL, float rawR, out float toRight) {
   float c = coverage(uv, rawL, rawR, toRight);
   if (c <= 0)
+   return false;
+  // Faded by its pixels kept and left out, on a pattern of its own, evened once lit (pass 2): a G-buffer has no see-through.
+  float shown = monocularShown(uv);
+  if (shown < 1 && !kept(pixel + float2(2, 1), shown))
    return false;
   if (toRight > 0 && toRight < 1) {
    toRight = kept(pixel, toRight) ? 1 : 0;
@@ -208,7 +222,8 @@ Shader "Justachae/NVG/Direct" {
     float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
     float c = coverage(uv, rawL, rawR, toRight);
     float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
-    if (c <= 0 || t <= 0 || t >= 1 || !notCovered(uv, rawL, rawR))
+    bool strip = t > 0 && t < 1, fading = monocularShown(uv) < 0.999;
+    if (c <= 0 || !strip && !fading || !notCovered(uv, rawL, rawR))
      discard;
     float3 sum = 0;
     for (int y = -2; y < 2; y++)

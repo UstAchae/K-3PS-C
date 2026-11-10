@@ -135,8 +135,9 @@ internal static partial class NightVisionEyepieces
         Vector3 right = view.right;
         Vector3 placeA = FromCamera(_lensNodes[CentreLensA], position).GetColumn(3), placeB = FromCamera(_lensNodes[CentreLensB], position).GetColumn(3);
         float a = Vector3.Dot(placeA, right), b = Vector3.Dot(placeB, right);
-        // A monocular is before one eye only: over the other eye's half the device fades out toward the edge.
-        int monocular = _device.Monocular && BinocularOn ? (a >= 0f ? 1 : 0) : -1;
+        // A monocular is before one eye only: over the other eye's half the device fades out toward the edge. Which eye, by where its lens
+        // is from the head's middle, not from the camera: gone over to the aiming eye, the camera is right behind a lens before that eye.
+        int monocular = _device.Monocular && BinocularOn ? (a + CameraPosition.Horizontal >= 0f ? 1 : 0) : -1;
         float seeThrough = Mathf.Clamp01(MonocularSeeThrough);
         float fade = seeThrough <= 0.5f ? seeThrough * 2f : 1f + (seeThrough - 0.5f) * 6f;
         binocular.SetVector(MonocularId, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
@@ -194,7 +195,7 @@ internal static partial class NightVisionEyepieces
             binocular.SetVector(EyePosIds[side], new Vector4(eye.x, eye.y, eye.z, eyeBack));
         }
         if (_direct)
-            DrawDirect(camera, leftShift, rightShift, split);
+            DrawDirect(camera, leftShift, rightShift, split, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
     }
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.

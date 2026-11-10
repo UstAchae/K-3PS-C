@@ -365,7 +365,9 @@ internal static partial class NightVisionEyepieces
         _directMotion?.Clear();
     }
 
-    private static void DrawDirect(Camera main, Vector3 leftShift, Vector3 rightShift, float split)
+    private static readonly int DirectMonocularId = Shader.PropertyToID("_DirectMonocular");
+
+    private static void DrawDirect(Camera main, Vector3 leftShift, Vector3 rightShift, float split, Vector4 monocular)
     {
         _directBuffer ??= new CommandBuffer { name = "Justachae NVG device in the main camera" };
         _directAgain ??= new CommandBuffer { name = "Justachae NVG device after the decals" };
@@ -467,6 +469,7 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
 
         buffer.SetGlobalFloat(DirectSplit, split);
+        buffer.SetGlobalVector(DirectMonocularId, monocular);
         buffer.SetGlobalFloat(DirectStrip, Overscan);
         buffer.SetGlobalVector(DirectInset, new Vector4(DirectInsetPixels / Mathf.Max(Screen.width, 1), DirectInsetPixels / Mathf.Max(Screen.height, 1), 0f, 0f));
         for (int side = 0; side < 2; side++)
