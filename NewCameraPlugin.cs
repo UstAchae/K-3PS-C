@@ -321,7 +321,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void BindVestibular()
     {
         ConfigEntry<bool> balance = SettingsLayout.Bind(Config, "前庭平衡", "总开关", true,
-            new ConfigDescription("像内耳前庭带着眼球那样，镜头位置不动，只把镜头转回玩家想看的方向，抵消走路、跑步时头的晃动。注视点取视线上实际看到的东西的距离；切枪、换弹、打药、翻背包、搜刮、开门等动作时，动画让头转去看手或包的部分会保留。开枪时后坐力给镜头的转动不受影响。开镜（胸口抵肩除外）、架枪、固定武器、翻越、攀爬时不起作用；中键自由看保留。关闭后镜头完全按头部原样晃动。",
+            new ConfigDescription("像内耳前庭带着眼球那样，镜头位置不动，只把镜头转回玩家想看的方向，抵消走路、跑步时头的晃动。注视点取视线上实际看到的东西的距离；切枪、换弹、打药、翻背包、搜刮、开门等动作时，动画让头转去看手或包的部分会保留。开枪时后坐力给镜头的转动不受影响。开镜（包括胸口抵肩）、架枪、固定武器、翻越、攀爬时不起作用；中键自由看保留。关闭后镜头完全按头部原样晃动。",
                 null, new ConfigurationManagerAttributes { Order = 3 }));
         ConfigEntry<float> strength = SettingsLayout.Bind(Config, "前庭平衡", "强度", 0.7f,
             new ConfigDescription("左右和上下平衡多少。0 是不平衡（原样），1 是完全平衡。",
@@ -473,7 +473,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     {
         const string section = "胸口抵肩";
         ConfigEntry<bool> enabled = SettingsLayout.Bind(Config, section, "启用", true,
-            "按住瞄准键不放时，不把瞄具对到眼前，而是枪托抵在胸口正中、枪放低并向内倾斜，枪管和视线平行，靠激光指示器瞄准（戴夜视仪时的常用姿势）。点一下瞄准键仍是正常开镜（松开时开镜）；按住超过下面的时间就直接进入胸口抵肩，松开就退出瞄准。摆动、呼吸、后坐力和开镜时一样，走路速度不按开镜减慢，鼠标灵敏度和红点、全息开镜时一样，前庭平衡照常起作用。游戏里瞄准键设成长按瞄准时两者对换：按住是正常开镜（松开退出），点一下进入胸口抵肩并保持，再点一下退出，保持中按住则转为正常开镜，松开回到胸口抵肩。设成双击瞄准时：双击是正常开镜，按住进入胸口抵肩，松开退出（和点击瞄准时一样）。");
+            "按住瞄准键不放时，不把瞄具对到眼前，而是枪托抵在胸口正中、枪放低并向内倾斜，枪管和视线平行，靠激光指示器瞄准（戴夜视仪时的常用姿势）。点一下瞄准键仍是正常开镜（松开时开镜）；按住超过下面的时间就直接进入胸口抵肩，松开就退出瞄准。摆动、呼吸、后坐力和镜头跟随头部的程度都和开镜时一样（不做前庭平衡），走路速度不按开镜减慢，鼠标灵敏度和红点、全息开镜时一样。游戏里瞄准键设成长按瞄准时两者对换：按住是正常开镜（松开退出），点一下进入胸口抵肩并保持，再点一下退出，保持中按住则转为正常开镜，松开回到胸口抵肩。设成双击瞄准时：双击是正常开镜，按住进入胸口抵肩，松开退出（和点击瞄准时一样）。");
         ConfigEntry<KeyCode> key = SettingsLayout.Bind(Config, section, "瞄准键", KeyCode.Mouse1,
             "游戏里绑定的瞄准键（默认鼠标右键 Mouse1），用来判断是否还按着。改了游戏里的瞄准键时这里也要改。");
         ConfigEntry<float> hold = SettingsLayout.Bind(Config, section, "按住多久算按住（秒）", 0.15f,

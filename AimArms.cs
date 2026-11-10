@@ -1567,9 +1567,9 @@ internal static class AimArms
             return;
 
         bool aiming = player.HandsController != null && player.HandsController.IsAiming;
-        // The stock at the chest leaves the head free, as at the hip: the view goes with the head (and the balance),
-        // so nothing changes as the stance is let go.
-        float target = aiming && !ChestStance.Active && _smoothedHead.sqrMagnitude <= 0.01f ? 1f : 0f;
+        // The stock at the chest too: it is the aim, the gun only placed elsewhere, and the gun is placed on this steadied head. Left
+        // free (and balanced), the view kept part of the head's own motion that the gun did not, and the gun shook on the screen.
+        float target = aiming && _smoothedHead.sqrMagnitude <= 0.01f ? 1f : 0f;
         _headLock = Mathf.MoveTowards(_headLock, target, Time.deltaTime / (target > _headLock ? HeadLockSeconds : LeaveSeconds));
     }
 
