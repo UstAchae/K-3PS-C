@@ -27,7 +27,7 @@ Shader "Justachae/NVG/Defocus" {
   float4 _MainTex_TexelSize;
   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
   Texture2D _ScopeLens, _Src, _Coc;
-  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide, _Cover, _CoverWide;
+  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide, _Cover, _CoverWide, _FarSoft;
   float2 _Step;   // a Gaussian's direction, in texels
   SamplerState sampler_linear_clamp, sampler_point_clamp;
   float _ScopeOn;
@@ -231,6 +231,12 @@ Shader "Justachae/NVG/Defocus" {
     // frame blurred instead carried the thing's own dark out about it (a dark ring); the frame's own let onto the thing
     // where it is thin left its sharp top showing; a switch right at its outline cut the scene behind there.
     float3 behind = lerp(f.rgb, fill, max(Nearness(r), smoothstep(0, 0.5, soft)));
+    // About a near thing the scene is blurred as the thing is (what is not near, blurred alike: never the thing's own
+    // dark), fading back to the frame's own as far as the thing's wide blur reaches: the thing sits in a blurred patch
+    // as it does where all about it is near too (a table under the gun), not as a blurred shape on a sharp scene.
+    float4 around = _FarSoft.SampleLevel(sampler_linear_clamp, i.uv, 0);
+    if (around.a > 1e-3)
+     behind = lerp(behind, around.rgb / around.a, smoothstep(0, 0.4, coverWide) * (1 - Nearness(r)));
     // How solid the spread thing shows: its own shape (what of the frame is near), blurred wide and smooth, so its
     // outline fades softly both ways and a thin part, a narrow line in it, all but goes; its colour the discs'.
     // Fading out from the thing both in how much it covers (an S: thin at its fringe, as before within) and in its
