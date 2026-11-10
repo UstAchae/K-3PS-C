@@ -5,7 +5,8 @@
 // quarter-size pixel's angle); z how far the objective is ahead of the camera; w the radius it eases toward.
 // What is near: spread by more than a quarter-size pixel. A magnified sight's lens (its picture at infinity) is not; nor
 // what is seen through a sight's window or any opening: there the frame has what lies beyond.
-// Pass 1: what is near, at a quarter of the size, premultiplied by how much of the sixteen pixels under it it covers.
+// Pass 1: what is near, at a quarter of the size, premultiplied by how much of the sixteen pixels under it it covers
+//         times how near it is (Front: the nearer the more).
 // Pass 2: its discs' radius: red the radius times the cover, green the cover (halved as the levels are, the radius
 //         stays the cover's mean).
 // Pass 3: what is not near, the same way.
@@ -26,7 +27,7 @@ Shader "Justachae/NVG/Defocus" {
   float4 _MainTex_TexelSize;
   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
   Texture2D _ScopeLens, _Src, _Coc;
-  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide;
+  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide, _Cover, _CoverWide;
   float2 _Step;   // a Gaussian's direction, in texels
   SamplerState sampler_linear_clamp, sampler_point_clamp;
   float _ScopeOn;
@@ -63,6 +64,10 @@ Shader "Justachae/NVG/Defocus" {
   // from two and a half, eased between, so no line is seen where the spreading begins along a surface going away.
   float Nearness(float r) { return smoothstep(0.5, 2.5, r); }
   bool IsNear(float r) { return Nearness(r) > 0; }
+  // How much a near point counts in the colour of what is near about it: the nearer the more (the square of its
+  // disc's radius against the most), so a nearer thing stands in front of what is behind it when both are blurred
+  // together: a bright floor a metre off showed through a dark gun a third of that away.
+  float Front(float r) { float k = r / _DefocusLens.w; return k * k + 0.02; }
 
   float4 Near(float2 uv) {
    float4 n = _NearAcc0.SampleLevel(sampler_linear_clamp, uv, 0) + _NearAcc1.SampleLevel(sampler_linear_clamp, uv, 0)
@@ -96,7 +101,8 @@ Shader "Justachae/NVG/Defocus" {
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
       float2 uv = i.uv + (float2(x, y) - 1.5) * t;
-      sum += float4(tex2D(_MainTex, uv).rgb, 1) * Nearness(Radius(uv));
+      float r = Radius(uv);
+      sum += float4(tex2D(_MainTex, uv).rgb, 1) * Nearness(r) * Front(r);
      }
     return sum / 16;
    }
@@ -211,11 +217,12 @@ Shader "Justachae/NVG/Defocus" {
     // thing; a thick one's fringe is still covered when blurred wide), and only where there is something of it, it is
     // taken from the wider one, spread further and fainter. Taken by the narrow one's cover alone, a thick thing's
     // fringe counted as thin and drew a second, wider ring of its own shape about it.
-    float4 shape = _Shape.SampleLevel(sampler_linear_clamp, i.uv, 0);
-    float4 wide = _ShapeWide.SampleLevel(sampler_linear_clamp, i.uv, 0);
-    float thin = (1 - smoothstep(0.2, 0.6, max(shape.a, wide.a))) * saturate(shape.a * 8);
-    shape = lerp(shape, wide, thin);
-    float soft = saturate(shape.a);
+    // The cover (how much is near) and the colour (weighted toward the nearer, Front) blurred alike.
+    float coverNarrow = _Cover.SampleLevel(sampler_linear_clamp, i.uv, 0).g;
+    float coverWide = _CoverWide.SampleLevel(sampler_linear_clamp, i.uv, 0).g;
+    float thin = (1 - smoothstep(0.2, 0.6, max(coverNarrow, coverWide))) * saturate(coverNarrow * 8);
+    float4 shape = lerp(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0), _ShapeWide.SampleLevel(sampler_linear_clamp, i.uv, 0), thin);
+    float soft = saturate(lerp(coverNarrow, coverWide, thin));
     float3 colour = shape.a > 1e-3 ? shape.rgb / shape.a : (n.a > 1e-3 ? n.rgb / n.a : f.rgb);
     // Where little or nothing of what is about it was found (all about it is near too), its own colour, eased in.
     fill = found > 1e-3 ? lerp(colour, fill / found, saturate(found * 2)) : colour;
@@ -240,7 +247,7 @@ Shader "Justachae/NVG/Defocus" {
    CGPROGRAM
    #pragma vertex vert_img
    #pragma fragment frag
-   float4 frag (v2f_img i) : SV_Target { return saturate(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0).a); }
+   float4 frag (v2f_img i) : SV_Target { return saturate(_Cover.SampleLevel(sampler_linear_clamp, i.uv, 0).g); }
    ENDCG
   }
   Pass {

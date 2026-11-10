@@ -38,6 +38,35 @@ internal static partial class NightVisionEyepieces
     private static readonly int BandId = Shader.PropertyToID("_Band");
     private static readonly int ShapeId = Shader.PropertyToID("_Shape");
     private static readonly int ShapeWideId = Shader.PropertyToID("_ShapeWide");
+    private static readonly int CoverId = Shader.PropertyToID("_Cover");
+    private static readonly int CoverWideId = Shader.PropertyToID("_CoverWide");
+
+    // A level blurred wide and smooth (two Gaussians each way), and the same at half its size blurred again: twice as
+    // wide.
+    private static void Smoothed(RenderTexture source, Material defocus, out RenderTexture soft, out RenderTexture wide)
+    {
+        soft = Temporary(source.width, source.height);
+        RenderTexture across = Temporary(source.width, source.height);
+        Graphics.Blit(source, soft);
+        Gaussians(soft, across, defocus);
+        RenderTexture.ReleaseTemporary(across);
+        wide = Temporary(Mathf.Max(soft.width / 2, 1), Mathf.Max(soft.height / 2, 1));
+        RenderTexture wideAcross = Temporary(wide.width, wide.height);
+        Graphics.Blit(soft, wide, defocus, 7);
+        Gaussians(wide, wideAcross, defocus);
+        RenderTexture.ReleaseTemporary(wideAcross);
+    }
+
+    private static void Gaussians(RenderTexture texture, RenderTexture across, Material defocus)
+    {
+        for (int pass = 0; pass < 2; pass++)
+        {
+            defocus.SetVector(StepId, new Vector2(1f, 0f));
+            Graphics.Blit(texture, across, defocus, 8);
+            defocus.SetVector(StepId, new Vector2(0f, 1f));
+            Graphics.Blit(across, texture, defocus, 8);
+        }
+    }
     private static readonly int[] NearAccIds = { Shader.PropertyToID("_NearAcc0"), Shader.PropertyToID("_NearAcc1"),
         Shader.PropertyToID("_NearAcc2"), Shader.PropertyToID("_NearAcc3") };
     private static readonly int[] FarIds = { Shader.PropertyToID("_Far0"), Shader.PropertyToID("_Far1"), Shader.PropertyToID("_Far2"),
@@ -112,32 +141,14 @@ internal static partial class NightVisionEyepieces
         }
         DiagDefocus(frame, pixelsPerRadian, ahead); // TEMP DIAG
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
-        // Its outline: the near shape (what of the frame is near, at an eighth of its size) blurred wide and smooth.
-        RenderTexture shape = _levelColor[1]!;
-        RenderTexture across = Temporary(shape.width, shape.height), soft = Temporary(shape.width, shape.height);
-        Graphics.Blit(shape, soft);
-        for (int pass = 0; pass < 2; pass++)
-        {
-            defocus.SetVector(StepId, new Vector2(1f, 0f));
-            Graphics.Blit(soft, across, defocus, 8);
-            defocus.SetVector(StepId, new Vector2(0f, 1f));
-            Graphics.Blit(across, soft, defocus, 8);
-        }
-        RenderTexture.ReleaseTemporary(across);
+        // Its outline: the near shape (what of the frame is near, at an eighth of its size) blurred wide and smooth, and
+        // again twice as wide for thin parts; its colour (weighted toward what is nearer) blurred alike.
+        Smoothed(_levelColor[1]!, defocus, out RenderTexture soft, out RenderTexture wide);
+        Smoothed(_levelCoc[1]!, defocus, out RenderTexture cover, out RenderTexture coverWide);
         defocus.SetTexture(ShapeId, soft);
-        // The same, at half its size and blurred again, twice as wide: for thin parts (NvgDefocus.shader pass 5).
-        RenderTexture wide = Temporary(Mathf.Max(soft.width / 2, 1), Mathf.Max(soft.height / 2, 1));
-        RenderTexture wideAcross = Temporary(wide.width, wide.height);
-        Graphics.Blit(soft, wide, defocus, 7);
-        for (int pass = 0; pass < 2; pass++)
-        {
-            defocus.SetVector(StepId, new Vector2(1f, 0f));
-            Graphics.Blit(wide, wideAcross, defocus, 8);
-            defocus.SetVector(StepId, new Vector2(0f, 1f));
-            Graphics.Blit(wideAcross, wide, defocus, 8);
-        }
-        RenderTexture.ReleaseTemporary(wideAcross);
         defocus.SetTexture(ShapeWideId, wide);
+        defocus.SetTexture(CoverId, cover);
+        defocus.SetTexture(CoverWideId, coverWide);
         Graphics.Blit(frame, made, defocus, 5);
         DumpDefocus(frame, made, defocus); // TEMP DIAG
         AddTritium(view, made);
@@ -146,8 +157,12 @@ internal static partial class NightVisionEyepieces
         Graphics.Blit(frame, _blurMask, defocus, 6);
         defocus.SetTexture(ShapeId, Texture2D.blackTexture);
         defocus.SetTexture(ShapeWideId, Texture2D.blackTexture);
+        defocus.SetTexture(CoverId, Texture2D.blackTexture);
+        defocus.SetTexture(CoverWideId, Texture2D.blackTexture);
         RenderTexture.ReleaseTemporary(soft);
         RenderTexture.ReleaseTemporary(wide);
+        RenderTexture.ReleaseTemporary(cover);
+        RenderTexture.ReleaseTemporary(coverWide);
         for (int level = 0; level < DefocusLevels; level++)
         {
             defocus.SetTexture(NearAccIds[level], Texture2D.blackTexture);
