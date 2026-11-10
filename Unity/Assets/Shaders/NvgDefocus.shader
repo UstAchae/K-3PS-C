@@ -26,7 +26,7 @@ Shader "Justachae/NVG/Defocus" {
   float4 _MainTex_TexelSize;
   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
   Texture2D _ScopeLens, _Src, _Coc;
-  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape;
+  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide;
   float2 _Step;   // a Gaussian's direction, in texels
   SamplerState sampler_linear_clamp, sampler_point_clamp;
   float _ScopeOn;
@@ -207,7 +207,11 @@ Shader "Justachae/NVG/Defocus" {
     }
     // The near shape blurred wide (premultiplied): how solid it shows, and its colour, blurred alike, so the thing is
     // one soft shade with no structure left in it, as its outline is.
+    // Thin parts blurred the more: where the near shape, blurred, covers little (a thin thing), it is taken from the
+    // same blurred again twice as wide, spread further and fainter; where it covers much (a thick thing), as it is.
     float4 shape = _Shape.SampleLevel(sampler_linear_clamp, i.uv, 0);
+    float4 wide = _ShapeWide.SampleLevel(sampler_linear_clamp, i.uv, 0);
+    shape = lerp(wide, shape, smoothstep(0.25, 0.75, shape.a));
     float soft = saturate(shape.a);
     float3 colour = shape.a > 1e-3 ? shape.rgb / shape.a : (n.a > 1e-3 ? n.rgb / n.a : f.rgb);
     // Where little or nothing of what is about it was found (all about it is near too), its own colour, eased in.

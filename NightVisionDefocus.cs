@@ -37,6 +37,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int GridId = Shader.PropertyToID("_Grid");
     private static readonly int BandId = Shader.PropertyToID("_Band");
     private static readonly int ShapeId = Shader.PropertyToID("_Shape");
+    private static readonly int ShapeWideId = Shader.PropertyToID("_ShapeWide");
     private static readonly int[] NearAccIds = { Shader.PropertyToID("_NearAcc0"), Shader.PropertyToID("_NearAcc1"),
         Shader.PropertyToID("_NearAcc2"), Shader.PropertyToID("_NearAcc3") };
     private static readonly int[] FarIds = { Shader.PropertyToID("_Far0"), Shader.PropertyToID("_Far1"), Shader.PropertyToID("_Far2"),
@@ -124,6 +125,19 @@ internal static partial class NightVisionEyepieces
         }
         RenderTexture.ReleaseTemporary(across);
         defocus.SetTexture(ShapeId, soft);
+        // The same, at half its size and blurred again, twice as wide: for thin parts (NvgDefocus.shader pass 5).
+        RenderTexture wide = Temporary(Mathf.Max(soft.width / 2, 1), Mathf.Max(soft.height / 2, 1));
+        RenderTexture wideAcross = Temporary(wide.width, wide.height);
+        Graphics.Blit(soft, wide, defocus, 7);
+        for (int pass = 0; pass < 2; pass++)
+        {
+            defocus.SetVector(StepId, new Vector2(1f, 0f));
+            Graphics.Blit(wide, wideAcross, defocus, 8);
+            defocus.SetVector(StepId, new Vector2(0f, 1f));
+            Graphics.Blit(wideAcross, wide, defocus, 8);
+        }
+        RenderTexture.ReleaseTemporary(wideAcross);
+        defocus.SetTexture(ShapeWideId, wide);
         Graphics.Blit(frame, made, defocus, 5);
         DumpDefocus(frame, made, defocus); // TEMP DIAG
         AddTritium(view, made);
@@ -131,7 +145,9 @@ internal static partial class NightVisionEyepieces
         _blurMask = Temporary(width, height);
         Graphics.Blit(frame, _blurMask, defocus, 6);
         defocus.SetTexture(ShapeId, Texture2D.blackTexture);
+        defocus.SetTexture(ShapeWideId, Texture2D.blackTexture);
         RenderTexture.ReleaseTemporary(soft);
+        RenderTexture.ReleaseTemporary(wide);
         for (int level = 0; level < DefocusLevels; level++)
         {
             defocus.SetTexture(NearAccIds[level], Texture2D.blackTexture);
