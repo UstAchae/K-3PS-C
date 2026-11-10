@@ -249,6 +249,14 @@ Shader "Justachae/NVG/Defocus" {
     // alone, its edge fell off quickly against the scene and its outline stood.
     float about = 0.15 * saturate(1 - coverNarrow);
     float shown = shape.a + about > 1e-4 ? shape.a / (shape.a + about) : 0;
+    // And its share blurred twice as wide beyond that, so its fall does not end where the narrow blur's reach does
+    // (a disc as near as the gun's spreads its edge over twice its radius: there it fell off over half of that).
+    float4 shapeWide = _ShapeWide.SampleLevel(sampler_linear_clamp, i.uv, 0);
+    float aboutWide = 0.15 * saturate(1 - coverWide);
+    float shownWide = shapeWide.a + aboutWide > 1e-4 ? shapeWide.a / (shapeWide.a + aboutWide) : 0;
+    if (shapeWide.a > 1e-3 && shown < 1)
+     colour = lerp(shapeWide.rgb / shapeWide.a, colour, shown);
+    shown = 1 - (1 - shown) * (1 - shownWide);
     float4 farSoft = _FarSoft.SampleLevel(sampler_linear_clamp, i.uv, 0);
     float3 soft = farSoft.a > 1e-3 ? lerp(fill, farSoft.rgb / farSoft.a, saturate(farSoft.a * 4)) : fill;
     float3 seen = lerp(f.rgb, soft, smoothstep(0, 0.4, max(max(blocked, shown), saturate(coverWide))));
