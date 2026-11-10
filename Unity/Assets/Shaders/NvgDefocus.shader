@@ -1,16 +1,15 @@
-// The objective's defocus as a lens makes it (NightVisionDefocus.cs): a point d from a lens of aperture D focused at s
-// spread over a disc of even light, diameter D·|1/d − 1/s| seen from the lens; the light moved, not made.
+// The objective's defocus (NightVisionDefocus.cs): a point d from a lens of aperture D focused at s spread over a disc
+// of even light, diameter D·|1/d − 1/s| seen from the lens.
 // _DefocusLens: x 1/s; y a disc's radius in quarter-size pixels per unit of |1/d − 1/s| (half the aperture over the
 // quarter-size pixel's angle); z how far the objective is ahead of the camera; w the largest radius drawn.
-// The player's own: nearer in the frame than in the scene drawn without them (_BehindDepth, distance along the view).
-// Pass 0: (in the second camera) its depth, as distance along the view.
-// Pass 1: what is the player's own, at a quarter of the size, premultiplied by how much of the sixteen pixels it covers.
-// Pass 2: the discs' radii: red the player's own (their mean), green the world's (what lies behind them where they are).
-// Pass 3: the world spread more than a quarter-size pixel, premultiplied the same way.
-// Pass 4: each quarter-size pixel of a layer drawn as its disc (procedural, six vertices a pixel), added.
-// Pass 5: the frame as the lens lays it on the tube: the player's own spread over the near world spread over the sharp
-//         rest, which where the player's own were is the scene behind them.
+// What is near: spread by more than a quarter-size pixel. A magnified sight's lens (its picture at infinity) is not.
+// Pass 1: what is near, at a quarter of the size, premultiplied by how much of the sixteen pixels under it it covers.
+// Pass 2: its discs' radius (the mean of what is near among the sixteen).
+// Pass 4: each quarter-size pixel drawn as its disc (procedural, six vertices a pixel), added.
+// Pass 5: the frame with what is near laid over it solid: its spread colour where it is and out to where its discs
+//         reach, fading there as they thin out (twice their cover: solid to the edge of the thing itself).
 // Pass 6: how much of each part of the frame is spread (0 to 1), for the tube's grain (EaseGrain).
+// Passes 0 and 3 are left empty, so the others keep their numbers.
 Shader "Justachae/NVG/Defocus" {
  Properties { _MainTex ("frame", 2D) = "black" {} }
  CGINCLUDE
@@ -18,29 +17,27 @@ Shader "Justachae/NVG/Defocus" {
   sampler2D _MainTex;
   float4 _MainTex_TexelSize;
   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
-  Texture2D _Behind, _BehindDepth, _ScopeLens, _NearAcc, _WorldAcc, _Src, _Coc;
+  Texture2D _ScopeLens, _NearAcc, _Src, _Coc;
   SamplerState sampler_linear_clamp, sampler_point_clamp;
   float _ScopeOn;
   float4 _DefocusLens;
   float2 _TanHalf;
-  float _CocChannel;
   float4 _Grid;   // the quarter-size grid's width and height; z −1 where a render texture's up is flipped
 
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
   }
-  float ZFrame(float2 uv) { return LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv)); }
-  float ZBehind(float2 uv) { return _BehindDepth.SampleLevel(sampler_point_clamp, uv, 0).r; }
-  // From the objective along the line of sight through uv, for a point z along the view.
-  float FromLens(float z, float2 uv) {
+  // A disc's radius (quarter-size pixels) for what the frame shows at uv: none through a sight's lens, nor for what is
+  // behind the objective.
+  float Radius(float2 uv) {
+   if (InLens(uv))
+    return 0;
+   float z = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
    float2 ray = (uv * 2 - 1) * _TanHalf;
-   return z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z;
+   float d = z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z;
+   return d <= 0.003 ? 0 : min(_DefocusLens.y * abs(1 / d - _DefocusLens.x), _DefocusLens.w);
   }
-  float Radius(float d) { return d <= 0.003 ? 0 : min(_DefocusLens.y * abs(1 / d - _DefocusLens.x), _DefocusLens.w); }
-  // The player's own: nearer here than in the scene drawn without them.
-  bool Own(float2 uv, float z) { return z < ZBehind(uv) - max(0.01, 0.02 * z); }
-  // Seen through the objective: in front of it.
-  bool Seen(float2 uv, float z) { return FromLens(z, uv) > 0.003; }
+  bool IsNear(float r) { return r > 1; }
  ENDCG
  SubShader {
   Cull Off ZWrite Off ZTest Always
@@ -48,7 +45,7 @@ Shader "Justachae/NVG/Defocus" {
    CGPROGRAM
    #pragma vertex vert_img
    #pragma fragment frag
-   float4 frag (v2f_img i) : SV_Target { return ZFrame(i.uv); }
+   float4 frag (v2f_img i) : SV_Target { return 0; }
    ENDCG
   }
   Pass {
@@ -62,10 +59,7 @@ Shader "Justachae/NVG/Defocus" {
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
       float2 uv = i.uv + (float2(x, y) - 1.5) * t;
-      if (InLens(uv))
-       continue;
-      float z = ZFrame(uv);
-      if (Own(uv, z) && Seen(uv, z))
+      if (IsNear(Radius(uv)))
        sum += float4(tex2D(_MainTex, uv).rgb, 1);
      }
     return sum / 16;
@@ -79,21 +73,16 @@ Shader "Justachae/NVG/Defocus" {
    #pragma target 3.5
    float4 frag (v2f_img i) : SV_Target {
     float2 t = _MainTex_TexelSize.xy;
-    float own = 0, ownCount = 0, world = 0;
+    float sum = 0, count = 0;
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
-      float2 uv = i.uv + (float2(x, y) - 1.5) * t;
-      if (InLens(uv))
-       continue;
-      float z = ZFrame(uv);
-      bool mine = Own(uv, z);
-      if (mine && Seen(uv, z)) {
-       own += Radius(FromLens(z, uv));
-       ownCount += 1;
+      float r = Radius(i.uv + (float2(x, y) - 1.5) * t);
+      if (IsNear(r)) {
+       sum += r;
+       count += 1;
       }
-      world += Radius(FromLens(mine ? ZBehind(uv) : z, uv));
      }
-    return float4(ownCount > 0 ? own / ownCount : 0, world / 16, 0, 0);
+    return count > 0 ? sum / count : 0;
    }
    ENDCG
   }
@@ -101,24 +90,7 @@ Shader "Justachae/NVG/Defocus" {
    CGPROGRAM
    #pragma vertex vert_img
    #pragma fragment frag
-   #pragma target 3.5
-   float4 frag (v2f_img i) : SV_Target {
-    float2 t = _MainTex_TexelSize.xy;
-    float4 sum = 0;
-    for (int y = 0; y < 4; y++)
-     for (int x = 0; x < 4; x++) {
-      float2 uv = i.uv + (float2(x, y) - 1.5) * t;
-      if (InLens(uv))
-       continue;
-      float z = ZFrame(uv);
-      bool mine = Own(uv, z);
-      if (Radius(FromLens(mine ? ZBehind(uv) : z, uv)) <= 1)
-       continue;
-      float3 c = mine ? _Behind.SampleLevel(sampler_linear_clamp, uv, 0).rgb : tex2D(_MainTex, uv).rgb;
-      sum += float4(c, 1);
-     }
-    return sum / 16;
-   }
+   float4 frag (v2f_img i) : SV_Target { return 0; }
    ENDCG
   }
   Pass {
@@ -141,8 +113,7 @@ Shader "Justachae/NVG/Defocus" {
     float2 cell = float2(quad % w, quad / w) + 0.5;
     float2 uv = cell / _Grid.xy;
     float4 c = _Src.SampleLevel(sampler_point_clamp, uv, 0);
-    float2 radii = _Coc.SampleLevel(sampler_point_clamp, uv, 0).rg;
-    float r = max(_CocChannel > 0.5 ? radii.y : radii.x, 0.5);
+    float r = max(_Coc.SampleLevel(sampler_point_clamp, uv, 0).r, 0.5);
     float2 off = Corners[corner] * (r + 1);
     float2 p = (cell + off) / _Grid.xy * 2 - 1;
     p.y *= _Grid.z;
@@ -170,16 +141,14 @@ Shader "Justachae/NVG/Defocus" {
    #pragma target 3.5
    float4 frag (v2f_img i) : SV_Target {
     float4 f = tex2D(_MainTex, i.uv);
-    float3 sharp = f.rgb;
-    if (!InLens(i.uv) && Own(i.uv, ZFrame(i.uv)))
-     sharp = _Behind.SampleLevel(sampler_linear_clamp, i.uv, 0).rgb;
     float4 n = _NearAcc.SampleLevel(sampler_linear_clamp, i.uv, 0);
-    if (n.a > 1)
-     n /= n.a;
-    float4 w = _WorldAcc.SampleLevel(sampler_linear_clamp, i.uv, 0);
-    if (w.a > 1)
-     w /= w.a;
-    return float4(n.rgb + (1 - n.a) * (w.rgb + (1 - w.a) * sharp), f.a);
+    if (n.a < 1e-4)
+     return f;
+    float3 spread = n.rgb / n.a;
+    // Where the thing itself is, its spread colour only (the sharp thing under it is not seen); out from it, over the
+    // sharp rest as its discs thin out.
+    float solid = IsNear(Radius(i.uv)) ? 1 : saturate(2 * n.a);
+    return float4(lerp(f.rgb, spread, solid), f.a);
    }
    ENDCG
   }
@@ -187,11 +156,7 @@ Shader "Justachae/NVG/Defocus" {
    CGPROGRAM
    #pragma vertex vert_img
    #pragma fragment frag
-   float4 frag (v2f_img i) : SV_Target {
-    float n = _NearAcc.SampleLevel(sampler_linear_clamp, i.uv, 0).a;
-    float w = _WorldAcc.SampleLevel(sampler_linear_clamp, i.uv, 0).a;
-    return saturate(max(n, w));
-   }
+   float4 frag (v2f_img i) : SV_Target { return saturate(2 * _NearAcc.SampleLevel(sampler_linear_clamp, i.uv, 0).a); }
    ENDCG
   }
  }

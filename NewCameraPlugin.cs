@@ -575,7 +575,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         Guarded(MagazineCount.OnCameraPreRender, camera, "pre-render (magazine count)");
         Guarded(NightVisionEyepieces.NoteRendered, camera, "pre-render (objective)");
         Guarded(NightVisionEyepieces.OnCameraPreRender, camera, "pre-render (eyepieces)");
-        Guarded(NightVisionEyepieces.RenderBehindSelf, camera, "pre-render (behind the player's own)");
         Guarded(NightVisionEyepieces.OnCameraPreRenderIr, camera, "pre-render (IR)");
     };
     private static readonly Camera.CameraCallback PostRender = camera =>
