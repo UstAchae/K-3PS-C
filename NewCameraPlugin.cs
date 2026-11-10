@@ -175,6 +175,10 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<bool> reflections = SettingsLayout.Bind(Config, "头戴式成像装备", "镜片反光", false,
             new ConfigDescription("夜视仪翻下时，目镜镜片表面映出的周围环境和高光，叠在镜片里的夜视画面上。关掉后镜片里只剩夜视画面，设备上的玻璃部件也不画。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
+        // Saved under its old name (it was for the left eye only), kept.
+        string? wasLeft = SettingsLayout.TakeSaved(Config, "11 夜视仪与热成像", "PVS-14 左眼透明度") ?? SettingsLayout.TakeSaved(Config, "头戴式成像装备", "PVS-14 左眼透明度");
+        if (wasLeft != null)
+            SettingsLayout.PutSaved(Config, "头戴式成像装备", "PVS-14 另一只眼透明度", wasLeft);
         ConfigEntry<float> monocularSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "PVS-14 另一只眼透明度", 0.5f,
             new ConfigDescription("AN/PVS-14 单筒夜视仪只挡在一只眼前（插在双燕尾转接件的哪个槽位，就在哪只眼前），另一只眼看过去时机身往画面边缘逐渐变透明。0：不变透明（两只眼都看到完整的机身）；0.5：默认；1：变透明得最快。",
                 new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
