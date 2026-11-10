@@ -5,69 +5,38 @@ namespace EFTNewCamera;
 
 // The objective's defocus (step 3 of the eyepieces' picture, NightVisionComposite.cs). A point at a distance d from a
 // lens of aperture D focused at s is spread over a disc of even light, whose diameter seen from the lens is
-// D·|1/d − 1/s|: the hands and the gun a few tenths of a metre off become discs degrees wide, the world a few metres
-// off a fraction of one. Each point near enough to be spread more than a quarter-size pixel is drawn as its disc
-// (NvgDefocus.shader), at a quarter of the frame's size: discs, not Gaussians. What is near stays solid: its spread
-// colour laid over the sharp rest, its edge fading out over as far as its discs reach (a lens would let what lies
-// behind it show through its edge; the frame has nothing of that, and a near thing seen through came out as glass).
+// D·|1/d − 1/s|. A few metres off that is a fraction of a degree, as the lens has it. Nearer it grows without end
+// (things a few centimetres from the objective spread over the whole field and are not seen at all), so here it eases
+// toward DefocusMostDegrees instead: the arms and the gun stay things seen, softly, the nearer the softer, never at a
+// fixed most. Each point near enough to be spread more than a quarter-size pixel is drawn as its disc
+// (NvgDefocus.shader): the small ones at a quarter of the frame's size, the larger at an eighth, a sixteenth and a
+// thirty-second, so no disc is more than a few pixels across where it is drawn. What is near is laid over what lies
+// behind it with as much of the lens's light as it blocks: through a sight's window, the scene beyond, sharp; behind
+// its own edge, where the frame has nothing but the thing itself, what is about it spread as wide (NvgDefocus.shader).
 internal static partial class NightVisionEyepieces
 {
     private const float DefocusAperture = 0.0225f;      // the objective's, 27 mm at f/1.2 (as the tritium's)
-    private const float DefocusMaxRadius = 96f;         // a disc's radius at most, in quarter-size pixels
+    private const float DefocusMostDegrees = 3f;        // what a disc's radius eases toward, nearer and nearer
     private const int DefocusScale = 4;
+    private const int DefocusLevels = 4;                // radii up to 4, 8, 16 and beyond quarter-size pixels
 
     private static Shader? _defocusShader;
     private static Material? _defocus;
     private static CommandBuffer? _discBuffer;
-    private static readonly MaterialPropertyBlock _nearDiscs = new MaterialPropertyBlock();
+    private static readonly MaterialPropertyBlock[] _discBlocks = { new(), new(), new(), new() };
+    private static readonly RenderTexture?[] _levelColor = new RenderTexture?[DefocusLevels], _levelCoc = new RenderTexture?[DefocusLevels],
+        _levelAcc = new RenderTexture?[DefocusLevels], _levelFar = new RenderTexture?[DefocusLevels];
     private static bool _defocusNoted;
-
-    // TEMP DIAG: whether the discs are drawn and keep the light (the near layer's cover summed before and after),
-    // and how wide they are; a few times, seconds apart.
-    private static float _diagDefocusAt;
-    private static int _diagDefocusCount;
-    private static void DiagDefocus(RenderTexture nearColor, RenderTexture coc, RenderTexture nearAcc, RenderTexture frame, float pixelsPerRadian, float ahead)
-    {
-        if (_diagDefocusCount >= 4 || Time.time - _diagDefocusAt < 3f)
-            return;
-        _diagDefocusAt = Time.time;
-        _diagDefocusCount++;
-        int n = _diagDefocusCount;
-        string head = $"frame {frame.width}x{frame.height}, quarter {nearColor.width}x{nearColor.height}, px/rad {pixelsPerRadian:F0}, objective ahead {ahead:F3} m, lens y {0.5f * DefocusAperture * pixelsPerRadian:F2}";
-        float srcCover = -1f, maxR = 0f, sumR = 0f;
-        int nearTexels = 0;
-        UnityEngine.Rendering.AsyncGPUReadback.Request(nearColor, 0, TextureFormat.RGBAFloat, r =>
-        {
-            if (r.hasError) return;
-            var d = r.GetData<Color>();
-            float sum = 0f;
-            for (int i = 0; i < d.Length; i++) { sum += d[i].a; if (d[i].a > 0f) nearTexels++; }
-            srcCover = sum;
-        });
-        UnityEngine.Rendering.AsyncGPUReadback.Request(coc, 0, TextureFormat.RGBAFloat, r =>
-        {
-            if (r.hasError) return;
-            var d = r.GetData<Color>();
-            int k = 0;
-            for (int i = 0; i < d.Length; i++) { if (d[i].r > 0f) { maxR = Mathf.Max(maxR, d[i].r); sumR += d[i].r; k++; } }
-            sumR = k > 0 ? sumR / k : 0f;
-        });
-        UnityEngine.Rendering.AsyncGPUReadback.Request(nearAcc, 0, TextureFormat.RGBAFloat, r =>
-        {
-            if (r.hasError) { NewCameraPlugin.Log?.LogInfo($"TEMP DIAG defocus {n}: read back failed"); return; }
-            var d = r.GetData<Color>();
-            float sum = 0f, max = 0f;
-            int lit = 0;
-            for (int i = 0; i < d.Length; i++) { sum += d[i].a; max = Mathf.Max(max, d[i].a); if (d[i].a > 1e-4f) lit++; }
-            NewCameraPlugin.Log?.LogInfo($"TEMP DIAG defocus {n}: {head}; near texels {nearTexels}, their cover {srcCover:F1}; radius mean {sumR:F2} max {maxR:F2} (quarter px); after the discs cover {sum:F1} (kept {(srcCover > 0f ? sum / srcCover : 0f):F3}), max {max:F3}, texels reached {lit}");
-        });
-    }
 
     private static readonly int DefocusLensId = Shader.PropertyToID("_DefocusLens");
     private static readonly int SrcId = Shader.PropertyToID("_Src");
     private static readonly int CocId = Shader.PropertyToID("_Coc");
     private static readonly int GridId = Shader.PropertyToID("_Grid");
-    private static readonly int NearAccId = Shader.PropertyToID("_NearAcc");
+    private static readonly int BandId = Shader.PropertyToID("_Band");
+    private static readonly int[] NearAccIds = { Shader.PropertyToID("_NearAcc0"), Shader.PropertyToID("_NearAcc1"),
+        Shader.PropertyToID("_NearAcc2"), Shader.PropertyToID("_NearAcc3") };
+    private static readonly int[] FarIds = { Shader.PropertyToID("_Far0"), Shader.PropertyToID("_Far1"), Shader.PropertyToID("_Far2"),
+        Shader.PropertyToID("_Far3") };
 
     // Step 3 the lens's way: false (the frame left to the older blur) without the shader.
     private static bool DefocusThrough(Camera view, RenderTexture frame, ref RenderTexture? made)
@@ -80,45 +49,136 @@ internal static partial class NightVisionEyepieces
         float pixelsPerRadian = height / (2f * tanUp);
         float ahead = Mathf.Clamp(Vector3.Dot(_body!.TransformPoint(_objectiveFront) - _renderedFrom, _renderedForward), 0f, MaxEyeDistance);
         // x: 1 over the focus distance (far away: 0); y: a disc's radius in quarter-size pixels per unit of |1/d − 1/s|;
-        // z: how far the objective is ahead of the camera; w: the largest radius drawn.
-        defocus.SetVector(DefocusLensId, new Vector4(0f, 0.5f * DefocusAperture * pixelsPerRadian, ahead, DefocusMaxRadius));
+        // z: how far the objective is ahead of the camera; w: the radius it eases toward (quarter-size pixels).
+        defocus.SetVector(DefocusLensId, new Vector4(0f, 0.5f * DefocusAperture * pixelsPerRadian, ahead,
+            DefocusMostDegrees * Mathf.Deg2Rad * pixelsPerRadian));
         defocus.SetVector(TanHalfId, TanHalf(view, frame));
         BindScope(defocus);
 
-        RenderTexture nearColor = Temporary(width, height), coc = Temporary(width, height);
-        Graphics.Blit(frame, nearColor, defocus, 1);
-        Graphics.Blit(frame, coc, defocus, 2);
+        // What is near, and its discs' radii (as radius times cover, and cover), at a quarter of the size, then each
+        // level half the last: a plain halving keeps the mean of both, so the radius stays the cover's mean.
+        for (int level = 0; level < DefocusLevels; level++)
+        {
+            int w = Mathf.Max(width >> level, 1), h = Mathf.Max(height >> level, 1);
+            _levelColor[level] = Temporary(w, h);
+            _levelCoc[level] = Temporary(w, h);
+            _levelAcc[level] = Temporary(w, h);
+            _levelFar[level] = Temporary(w, h);
+            if (level == 0)
+            {
+                Graphics.Blit(frame, _levelColor[0], defocus, 1);
+                Graphics.Blit(frame, _levelCoc[0], defocus, 2);
+                Graphics.Blit(frame, _levelFar[0], defocus, 3);
+            }
+            else
+            {
+                Graphics.Blit(_levelColor[level - 1], _levelColor[level]);
+                Graphics.Blit(_levelCoc[level - 1], _levelCoc[level]);
+                Graphics.Blit(_levelFar[level - 1], _levelFar[level]);
+            }
+        }
 
-        RenderTexture nearAcc = Temporary(width, height);
         CommandBuffer discs = _discBuffer ??= new CommandBuffer { name = "Justachae NVG objective discs" };
         discs.Clear();
-        discs.SetRenderTarget(nearAcc);
-        discs.ClearRenderTarget(false, true, Color.clear);
-        _nearDiscs.Clear();
-        _nearDiscs.SetTexture(SrcId, nearColor);
-        _nearDiscs.SetTexture(CocId, coc);
-        // Into a render texture the frame's up is flipped where textures start at the top.
-        _nearDiscs.SetVector(GridId, new Vector4(width, height, SystemInfo.graphicsUVStartsAtTop ? -1f : 1f, 0f));
-        discs.DrawProcedural(Matrix4x4.identity, defocus, 4, MeshTopology.Triangles, width * height * 6, 1, _nearDiscs);
+        float flip = SystemInfo.graphicsUVStartsAtTop ? -1f : 1f;
+        for (int level = 0; level < DefocusLevels; level++)
+        {
+            RenderTexture acc = _levelAcc[level]!;
+            discs.SetRenderTarget(acc);
+            discs.ClearRenderTarget(false, true, Color.clear);
+            MaterialPropertyBlock block = _discBlocks[level];
+            block.Clear();
+            block.SetTexture(SrcId, _levelColor[level]);
+            block.SetTexture(CocId, _levelCoc[level]);
+            // Into a render texture the frame's up is flipped where textures start at the top; w: this level's pixel
+            // in quarter-size pixels.
+            block.SetVector(GridId, new Vector4(acc.width, acc.height, flip, 1 << level));
+            // The radii (quarter-size pixels) this level draws: above the last level's, up to twice that.
+            float least = level == 0 ? 0f : 4f * (1 << (level - 1)), most = level == DefocusLevels - 1 ? 1e6f : 4f * (1 << level);
+            block.SetVector(BandId, new Vector4(least, most, 0f, 0f));
+            discs.DrawProcedural(Matrix4x4.identity, defocus, 4, MeshTopology.Triangles, acc.width * acc.height * 6, 1, block);
+        }
         Graphics.ExecuteCommandBuffer(discs);
 
-        DiagDefocus(nearColor, coc, nearAcc, frame, pixelsPerRadian, ahead); // TEMP DIAG
-        defocus.SetTexture(NearAccId, nearAcc);
+        for (int level = 0; level < DefocusLevels; level++)
+        {
+            defocus.SetTexture(NearAccIds[level], _levelAcc[level]);
+            defocus.SetTexture(FarIds[level], _levelFar[level]);
+        }
+        DiagDefocus(frame, pixelsPerRadian, ahead); // TEMP DIAG
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
         Graphics.Blit(frame, made, defocus, 5);
         AddTritium(view, made);
         ReleaseMask();
         _blurMask = Temporary(width, height);
         Graphics.Blit(frame, _blurMask, defocus, 6);
-        defocus.SetTexture(NearAccId, Texture2D.blackTexture);
-        RenderTexture.ReleaseTemporary(nearColor);
-        RenderTexture.ReleaseTemporary(coc);
-        RenderTexture.ReleaseTemporary(nearAcc);
+        for (int level = 0; level < DefocusLevels; level++)
+        {
+            defocus.SetTexture(NearAccIds[level], Texture2D.blackTexture);
+            defocus.SetTexture(FarIds[level], Texture2D.blackTexture);
+            RenderTexture.ReleaseTemporary(_levelColor[level]);
+            RenderTexture.ReleaseTemporary(_levelCoc[level]);
+            RenderTexture.ReleaseTemporary(_levelAcc[level]);
+            RenderTexture.ReleaseTemporary(_levelFar[level]);
+            _levelColor[level] = _levelCoc[level] = _levelAcc[level] = _levelFar[level] = null;
+        }
         if (!_defocusNoted)
         {
             _defocusNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus by discs, what is near kept solid ({width}x{height} discs).");
+            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus by discs at four sizes, over what lies behind ({width}x{height} quarter grid).");
         }
         return true;
+    }
+
+    // TEMP DIAG: the discs' radii and how much of the near layer's light they keep, and the frame time, a few times.
+    private static float _diagDefocusAt, _diagFrameSum;
+    private static int _diagDefocusCount, _diagFrames;
+    private static void DiagDefocus(RenderTexture frame, float pixelsPerRadian, float ahead)
+    {
+        _diagFrameSum += Time.unscaledDeltaTime;
+        _diagFrames++;
+        if (_diagDefocusCount >= 6 || Time.time - _diagDefocusAt < 3f)
+            return;
+        float ms = 1000f * _diagFrameSum / Mathf.Max(_diagFrames, 1);
+        _diagFrameSum = 0f;
+        _diagFrames = 0;
+        _diagDefocusAt = Time.time;
+        int n = ++_diagDefocusCount;
+        string head = $"frame {frame.width}x{frame.height}, mean frame {ms:F1} ms, px/rad {pixelsPerRadian:F0}, objective ahead {ahead:F3} m, most radius {DefocusMostDegrees * Mathf.Deg2Rad * pixelsPerRadian:F1}";
+        float cover = 0f, maxR = 0f, sumR = 0f;
+        int count = 0;
+        AsyncGPUReadback.Request(_levelCoc[0]!, 0, TextureFormat.RGBAFloat, r =>
+        {
+            if (r.hasError) return;
+            var d = r.GetData<Color>();
+            for (int i = 0; i < d.Length; i++)
+            {
+                if (d[i].g <= 0f) continue;
+                float radius = d[i].r / d[i].g;
+                maxR = Mathf.Max(maxR, radius);
+                sumR += radius;
+                cover += d[i].g;
+                count++;
+            }
+        });
+        float[] kept = new float[DefocusLevels];
+        int done = 0;
+        for (int level = 0; level < DefocusLevels; level++)
+        {
+            int l = level, scale = 1 << level;
+            AsyncGPUReadback.Request(_levelAcc[level]!, 0, TextureFormat.RGBAFloat, r =>
+            {
+                if (!r.hasError)
+                {
+                    var d = r.GetData<Color>();
+                    float sum = 0f;
+                    for (int i = 0; i < d.Length; i++) sum += d[i].a;
+                    kept[l] = sum * scale * scale;
+                }
+                if (++done < DefocusLevels) return;
+                float all = kept[0] + kept[1] + kept[2] + kept[3];
+                NewCameraPlugin.Log?.LogInfo($"TEMP DIAG defocus {n}: {head}; near texels {count}, radius mean {(count > 0 ? sumR / count : 0f):F2} max {maxR:F2} (quarter px); light kept {(cover > 0f ? all / cover : 0f):F3} (by level {kept[0]:F0} {kept[1]:F0} {kept[2]:F0} {kept[3]:F0} of {cover:F0})");
+            });
+        }
     }
 }
