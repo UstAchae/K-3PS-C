@@ -200,7 +200,9 @@ Shader "Justachae/NVG/Defocus" {
    float4 frag (v2f_img i) : SV_Target {
     float4 f = tex2D(_MainTex, i.uv);
     float4 n = Near(i.uv);
-    if (n.a < 1e-4)
+    // Nothing near spread here, by discs or as what is close (the gun, drawn only that way, was left sharp when only
+    // the discs were asked).
+    if (n.a < 1e-4 && _Cover.SampleLevel(sampler_linear_clamp, i.uv, 0).g < 1e-4 && _CoverWide.SampleLevel(sampler_linear_clamp, i.uv, 0).g < 1e-4)
      return f;
     float r = Radius(i.uv);
     // Behind a near thing (where the frame has only the thing itself): what is about it, filled in from its edge
