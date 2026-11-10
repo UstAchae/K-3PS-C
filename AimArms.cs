@@ -1127,7 +1127,9 @@ internal static class AimArms
         Quaternion keptGun = gunBase * Scale(Quaternion.Inverse(_gunTurnMean) * gunTurn, gunTurnScale);
         // The position above is always chased. The turn is chased only during a bolt cycle or fire mode
         // switch, so that animation shows first; otherwise chasing it lets breath sway through a held breath.
-        Quaternion pinnedTurn = LineOfSight(animation, sightBone, sightForward, ironAligned, anim, armBase * gunBase) * keptArm * keptGun * Quaternion.Inverse(armTurn * rawGunTurn);
+        Quaternion lineTurn = LineOfSight(animation, sightBone, sightForward, ironAligned, anim, armBase * gunBase);
+        Quaternion pinnedTurn = lineTurn * keptArm * keptGun * Quaternion.Inverse(armTurn * rawGunTurn);
+        DiagBreath.Parts(armTurn, rawGunTurn, lineTurn, keptArm * keptGun, ShotKick(animation, anim.rotation), later, chasing, _sightCatch > 0f, _handAction);  // TEMPORARY
         // The catch-up after the action has a fixed length. Waiting for the chase to settle never ends
         // while breath sway keeps moving the target.
         if (_handAction)

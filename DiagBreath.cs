@@ -23,6 +23,37 @@ internal static class DiagBreath
         return new Vector2(Mathf.DeltaAngle(0f, e.x), Mathf.DeltaAngle(0f, e.y));
     }
 
+    // From AimArms.Sway, each frame aimed: how much each part of the gun's placement moves.
+    private static bool _partsFirst = true;
+    private static Vector2 _armMin, _armMax, _rawMin, _rawMax, _lineTurnMin, _lineTurnMax, _keptMin, _keptMax, _kickMin, _kickMax;
+    private static float _laterMax;
+    private static int _chasing, _catching, _acting, _parts;
+    internal static void Parts(Quaternion arm, Quaternion raw, Quaternion line, Quaternion kept, Quaternion kick, Vector3 later, bool chasing, bool catching, bool acting)
+    {
+        bool first = _partsFirst;
+        _partsFirst = false;
+        Take(Angles(arm), ref _armMin, ref _armMax, first);
+        Take(Angles(raw), ref _rawMin, ref _rawMax, first);
+        Take(Angles(line), ref _lineTurnMin, ref _lineTurnMax, first);
+        Take(Angles(kept), ref _keptMin, ref _keptMax, first);
+        Take(Angles(kick), ref _kickMin, ref _kickMax, first);
+        if (first) { _laterMax = 0f; _chasing = _catching = _acting = _parts = 0; }
+        _laterMax = Mathf.Max(_laterMax, later.magnitude * 1000f);
+        _parts++;
+        if (chasing) _chasing++;
+        if (catching) _catching++;
+        if (acting) _acting++;
+    }
+
+    private static string PartsText()
+    {
+        if (_partsFirst)
+            return " parts none";
+        _partsFirst = true;
+        return $" parts n={_parts} arm={_armMax - _armMin:F3} rawGun={_rawMax - _rawMin:F3} lineFix={_lineTurnMax - _lineTurnMin:F3} kept={_keptMax - _keptMin:F3}"
+            + $" kick={_kickMax - _kickMin:F3} kickMean={(_kickMax + _kickMin) * 0.5f:F3} laterMax={_laterMax:F2}mm chasing={_chasing} catching={_catching} acting={_acting}";
+    }
+
     internal static void Sample(Player player, Quaternion headRotation, Vector3 cameraPosition, Quaternion cameraRotation)
     {
         if (player.HandsController == null || !player.HandsController.IsAiming)
@@ -62,7 +93,7 @@ internal static class DiagBreath
         catch (System.Exception e) { body = " body? " + e.Message; }
         NewCameraPlugin.Log?.LogInfo($"DiagBreath holding={holding} frames={_frames} sway={AimArms.DiagSway}"
             + $" head(p,y)={_headMax - _headMin:F3} cam={_camMax - _camMin:F3} line={_lineMax - _lineMin:F3} deg place(x,y)={_placeMax - _placeMin:F2} mm"
-            + $" camMean={(_camMax + _camMin) * 0.5f:F2}" + body);
+            + $" camMean={(_camMax + _camMin) * 0.5f:F2}" + body + PartsText());
         _start = -1f;
     }
 }
