@@ -144,15 +144,9 @@ internal static partial class NightVisionEyepieces
         }
         DiagDefocus(frame, pixelsPerRadian, ahead); // TEMP DIAG
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
-        // As at the table: all of the frame (each point by its share, the nearer the more) at an eighth of its size
-        // blurred wide and smooth, and again twice as wide for thin parts; the near shape blurred alike, for how far
-        // about a near thing that is taken.
-        RenderTexture all = Temporary(width, height), allHalf = Temporary(Mathf.Max(width / 2, 1), Mathf.Max(height / 2, 1));
-        Graphics.Blit(frame, all, defocus, 9);
-        Graphics.Blit(all, allHalf, defocus, 7);
-        RenderTexture.ReleaseTemporary(all);
-        Smoothed(allHalf, defocus, out RenderTexture soft, out RenderTexture wide);
-        RenderTexture.ReleaseTemporary(allHalf);
+        // Its outline: the near shape (what of the frame is near, at an eighth of its size) blurred wide and smooth, and
+        // again twice as wide for thin parts; its colour (weighted toward what is nearer) blurred alike.
+        Smoothed(_levelColor[1]!, defocus, out RenderTexture soft, out RenderTexture wide);
         Smoothed(_levelCoc[1]!, defocus, out RenderTexture cover, out RenderTexture coverWide);
         defocus.SetTexture(ShapeId, soft);
         defocus.SetTexture(ShapeWideId, wide);
@@ -204,7 +198,7 @@ internal static partial class NightVisionEyepieces
         string folder = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump", _dumps.ToString());
         System.IO.Directory.CreateDirectory(folder);
         Save(frame, System.IO.Path.Combine(folder, "0-frame.png"));
-        string[] names = { "", "1-frame-as-is.png", "2-blurred-colour.png", "3-zone.png" };
+        string[] names = { "", "1-behind.png", "2-disc-colour.png", "3-solid.png" };
         for (int show = 1; show <= 3; show++)
         {
             RenderTexture layer = RenderTexture.GetTemporary(frame.width, frame.height, 0, RenderTextureFormat.ARGBHalf);
