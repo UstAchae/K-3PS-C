@@ -117,15 +117,20 @@ Shader "Justachae/NVG/Direct" {
   float s = smoothstep(0, 0.5 + _DirectStrip * 0.5, _DirectMonocular.y > 0.5 ? uv.x : 1 - uv.x);
   return pow(max(s, 1e-5), _DirectMonocular.z);
  }
+ bool fadingAt (float2 uv) { return monocularShown(uv) < 0.999; }
+ // Every other pixel, as on a chessboard: across a monocular's fade those have the device, the others what lies behind.
+ bool checker (float2 pixel) { return fmod(floor(pixel.x) + floor(pixel.y), 2) < 0.5; }
 
  bool pick (float2 pixel, float2 uv, float rawL, float rawR, out float toRight) {
   float c = coverage(uv, rawL, rawR, toRight);
   if (c <= 0)
    return false;
-  // Faded by its pixels kept and left out, on a pattern of its own, evened once lit (pass 2): a G-buffer has no see-through.
-  float shown = monocularShown(uv);
-  if (shown < 1 && !kept(pixel + float2(2, 1), shown))
-   return false;
+  // A G-buffer has no see-through. Across a monocular's fade every other pixel has the device, whole, the eyes' halves mixed in by
+  // their shares; once lit, each pixel gets the device's light from the pixels that have it and what lies behind from the others,
+  // mixed by how much of the device shows (pass 2). Kept and left out by a coarser pattern and evened over it, the fade showed its
+  // squares, what lay behind blurred with it.
+  if (fadingAt(uv))
+   return checker(pixel);
   if (toRight > 0 && toRight < 1) {
    toRight = kept(pixel, toRight) ? 1 : 0;
    return true;
@@ -222,9 +227,31 @@ Shader "Justachae/NVG/Direct" {
     float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
     float c = coverage(uv, rawL, rawR, toRight);
     float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
-    bool strip = t > 0 && t < 1, fading = monocularShown(uv) < 0.999;
+    bool strip = t > 0 && t < 1, fading = fadingAt(uv);
     if (c <= 0 || !strip && !fading || !notCovered(uv, rawL, rawR))
      discard;
+    if (fading) {
+     // This pixel's own light, and the other kind's from the four next to it (all of the other kind on a chessboard). Next to a
+     // pixel without the device, only those that have it there count.
+     float3 own = tex2Dlod(_DirectLitNow, float4(uv, 0, 0)).rgb;
+     bool device = checker(i.pos.xy);
+     float3 other = 0;
+     float count = 0;
+     static const float2 steps[4] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1) };
+     [unroll] for (int k = 0; k < 4; k++) {
+      float2 at = uv + steps[k] * _DirectTexel.xy;
+      float tn = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, at.x);
+      bool has = tn < 1 && shown(SAMPLE_DEPTH_TEXTURE_LOD(_DirectLD, float4(at, 0, 0)))
+          || tn > 0 && shown(SAMPLE_DEPTH_TEXTURE_LOD(_DirectRD, float4(at, 0, 0)));
+      float w = device || has ? 1 : 0;
+      other += tex2Dlod(_DirectLitNow, float4(at, 0, 0)).rgb * w;
+      count += w;
+     }
+     if (count <= 0)
+      return float4(own, 1);
+     other /= count;
+     return float4(lerp(device ? other : own, device ? own : other, c * monocularShown(uv)), 1);
+    }
     float3 sum = 0;
     for (int y = -2; y < 2; y++)
      for (int x = -2; x < 2; x++)
