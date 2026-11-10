@@ -474,12 +474,13 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             "游戏里绑定的瞄准键（默认鼠标右键 Mouse1），用来判断是否还按着。改了游戏里的瞄准键时这里也要改。");
         ConfigEntry<float> hold = SettingsLayout.Bind(Config, section, "按住多久算按住（秒）", 0.15f,
             new ConfigDescription("瞄准键按下后，这个时间内松开算点一下（松开时正常开镜），超过这个时间还按着算按住（直接进入胸口抵肩；游戏里设成长按瞄准时反过来）。越短按住时等得越少，但慢一点的点击可能被当成按住。", new AcceptableValueRange<float>(0.1f, 1f)));
-        ConfigEntry<float> drop = SettingsLayout.Bind(Config, section, "比开镜时低（米）", 0.05f,
-            new ConfigDescription("胸口抵肩时，枪比正常开镜时的位置低多少（负数是更高）。", new AcceptableValueRange<float>(-0.1f, 0.3f)));
-        ConfigEntry<float> side = SettingsLayout.Bind(Config, section, "比开镜时偏右（米）", -0.05f,
-            new ConfigDescription("胸口抵肩时，枪比正常开镜时的位置往右多少（负数是往左）。", new AcceptableValueRange<float>(-0.15f, 0.15f)));
-        ConfigEntry<float> ahead = SettingsLayout.Bind(Config, section, "比开镜时靠前（米）", 0f,
-            new ConfigDescription("胸口抵肩时，枪比正常开镜时的位置往前多少（负数是往后）。", new AcceptableValueRange<float>(-0.15f, 0.15f)));
+        // The stance places the gun by itself (its own origin), not by a sight: new names, as the old values meant the sight's place.
+        ConfigEntry<float> drop = SettingsLayout.Bind(Config, section, "枪身原点低于视线（米）", 0.17f,
+            new ConfigDescription("胸口抵肩时，枪身原点在视线下方多少（负数是在上方）。只看枪本身，和装了什么瞄具无关。", new AcceptableValueRange<float>(-0.1f, 0.4f)));
+        ConfigEntry<float> side = SettingsLayout.Bind(Config, section, "枪身原点偏右（米）", -0.05f,
+            new ConfigDescription("胸口抵肩时，枪身原点在视线右边多少（负数是往左）。只看枪本身，和装了什么瞄具无关。", new AcceptableValueRange<float>(-0.15f, 0.15f)));
+        ConfigEntry<float> ahead = SettingsLayout.Bind(Config, section, "枪身原点靠前（米）", 0.05f,
+            new ConfigDescription("胸口抵肩时，枪身原点比平时开镜的距离再往前多少（负数是往后）。只看枪本身，和装了什么瞄具无关。", new AcceptableValueRange<float>(-0.2f, 0.3f)));
         ConfigEntry<float> cant = SettingsLayout.Bind(Config, section, "倾斜（度）", 20f,
             new ConfigDescription("胸口抵肩时，枪绕着瞄准线转多少度，正数是枪的上面往左倒（向内），负数往右。", new AcceptableValueRange<float>(-60f, 60f)));
         // Two decimals: the slider's value rounded to hundredths of a second.

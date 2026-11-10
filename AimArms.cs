@@ -286,12 +286,19 @@ internal static class AimArms
             Transform? bone = animation != null && animation.ScopeAimTransforms != null && animation.ScopeAimTransforms.Count > 0
                 ? Scopes.Current(animation)?.Bone
                 : null;
-            // The stock at the chest: placed by an upright sight, not by the one aimed through (a canted one sits off to the side).
-            if (bone != null && ChestStance.Weight > 0f && ChestStance.UprightSight(animation!) is Transform upright)
-                bone = upright;
+            // The stock at the chest is a stance, as crouching is: the gun is placed by itself, its own origin and its bore along the view,
+            // whatever sights it carries; only up at the eye is a sight looked through.
+            Transform? gunItself = aiming && ChestStance.Active && animation != null ? animation.HandsContainer?.Weapon : null;
+            if (gunItself != null)
+            {
+                NoteChestGun(animation!, bone, gunItself);
+                bone = gunItself;
+            }
             Vector3 sightPosition = bone != null ? bone.position : Vector3.zero;
             Vector3 sightForward = Vector3.forward;
-            bool ironAligned = bone != null && animation != null && ResolveIronSight(animation, bone, out sightPosition, out sightForward);
+            bool ironAligned = gunItself != null || bone != null && animation != null && ResolveIronSight(animation, bone, out sightPosition, out sightForward);
+            if (gunItself != null)
+                sightForward = -gunItself.up;   // the bore
             // The rangefinder: its lens is the aim point, whatever the game's aim bone does.
             bool rangefinder = RangefinderSight.TryGet(player, out Transform rangefinderLens, out Transform rangefinderBody, out float rangefinderRelief);
             if (rangefinder)
@@ -320,13 +327,14 @@ internal static class AimArms
             if (aiming && bone != null && animation != null)
             {
                 sightId = bone.GetInstanceID();
-                float relief = rangefinder ? rangefinderRelief - ForwardDistance : SightRelief(animation, bone);
+                float relief = rangefinder ? rangefinderRelief - ForwardDistance : gunItself != null ? 0f : SightRelief(animation, bone);
                 // From the aiming eye: the camera, or where the eye would be at the chest, where the camera stays.
                 Vector3 aimPoint = new Vector3(CameraPosition.PoseAcross, 0f, ForwardDistance + relief);
-                // The stock at the chest (ChestStance): the gun as aimed, lower and to the right of the eye.
-                float chest = ChestStance.Weight * ChestStance.Weight * (3f - 2f * ChestStance.Weight);
-                if (chest > 0f)
-                    aimPoint += ChestStance.Offset * chest;
+                // The stock at the chest (ChestStance): the gun's own origin there, lower and to the right of the eye. Into it and out of it
+                // the gun goes as the change of what places it has it (the blend below).
+                float chest = gunItself != null ? 1f : 0f;
+                if (gunItself != null)
+                    aimPoint += ChestStance.Offset;
                 Transform? root = bones.Weapon_Root_Anim;
                 SteadyHead(player, cameraPosition, cameraRotation, out Vector3 steadyPosition, out Quaternion steadyRotation);
                 Quaternion bodyRotation = _bodyLook * Quaternion.Inverse(_smoothLook) * steadyRotation;
@@ -1687,6 +1695,18 @@ internal static class AimArms
         if (Mathf.Abs(yaw) < 0.01f && Mathf.Abs(down) < 0.01f)
             return Quaternion.identity;
         return LookTurn(player.MovementContext, yaw, down);
+    }
+
+    // Temporary: in the stance, where the gun's origin lies from the sight it would be aimed by (right, up, ahead along the bore, m), to
+    // set the stance's place by; once for each gun and sight.
+    private static int _chestNoted;
+    private static void NoteChestGun(ProceduralWeaponAnimation animation, Transform? sight, Transform gun)
+    {
+        if (sight == null || !sight.IsChildOf(gun.root) || sight.GetInstanceID() == _chestNoted)
+            return;
+        _chestNoted = sight.GetInstanceID();
+        Vector3 s = gun.InverseTransformPoint(sight.position);
+        NewCameraPlugin.Log?.LogInfo($"Chest check: the gun's origin from its sight {sight.name}: right {-s.x:F3}, up {-s.z:F3}, ahead {s.y:F3} m; the sight's relief {SightRelief(animation, sight):F3} m");
     }
 
     private static bool ResolveIronSight(ProceduralWeaponAnimation animation, Transform bone, out Vector3 position, out Vector3 forward)

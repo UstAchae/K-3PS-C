@@ -24,14 +24,14 @@ internal static class ChestStance
     internal static bool Enabled = true;
     internal static KeyCode Key = KeyCode.Mouse1;  // the aim key as bound in the game (it does not report a release)
     internal static float HoldSeconds = 0.25f;
-    internal static float Drop = 0.10f, Ahead = 0f, Side = 0.05f;      // the sight's place from where it is aimed (m)
+    internal static float Drop = 0.17f, Ahead = 0.05f, Side = -0.05f;  // the gun's own origin from the eye's line (m)
     internal static float Cant = 30f;                                   // the gun's turn about its line of sight (degrees, top to the left)
 
     internal static bool Active { get; private set; }
     // How far into the stance the gun is (0 or 1): kept as it was once the aim ends, so the gun leaves from where it was,
     // and set as the next aim is taken.
     internal static float Weight { get; private set; }
-    // From the aimed place (the sight at the eye): the gun held as aimed, only lower and to the right.
+    // The gun's own origin from the eye's line, ahead by the usual aiming distance: lower and to the right.
     internal static Vector3 Offset => new Vector3(Side, -Drop, Ahead);
 
     private static bool _pending;        // a press of the aim key held back, not yet known to be a click or a hold
@@ -269,80 +269,6 @@ internal static class ChestStance
             Weight = Mathf.Min(1f, Weight + Time.deltaTime / EnterSeconds);
     }
 
-    // The gun's own up, in its frame: the axis across its bore (its bore is its -Y) that most of its sights sit above
-    // it along, a canted one (off to the side) being the odd one out. Taken from where the sights are, over the bore
-    // through the muzzle, not from how their bones are turned: the bones do not agree on it (an "aim_camera" bone's
-    // forward pointed up on one gun and down on another, which turned the gun over in the stance and lifted the
-    // arms over the shoulders). Found once a gun (and its set of sights).
-    private static int _upWeapon = -1, _upSights = -1;
-    private static Vector3 _upLocal = Vector3.forward;
-    private static Transform? _uprightSight;
-    private static readonly Vector3[] Across = { Vector3.right, -Vector3.right, Vector3.forward, -Vector3.forward };
-
-    private static void FindUp(EFT.Animations.ProceduralWeaponAnimation animation, Transform weapon)
-    {
-        var sights = animation.ScopeAimTransforms;
-        int count = sights?.Count ?? 0;
-        // Known by the sights themselves, not only by how many: a sight changed for another in a raid left the count as it was, and the
-        // one taken off, far from the gun, went on placing it, which pulled the gun metres away and round.
-        int which = count;
-        for (int i = 0; i < count; i++)
-            which = which * 31 + (sights![i]?.Bone != null ? sights[i].Bone.GetInstanceID() : 0);
-        if (weapon.GetInstanceID() == _upWeapon && which == _upSights)
-            return;
-        _upWeapon = weapon.GetInstanceID();
-        _upSights = which;
-        _upLocal = Vector3.forward;
-        _uprightSight = null;
-        if (sights == null || count == 0)
-            return;
-        var votes = new int[Across.Length];
-        var first = new Transform?[Across.Length];
-        int firstAxis = -1;
-        // The bore's line, across it: the muzzle's place in the gun's frame (else the gun's own origin).
-        Transform? muzzle = (Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer?.HandsController as Player.FirearmController)?.CurrentFireport?.Original;
-        Vector3 bore = muzzle != null ? weapon.InverseTransformPoint(muzzle.position) : Vector3.zero;
-        for (int i = 0; i < count; i++)
-        {
-            Transform? bone = sights[i]?.Bone;
-            if (bone == null || !bone.IsChildOf(weapon))
-                continue;
-            Vector3 place = weapon.InverseTransformPoint(bone.position);
-            Vector3 up = new Vector3(place.x - bore.x, 0f, place.z - bore.z);
-            if (up.sqrMagnitude < 0.0001f)   // within a centimetre of the bore's line: no side to it
-                continue;
-            int best = 0;
-            for (int a = 1; a < Across.Length; a++)
-                if (Vector3.Dot(up, Across[a]) > Vector3.Dot(up, Across[best]))
-                    best = a;
-            if (Vector3.Angle(up, Across[best]) > 25f)
-                continue;
-            votes[best]++;
-            first[best] ??= bone;
-            if (firstAxis < 0)
-                firstAxis = best;
-        }
-        // No sight clearly over the bore: the gun's usual up (forward in its frame) is kept.
-        if (firstAxis < 0)
-            return;
-        int pick = firstAxis;
-        for (int a = 0; a < Across.Length; a++)
-            if (votes[a] > votes[pick])
-                pick = a;
-        _upLocal = Across[pick];
-        _uprightSight = first[pick];
-    }
-
-    // In the stance the gun is placed by a sight that stands upright on it, whichever is aimed through.
-    internal static Transform? UprightSight(EFT.Animations.ProceduralWeaponAnimation animation)
-    {
-        Transform? weapon = animation.HandsContainer?.Weapon;
-        if (weapon == null)
-            return null;
-        FindUp(animation, weapon);
-        return _uprightSight;
-    }
-
     // The turn that cants the gun Cant degrees from the view's up (top to the left), about the line of sight, whatever
     // the game has turned it to for the sight aimed through: its own up there, as the carry's turn leaves it, put there.
     internal static Quaternion Canted(EFT.Animations.ProceduralWeaponAnimation animation, Quaternion turn, Quaternion view, float weight)
@@ -351,8 +277,8 @@ internal static class ChestStance
         Transform? weapon = animation.HandsContainer?.Weapon;
         if (weapon == null)
             return Quaternion.AngleAxis(Cant * weight, forward) * turn;
-        FindUp(animation, weapon);
-        Vector3 have = Vector3.ProjectOnPlane(turn * weapon.TransformDirection(_upLocal), forward);
+        // The gun's own up: forward in its frame, as the game's guns have it, whatever sights it carries.
+        Vector3 have = Vector3.ProjectOnPlane(turn * weapon.forward, forward);
         Vector3 want = Quaternion.AngleAxis(Cant, forward) * Vector3.ProjectOnPlane(view * Vector3.up, forward);
         if (have.sqrMagnitude < 1e-8f)
             return turn;
