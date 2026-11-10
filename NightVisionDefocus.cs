@@ -41,7 +41,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int CoverId = Shader.PropertyToID("_Cover");
     private static readonly int CoverWideId = Shader.PropertyToID("_CoverWide");
 
-    // A level blurred wide and smooth (two Gaussians each way), and the same at half its size blurred again: twice as
+    // A level blurred wide and smooth (three Gaussians each way), and the same at half its size blurred again: twice as
     // wide.
     private static void Smoothed(RenderTexture source, Material defocus, out RenderTexture soft, out RenderTexture wide)
     {
@@ -59,7 +59,7 @@ internal static partial class NightVisionEyepieces
 
     private static void Gaussians(RenderTexture texture, RenderTexture across, Material defocus)
     {
-        for (int pass = 0; pass < 2; pass++)
+        for (int pass = 0; pass < 3; pass++)
         {
             defocus.SetVector(StepId, new Vector2(1f, 0f));
             Graphics.Blit(texture, across, defocus, 8);
