@@ -32,6 +32,8 @@ internal static class AimPatches
             postfix: Hook(typeof(AimArms), nameof(AimArms.FireModePostfix)));
         Patch(harmony, AccessTools.Method(typeof(FirearmsAnimator), nameof(FirearmsAnimator.TriggerFiremodeCheck)),
             postfix: Hook(typeof(AimArms), nameof(AimArms.FireModeCheckPostfix)));
+        Patch(harmony, AccessTools.Method(typeof(Player.FirearmController), nameof(Player.FirearmController.InitiateShot)),
+            postfix: Hook(typeof(AimArms), nameof(AimArms.BoltShotPostfix)));
         Patch(harmony, AccessTools.Method(typeof(Player.FirearmController), nameof(Player.FirearmController.AdjustShotVectors)),
             prefix: Hook(typeof(AimArms), nameof(AimArms.AdjustShotPrefix)));
         Patch(harmony, AccessTools.Method(typeof(Physical), nameof(Physical.Aim)),

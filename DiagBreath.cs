@@ -54,6 +54,12 @@ internal static class DiagBreath
             + $" kick={_kickMax - _kickMin:F3} kickMean={(_kickMax + _kickMin) * 0.5f:F3} laterMax={_laterMax:F2}mm chasing={_chasing} catching={_catching} acting={_acting}";
     }
 
+    private static int _bolt, _mode, _check;
+    internal static void Started(string why)
+    {
+        if (why == "bolt") _bolt++; else if (why == "mode") _mode++; else _check++;
+    }
+
     internal static void Sample(Player player, Quaternion headRotation, Vector3 cameraPosition, Quaternion cameraRotation)
     {
         if (player.HandsController == null || !player.HandsController.IsAiming)
@@ -94,7 +100,8 @@ internal static class DiagBreath
         catch (System.Exception e) { body = " body? " + e.Message; }
         NewCameraPlugin.Log?.LogInfo($"DiagBreath holding={holding} frames={_frames} {AimArms.DiagState} sway={AimArms.DiagSway} rawHead={_rawHeadMax - _rawHeadMin:F3}"
             + $" head(p,y)={_headMax - _headMin:F3} cam={_camMax - _camMin:F3} line={_lineMax - _lineMin:F3} deg place(x,y)={_placeMax - _placeMin:F2} mm"
-            + $" camMean={(_camMax + _camMin) * 0.5f:F2}" + body + PartsText());
+            + $" camMean={(_camMax + _camMin) * 0.5f:F2}" + body + PartsText() + $" started bolt={_bolt} mode={_mode} check={_check}");
+        _bolt = _mode = _check = 0;
         _start = -1f;
     }
 }

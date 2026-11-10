@@ -543,13 +543,31 @@ internal static class AimArms
         _fireModeOf = __instance;
         _fireMode = (int)__0;
         if (switched && !skipAnimation)
+        {
+            DiagBreath.Started("mode");  // TEMPORARY
             StartHandAction(FireModeMinSeconds);
+        }
+    }
+
+    // A bolt worked after a shot: the shot itself (InitiateShot), not the shot's vectors, which other mods (SAIN, XM250) ask the
+    // gun in hand for every frame.
+    internal static void BoltShotPostfix(Player.FirearmController __instance)
+    {
+        if (NewCameraSwitch.Enabled && __instance.Item is Weapon { BoltAction: true }
+            && ReferenceEquals(Singleton<GameWorld>.Instance?.MainPlayer?.HandsController, __instance))
+        {
+            DiagBreath.Started("bolt");  // TEMPORARY
+            StartHandAction(BoltMinSeconds);
+        }
     }
 
     internal static void FireModeCheckPostfix(FirearmsAnimator __instance)
     {
         if (NewCameraSwitch.Enabled && IsMainFirearmsAnimator(__instance))
+        {
+            DiagBreath.Started("check");  // TEMPORARY
             StartHandAction(FireModeMinSeconds);
+        }
     }
 
     // The action lasts until the hands layer is back in idle, but at least long enough for the
@@ -576,9 +594,6 @@ internal static class AimArms
 
     internal static void AdjustShotPrefix(Player.FirearmController __instance, ref Vector3 position, ref Vector3 direction)
     {
-        if (NewCameraSwitch.Enabled && __instance.Item is Weapon { BoltAction: true }
-            && ReferenceEquals(Singleton<GameWorld>.Instance?.MainPlayer?.HandsController, __instance))
-            StartHandAction(BoltMinSeconds);
         if (!NewCameraSwitch.Enabled)
             return;
         if (!_hasCarry || Time.frameCount - _shotFrame > 2)
