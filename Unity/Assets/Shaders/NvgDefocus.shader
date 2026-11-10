@@ -27,7 +27,7 @@ Shader "Justachae/NVG/Defocus" {
   float4 _MainTex_TexelSize;
   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
   Texture2D _ScopeLens, _Src, _Coc;
-  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide, _Cover, _CoverWide, _Blurred;
+  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide, _Cover, _CoverWide;
   float2 _Step;   // a Gaussian's direction, in texels
   SamplerState sampler_linear_clamp, sampler_point_clamp;
   float _ScopeOn;
@@ -226,16 +226,11 @@ Shader "Justachae/NVG/Defocus" {
     float3 colour = shape.a > 1e-3 ? shape.rgb / shape.a : (n.a > 1e-3 ? n.rgb / n.a : f.rgb);
     // Where little or nothing of what is about it was found (all about it is near too), its own colour, eased in.
     fill = found > 1e-3 ? lerp(colour, fill / found, saturate(found * 2)) : colour;
-    // The frame's own where nothing near is; what is filled in where something is and all about it, as far as the
-    // soft shape reaches (an opening's edge too: a sight's window kept the frame's own sharp scene to a line along
-    // its edge, against what was filled in under its frame).
-    // Gently, as the square of how much the shape covers: taken whole wherever it covered at all, what was filled in
-    // (darker, softer) showed as a veil of the thing's shape out to the blur's last reach.
-    float reach = saturate(soft * 1.5);
-    // Behind: the frame's own far from the thing, easing into the whole frame blurred (an eighth of its size) toward it
-    // and wholly that by its edge. Switched to what was filled in right at its outline, the scene behind (sharp outside,
-    // softened inside) was cut there, and the outline showed.
-    float3 behind = lerp(f.rgb, _Blurred.SampleLevel(sampler_linear_clamp, i.uv, 0).rgb, smoothstep(0, 0.5, soft));
+    // Behind: the frame's own far from the thing, easing into what was filled in (what is about it, never the thing
+    // itself) toward it, wholly that by its edge (where the soft shape is half), and on the thing itself. The whole
+    // frame blurred instead carried the thing's own dark out about it (a dark ring); the frame's own let onto the thing
+    // where it is thin left its sharp top showing; a switch right at its outline cut the scene behind there.
+    float3 behind = lerp(f.rgb, fill, max(Nearness(r), smoothstep(0, 0.5, soft)));
     // How solid the spread thing shows: its own shape (what of the frame is near), blurred wide and smooth, so its
     // outline fades softly both ways and a thin part, a narrow line in it, all but goes; its colour the discs'.
     // Fading out from the thing both in how much it covers (an S: thin at its fringe, as before within) and in its

@@ -39,7 +39,6 @@ internal static partial class NightVisionEyepieces
     private static readonly int ShapeId = Shader.PropertyToID("_Shape");
     private static readonly int ShapeWideId = Shader.PropertyToID("_ShapeWide");
     private static readonly int CoverId = Shader.PropertyToID("_Cover");
-    private static readonly int BlurredId = Shader.PropertyToID("_Blurred");
     private static readonly int CoverWideId = Shader.PropertyToID("_CoverWide");
 
     // A level blurred wide and smooth (two Gaussians each way), and the same at half its size blurred again: twice as
@@ -146,18 +145,6 @@ internal static partial class NightVisionEyepieces
         // again twice as wide for thin parts; its colour (weighted toward what is nearer) blurred alike.
         Smoothed(_levelColor[1]!, defocus, out RenderTexture soft, out RenderTexture wide);
         Smoothed(_levelCoc[1]!, defocus, out RenderTexture cover, out RenderTexture coverWide);
-        // The whole frame blurred (at an eighth of its size, once more smoothed), for what lies behind near a thing's edge.
-        RenderTexture quarter = Temporary(width, height), blurred = Temporary(Mathf.Max(width / 2, 1), Mathf.Max(height / 2, 1));
-        RenderTexture blurredAcross = Temporary(blurred.width, blurred.height);
-        Graphics.Blit(frame, quarter, defocus, 7);
-        Graphics.Blit(quarter, blurred, defocus, 7);
-        RenderTexture.ReleaseTemporary(quarter);
-        defocus.SetVector(StepId, new Vector2(1f, 0f));
-        Graphics.Blit(blurred, blurredAcross, defocus, 8);
-        defocus.SetVector(StepId, new Vector2(0f, 1f));
-        Graphics.Blit(blurredAcross, blurred, defocus, 8);
-        RenderTexture.ReleaseTemporary(blurredAcross);
-        defocus.SetTexture(BlurredId, blurred);
         defocus.SetTexture(ShapeId, soft);
         defocus.SetTexture(ShapeWideId, wide);
         defocus.SetTexture(CoverId, cover);
@@ -176,8 +163,6 @@ internal static partial class NightVisionEyepieces
         RenderTexture.ReleaseTemporary(wide);
         RenderTexture.ReleaseTemporary(cover);
         RenderTexture.ReleaseTemporary(coverWide);
-        defocus.SetTexture(BlurredId, Texture2D.blackTexture);
-        RenderTexture.ReleaseTemporary(blurred);
         for (int level = 0; level < DefocusLevels; level++)
         {
             defocus.SetTexture(NearAccIds[level], Texture2D.blackTexture);
