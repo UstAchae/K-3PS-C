@@ -828,7 +828,6 @@ internal static class NewCameraSwitch
                     _poseRotation *= Quaternion.Euler(shakeTurn);
                 }
                 PoseHead = head;
-                DiagBreath.Sample(player, CameraDirection.Resolve(head.rotation), _posePosition, _poseRotation);  // TEMPORARY
                 AimArms.LiftHead(head);
                 _poseFrame = Time.frameCount;
             }

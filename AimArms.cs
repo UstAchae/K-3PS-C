@@ -530,8 +530,8 @@ internal static class AimArms
             && ReferenceEquals(firearm.FirearmsAnimator, animator);
     }
 
-    // A switch of the fire mode, not the mode set again as it was: other mods (an animator updater) set it every frame, and each call
-    // taken as a switch kept the aimed gun chasing its place, the sway through it whatever the settings (the breath held, 跟随头部).
+    // A switch of the fire mode, not the mode set again as it was (other mods set it too): each call taken as a switch would keep the
+    // aimed gun chasing its place, the sway through it whatever the settings (the breath held, 跟随头部).
     private static FirearmsAnimator? _fireModeOf;
     private static int _fireMode = -1;
 
@@ -543,10 +543,7 @@ internal static class AimArms
         _fireModeOf = __instance;
         _fireMode = (int)__0;
         if (switched && !skipAnimation)
-        {
-            DiagBreath.Started("mode");  // TEMPORARY
             StartHandAction(FireModeMinSeconds);
-        }
     }
 
     // A bolt worked after a shot: the shot itself (InitiateShot), not the shot's vectors, which other mods (SAIN, XM250) ask the
@@ -555,19 +552,13 @@ internal static class AimArms
     {
         if (NewCameraSwitch.Enabled && __instance.Item is Weapon { BoltAction: true }
             && ReferenceEquals(Singleton<GameWorld>.Instance?.MainPlayer?.HandsController, __instance))
-        {
-            DiagBreath.Started("bolt");  // TEMPORARY
             StartHandAction(BoltMinSeconds);
-        }
     }
 
     internal static void FireModeCheckPostfix(FirearmsAnimator __instance)
     {
         if (NewCameraSwitch.Enabled && IsMainFirearmsAnimator(__instance))
-        {
-            DiagBreath.Started("check");  // TEMPORARY
             StartHandAction(FireModeMinSeconds);
-        }
     }
 
     // The action lasts until the hands layer is back in idle, but at least long enough for the
@@ -1152,9 +1143,7 @@ internal static class AimArms
         Quaternion keptGun = gunBase * Scale(Quaternion.Inverse(_gunTurnMean) * gunTurn, gunTurnScale);
         // The position above is always chased. The turn is chased only during a bolt cycle or fire mode
         // switch, so that animation shows first; otherwise chasing it lets breath sway through a held breath.
-        Quaternion lineTurn = LineOfSight(animation, sightBone, sightForward, ironAligned, anim, armBase * gunBase);
-        Quaternion pinnedTurn = lineTurn * keptArm * keptGun * Quaternion.Inverse(armTurn * rawGunTurn);
-        DiagBreath.Parts(armTurn, rawGunTurn, lineTurn, keptArm * keptGun, ShotKick(animation, anim.rotation), later, chasing, _sightCatch > 0f, _handAction);  // TEMPORARY
+        Quaternion pinnedTurn = LineOfSight(animation, sightBone, sightForward, ironAligned, anim, armBase * gunBase) * keptArm * keptGun * Quaternion.Inverse(armTurn * rawGunTurn);
         // The catch-up after the action has a fixed length. Waiting for the chase to settle never ends
         // while breath sway keeps moving the target.
         if (_handAction)
@@ -1510,11 +1499,6 @@ internal static class AimArms
         float length = twist.magnitude;
         return length < 0.0001f ? Quaternion.identity : new Quaternion(0f, 0f, twist.z / length, twist.w / length);
     }
-
-    internal static Quaternion DiagLook => _smoothLook;  // TEMPORARY (DiagBreath)
-    internal static Quaternion DiagRawHead => _headTurnRaw;
-    internal static string DiagState => $"chest={ChestStance.Active} freeLook={_smoothedHead.magnitude:F3} release={_release:F2}";
-    internal static string DiagSway => $"gun {Now.GunMove:F2}/{Now.GunTurn:F2} arm {Now.ArmMove:F2}/{Now.ArmTurn:F2} head {Now.HeadFollow:F2} breath {Now.Breath:F2} lock {_headLock:F2}";
 
     private static Quaternion AimTurn()
     {
