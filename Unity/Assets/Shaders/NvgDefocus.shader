@@ -221,7 +221,11 @@ Shader "Justachae/NVG/Defocus" {
     // The cover (how much is near) and the colour (weighted toward the nearer, Front) blurred alike.
     float coverNarrow = _Cover.SampleLevel(sampler_linear_clamp, i.uv, 0).g;
     float coverWide = _CoverWide.SampleLevel(sampler_linear_clamp, i.uv, 0).g;
-    float thin = (1 - smoothstep(0.2, 0.6, max(coverNarrow, coverWide))) * saturate(coverNarrow * 8);
+    // Also a thin part standing out of a thick one (a sight's top, a front post): covered blurred narrow, much less
+    // blurred twice as wide. Against a far scene it stayed a solid dark shape of its own; with a table about it, the
+    // table's blurred colour all but took it.
+    float thin = max((1 - smoothstep(0.2, 0.6, max(coverNarrow, coverWide))) * saturate(coverNarrow * 8),
+     saturate((coverNarrow - coverWide) * 2.5));
     float4 shape = lerp(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0), _ShapeWide.SampleLevel(sampler_linear_clamp, i.uv, 0), thin);
     // How much of the lens's light from a point behind the thing the thing blocks: its shape (what is near) blurred
     // as its discs are, taken as it is (no curve on it): all within a thick thing, falling evenly through its edge to
