@@ -354,7 +354,6 @@ internal static class AimArms
                 Vector3 placed = sightPosition + target;
                 target = steadyPosition + delay * (placed - bodyPosition) - sightPosition;
                 turn = delay * turn;
-                NoteAim(animation, bone, ironAligned, sightForward, turn, sightId);
             }
             else if (!aiming && FollowDelay > 0f && player.HandsController is Player.FirearmController && bones.Weapon_Root_Anim != null)
             {
@@ -506,7 +505,9 @@ internal static class AimArms
 
         if (weapon == null)
             return;
+        Quaternion gamePose = weapon.rotation;
         weapon.SetPositionAndRotation(weaponPosition, weaponRotation);
+        NoteSpin(player, bones, cameraRotation, gamePose, carryTurn, displacement);
         _shotFrame = Time.frameCount;
         _shotFireport = player.HandsController is Player.FirearmController firearm && firearm.CurrentFireport?.Original != null
             ? firearm.CurrentFireport.Original.position
@@ -1690,29 +1691,38 @@ internal static class AimArms
         return LookTurn(player.MovementContext, yaw, down);
     }
 
-    // Temporary: the sight the gun is placed by as it is aimed, and what the gun is turned by, the first frames after it changes.
-    private static int _notedSight, _notedFrames;
-    private static void NoteAim(ProceduralWeaponAnimation animation, Transform bone, bool ironAligned, Vector3 sightForward, Quaternion turn, int sightId)
+    // Temporary: as the gun is aimed, how each part lies against the camera, against how it lay as the aim began; and the game's own
+    // turn of the sight (a canted sight's), every ten frames for a while.
+    private static readonly AccessTools.FieldRef<ProceduralWeaponAnimation, Quaternion> GameScopeTurn = AccessTools.FieldRefAccess<ProceduralWeaponAnimation, Quaternion>("_scopeRotation");
+    private static readonly AccessTools.FieldRef<ProceduralWeaponAnimation, float> GameScopeTurnTarget = AccessTools.FieldRefAccess<ProceduralWeaponAnimation, float>("_targetScopeRotationDeg");
+    private static int _spinFrames = -1;
+    private static Quaternion _spinAnimStart, _spinThirdStart, _spinGameStart;
+
+    private static void NoteSpin(Player player, PlayerBones bones, Quaternion cameraRotation, Quaternion gamePose, Quaternion carryTurn, Vector3 displacement)
     {
-        if (sightId != _notedSight)
+        bool aiming = player.HandsController != null && player.HandsController.IsAiming;
+        Transform? anim = bones.Weapon_Root_Anim, third = bones.Weapon_Root_Third;
+        if (!aiming || anim == null || third == null)
         {
-            _notedSight = sightId;
-            _notedFrames = 0;
-            Transform? weapon = animation.HandsContainer?.Weapon;
-            Transform? root = animation.HandsContainer?.WeaponRootAnim;
-            var scope = Scopes.Current(animation);
-            var names = new System.Text.StringBuilder();
-            foreach (var s in animation.ScopeAimTransforms)
-                names.Append(s.Bone != null ? s.Bone.name : "null").Append(s.Mod != null ? "(" + s.Mod.Item.Template._name + ")" : "(no mod)").Append(' ');
-            string path = bone.name;
-            for (Transform? t = bone.parent; t != null && t != root; t = t.parent)
-                path = t.name + "/" + path;
-            float along = weapon != null ? Vector3.Angle(sightForward, -weapon.up) : -1f;
-            NewCameraPlugin.Log?.LogInfo($"Aim check: sight {path}, under the gun {(root != null && bone.IsChildOf(root))}, active {bone.gameObject.activeInHierarchy}, mod {(scope?.Mod != null ? scope.Mod.Item.Template._name : "none")}, optic {scope?.IsOptic}, align {scope?.AlignIfAvailable}, iron aligned {ironAligned}, its line off the barrel {along:F1} deg, sights [{names}]");
+            _spinFrames = -1;
+            return;
         }
-        if (_notedFrames < 90 && _notedFrames % 15 == 0)
-            NewCameraPlugin.Log?.LogInfo($"Aim check: frame {_notedFrames}, the gun turned {Quaternion.Angle(Quaternion.identity, turn):F1} deg, the sight's line off the barrel {(animation.HandsContainer?.Weapon != null ? Vector3.Angle(sightForward, -animation.HandsContainer.Weapon.up) : -1f):F1} deg");
-        _notedFrames++;
+        Quaternion back = Quaternion.Inverse(cameraRotation);
+        Quaternion animNow = back * anim.rotation, thirdNow = back * third.rotation, gameNow = back * gamePose;
+        if (_spinFrames < 0)
+        {
+            _spinFrames = 0;
+            _spinAnimStart = animNow;
+            _spinThirdStart = thirdNow;
+            _spinGameStart = gameNow;
+        }
+        if (_spinFrames <= 150 && _spinFrames % 10 == 0)
+        {
+            ProceduralWeaponAnimation? animation = player.ProceduralWeaponAnimation;
+            var scope = animation != null ? Scopes.Current(animation) : null;
+            NewCameraPlugin.Log?.LogInfo($"Aim spin: frame {_spinFrames}, the gun as carried {Quaternion.Angle(_spinAnimStart, animNow):F1} deg from the start, as the game posed it {Quaternion.Angle(_spinGameStart, gameNow):F1}, the body's gun {Quaternion.Angle(_spinThirdStart, thirdNow):F1}; carry turn {Quaternion.Angle(Quaternion.identity, carryTurn):F1} deg, carry move {displacement.magnitude:F3} m; game's sight turn {(animation != null ? Quaternion.Angle(Quaternion.identity, GameScopeTurn(animation)) : -1f):F1} deg toward {(animation != null ? GameScopeTurnTarget(animation) : -1f):F1}, sight's rotation {scope?.Rotation:F1}, sights {animation?.ScopeAimTransforms?.Count}, index {animation?.AimIndex}, sight {(scope?.Bone != null ? scope.Bone.name : "none")}");
+        }
+        _spinFrames++;
     }
 
     private static bool ResolveIronSight(ProceduralWeaponAnimation animation, Transform bone, out Vector3 position, out Vector3 forward)
