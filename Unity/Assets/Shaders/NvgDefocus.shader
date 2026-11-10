@@ -238,8 +238,12 @@ Shader "Justachae/NVG/Defocus" {
     // Fading out from the thing both in how much it covers (an S: thin at its fringe, as before within) and in its
     // shade (toward what lies behind as it thins): its spread colour is its own to the last of its fringe, and a faint
     // but full black there drew a dark ring about it.
-    float solid = smoothstep(0, 1, soft);
-    colour = lerp(behind, colour, smoothstep(0, 0.8, soft));
+    // Within the thing too: how deep in it a point is, from its cover blurred twice as wide (full only well within a
+    // thick thing, falling toward its edge), so it is darkest and most solid at its middle and fades out toward and
+    // past its edge, one gradient with the fringe outside it.
+    float depth = 0.5 * (soft + saturate(coverWide));
+    float solid = smoothstep(0, 1, depth);
+    colour = lerp(behind, colour, smoothstep(0, 0.8, depth));
     if (_DefocusShow > 2.5) return float4(solid.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
     if (_DefocusShow > 0.5) return float4(behind, 1);
