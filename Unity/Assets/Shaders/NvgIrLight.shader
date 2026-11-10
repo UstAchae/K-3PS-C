@@ -9,6 +9,9 @@
 // 3: the layer held over frames as TAA holds a frame: this frame's (its jitter taken out) blended into the last
 //    frame's, followed along the motion vectors and kept within what this frame has about the pixel. The layer is
 //    drawn from the jittered G-buffer but added after the upscale, which does not steady it.
+// 4: the night-vision ambient's difference on the frame's surfaces (NightVisionAmbient.cs), added into the layer: each
+//    surface's diffuse colour and occlusion from the G-buffer, times the difference of the two ambient probes along its
+//    normal (_NvSh*, packed as Unity packs a probe), as Unity's deferred shading lights a surface by the ambient.
 Shader "Justachae/NVG/IrLight" {
  Properties { _MainTex ("frame", 2D) = "black" {} }
  SubShader {
@@ -129,7 +132,8 @@ Shader "Justachae/NVG/IrLight" {
     // camera sees, at the share of its light that reaches the tube; the layer's, past the sight as seen from the eye, left out.
     if (_ScopeOn > 0.5 && tex2D(_ScopeLens, i.uv).r > 0.5)
      return float4(frame.rgb * _ScopeLight, frame.a);
-    return float4(frame.rgb + tex2D(_IrLayer, i.uv).rgb, frame.a);
+    // The night-vision ambient's difference may take some light away (a colour the level's own ambient has more of).
+    return float4(max(frame.rgb + tex2D(_IrLayer, i.uv).rgb, 0), frame.a);
    }
    ENDCG
   }
@@ -166,6 +170,41 @@ Shader "Justachae/NVG/IrLight" {
      return float4(c, 0);
     float3 h = clamp(tex2D(_IrHistory, prev).rgb, lo, hi);
     return float4(lerp(h, c, _IrJitter.w), 0);
+   }
+   ENDCG
+  }
+  Pass {
+   Blend One One
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 4.5
+   #include "UnityCG.cginc"
+   #include "UnityPBSLighting.cginc"
+   #include "UnityGBuffer.cginc"
+   sampler2D _CameraGBufferTexture0, _CameraGBufferTexture1, _CameraGBufferTexture2;
+   sampler2D_float _CameraDepthTexture;
+   float4 _IrScreen;
+   float4 _NvShAr, _NvShAg, _NvShAb, _NvShBr, _NvShBg, _NvShBb, _NvShC;
+   struct v2f { float4 pos : SV_POSITION; };
+   v2f vert (uint id : SV_VertexID) {
+    float2 p = float2((id << 1) & 2, id & 2);
+    v2f o; o.pos = float4(p * 2 - 1, 0, 1); return o;
+   }
+   half4 frag (v2f i) : SV_Target {
+    float2 uv = i.pos.xy * _IrScreen.zw;
+    // Nothing drawn there (reversed depth: the far plane at 0).
+    if (tex2Dlod(_CameraDepthTexture, float4(uv, 0, 0)).r <= 0) return 0;
+    half4 g0 = tex2Dlod(_CameraGBufferTexture0, float4(uv, 0, 0));
+    half4 g1 = tex2Dlod(_CameraGBufferTexture1, float4(uv, 0, 0));
+    half4 g2 = tex2Dlod(_CameraGBufferTexture2, float4(uv, 0, 0));
+    UnityStandardData data = UnityStandardDataFromGbuffer(g0, g1, g2);
+    float4 n = float4(data.normalWorld, 1);
+    float3 sh = float3(dot(_NvShAr, n), dot(_NvShAg, n), dot(_NvShAb, n));
+    float4 b = n.xyzz * n.yzzx;
+    sh += float3(dot(_NvShBr, b), dot(_NvShBg, b), dot(_NvShBb, b));
+    sh += _NvShC.rgb * (n.x * n.x - n.y * n.y);
+    return half4(data.diffuseColor * data.occlusion * sh, 0);
    }
    ENDCG
   }

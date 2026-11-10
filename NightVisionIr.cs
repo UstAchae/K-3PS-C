@@ -9,6 +9,7 @@ namespace EFTNewCamera;
 // IR seen only through the lenses. The game lights IR for the FPS camera's whole frame while night vision is on; with
 // the eyepieces in, the frame (the naked eye's scene around them) is drawn with none, and what IR adds is drawn into
 // a layer of its own that only the lenses' picture is made with (ForTube, step 2 at the head of NightVisionComposite.cs).
+// The night-vision ambient's difference goes into the same layer (NightVisionAmbient.cs).
 // IR lights: left in the frame at their intensity but through a blank cookie, so the game still draws their shadow maps
 // and they light nothing (at a mere trace of intensity the game leaves them out, shadows and all); each is drawn into
 // the layer as the game's deferred pass would light it, a shadowed one right after its shadow map (that map, and the
@@ -330,7 +331,9 @@ internal static partial class NightVisionEyepieces
         CollectIrLasers();
         bool lights = ir && _irLightsFrame == Time.frameCount && _irLights.Count > 0;
         bool lasers = lifted && _irMeshes.Count > 0 || ir && _irOnlyMeshes.Count > 0;
-        if (!lights && !lasers || !IrResources())
+        // The night-vision ambient's difference (NightVisionAmbient.cs), once the layer's materials are made.
+        bool ambient = ir && IrResources() && NightAmbientWanted();
+        if (!lights && !lasers && !ambient || !IrResources())
         {
             // No lasers this frame: none added after the upscale either.
             if (lifted && _irNaked != null && _nakedFrame >= 0)
@@ -395,6 +398,8 @@ internal static partial class NightVisionEyepieces
             if (l.Light != null)
                 DrawIrLight(_irAfter, l, _irPlain!);
         }
+        if (ambient)
+            DrawNightAmbient(_irAfter);
         if (ir)
             camera.AddCommandBuffer(CameraEvent.AfterLighting, _irAfter);
 
