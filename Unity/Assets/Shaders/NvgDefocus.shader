@@ -15,6 +15,7 @@
 //         its own shape blurred wide (_Shape: a soft outline, a thin thing gone). Behind a near thing the frame has only the
 //         thing itself: what is about it, filled in from its edge inward (finest first), stands for what lies behind it.
 // Pass 6: how much of each part of the frame is spread (0 to 1), for the tube's grain (EaseGrain).
+// Pass 9: all of the frame, at a quarter of the size, premultiplied by each point's Share (the table's look).
 // Pass 8: a Gaussian of four texels' spread along _Step (the near shape's soft outline, NightVisionDefocus.cs).
 // Pass 7: a level halved: four bilinear taps a texel apart, the four by four under it weighted as a tent, smoother
 //         from frame to frame than the two by two alone.
@@ -68,6 +69,10 @@ Shader "Justachae/NVG/Defocus" {
   // disc's radius against the most), so a nearer thing stands in front of what is behind it when both are blurred
   // together: a bright floor a metre off showed through a dark gun a third of that away.
   float Front(float r) { float k = r / _DefocusLens.w; return k * k + 0.02; }
+  // How much a point of the frame counts in the colour all about it is blurred to near a near thing: what is near by
+  // Front, the rest (and what is only a little near) as the floor a metre off counted at the table, so the scene about
+  // the gun takes its share of the gun's spread there as the floor did, and no dark ring of the gun's is left over it.
+  float Share(float r) { return max(Nearness(r) * Front(r), 0.15); }
 
   float4 Near(float2 uv) {
    float4 n = _NearAcc0.SampleLevel(sampler_linear_clamp, uv, 0) + _NearAcc1.SampleLevel(sampler_linear_clamp, uv, 0)
@@ -193,59 +198,22 @@ Shader "Justachae/NVG/Defocus" {
    #pragma target 3.5
    float4 frag (v2f_img i) : SV_Target {
     float4 f = tex2D(_MainTex, i.uv);
-    float4 n = Near(i.uv);
-    if (n.a < 1e-4)
-     return f;
-    float r = Radius(i.uv);
-    // Behind a near thing (where the frame has only the thing itself): what is about it, filled in from its edge
-    // inward, finest level first, each level taken as far as it has any of it, and all of it taken as the mean of
-    // what was found: never the thing's own colour (a dark thing's colour made in there drew its outline back).
-    float3 fill = 0;
-    float found = 0, need = 1;
-    for (int level = 0; level < 4 && need > 1e-3; level++) {
-     float4 far = Far(level, i.uv);
-     if (far.a < 1e-3)
-      continue;
-     float take = need * saturate(far.a * 2);
-     fill += far.rgb / far.a * take;
-     found += take;
-     need -= take;
-    }
-    // The near shape blurred wide (premultiplied): how solid it shows, and its colour, blurred alike, so the thing is
-    // one soft shade with no structure left in it, as its outline is.
-    // Thin parts blurred the more: where the near shape covers little both blurred and blurred twice as wide (a thin
-    // thing; a thick one's fringe is still covered when blurred wide), and only where there is something of it, it is
-    // taken from the wider one, spread further and fainter. Taken by the narrow one's cover alone, a thick thing's
-    // fringe counted as thin and drew a second, wider ring of its own shape about it.
-    // The cover (how much is near) and the colour (weighted toward the nearer, Front) blurred alike.
+    // As at the table (all in view near): near a near thing, all of the frame about it (what is near and what is not,
+    // each by its Share) blurred together wide and smooth, one soft shade, the gun's dark and the scene's light mixed
+    // by their shares wherever its blur reaches; nothing laid over anything, so no ring of either is left. Thin parts
+    // the more: where the near shape covers little both blurred and blurred twice as wide, taken from the wider one.
     float coverNarrow = _Cover.SampleLevel(sampler_linear_clamp, i.uv, 0).g;
     float coverWide = _CoverWide.SampleLevel(sampler_linear_clamp, i.uv, 0).g;
     float thin = (1 - smoothstep(0.2, 0.6, max(coverNarrow, coverWide))) * saturate(coverNarrow * 8);
-    float4 shape = lerp(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0), _ShapeWide.SampleLevel(sampler_linear_clamp, i.uv, 0), thin);
-    float soft = saturate(lerp(coverNarrow, coverWide, thin));
-    float3 colour = shape.a > 1e-3 ? shape.rgb / shape.a : (n.a > 1e-3 ? n.rgb / n.a : f.rgb);
-    // Where little or nothing of what is about it was found (all about it is near too), its own colour, eased in.
-    fill = found > 1e-3 ? lerp(colour, fill / found, saturate(found * 2)) : colour;
-    // Behind: the frame's own far from the thing, easing into what was filled in (what is about it, never the thing
-    // itself) toward it, wholly that by its edge (where the soft shape is half), and on the thing itself. The whole
-    // frame blurred instead carried the thing's own dark out about it (a dark ring); the frame's own let onto the thing
-    // where it is thin left its sharp top showing; a switch right at its outline cut the scene behind there.
-    float3 behind = lerp(f.rgb, fill, max(Nearness(r), smoothstep(0, 0.5, soft)));
-    // How solid the spread thing shows: its own shape (what of the frame is near), blurred wide and smooth, so its
-    // outline fades softly both ways and a thin part, a narrow line in it, all but goes; its colour the discs'.
-    // Fading out from the thing both in how much it covers (an S: thin at its fringe, as before within) and in its
-    // shade (toward what lies behind as it thins): its spread colour is its own to the last of its fringe, and a faint
-    // but full black there drew a dark ring about it.
-    // Within the thing too: how deep in it a point is, from its cover blurred twice as wide (full only well within a
-    // thick thing, falling toward its edge), so it is darkest and most solid at its middle and fades out toward and
-    // past its edge, one gradient with the fringe outside it.
-    float depth = 0.5 * (soft + saturate(coverWide));
-    float solid = smoothstep(0, 1, depth);
-    colour = lerp(behind, colour, smoothstep(0, 0.8, depth));
-    if (_DefocusShow > 2.5) return float4(solid.xxx, 1);   // TEMP DIAG
+    float4 all = lerp(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0), _ShapeWide.SampleLevel(sampler_linear_clamp, i.uv, 0), thin);
+    float3 colour = all.a > 1e-4 ? all.rgb / all.a : f.rgb;
+    // How far that reaches: wholly so wherever anything near is about, easing back to the frame as sharp further out,
+    // as far as the near shape's wide blur reaches.
+    float zone = smoothstep(0, 0.4, max(saturate(lerp(coverNarrow, coverWide, thin)), saturate(coverWide)));
+    if (_DefocusShow > 2.5) return float4(zone.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
-    if (_DefocusShow > 0.5) return float4(behind, 1);
-    return float4(lerp(behind, colour, solid), f.a);
+    if (_DefocusShow > 0.5) return f;
+    return float4(lerp(f.rgb, colour, zone), f.a);
    }
    ENDCG
   }
@@ -281,6 +249,23 @@ Shader "Justachae/NVG/Defocus" {
      total += w;
     }
     return sum / total;
+   }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f_img i) : SV_Target {
+    float2 t = _MainTex_TexelSize.xy;
+    float4 sum = 0;
+    for (int y = 0; y < 4; y++)
+     for (int x = 0; x < 4; x++) {
+      float2 uv = i.uv + (float2(x, y) - 1.5) * t;
+      sum += float4(tex2D(_MainTex, uv).rgb, 1) * Share(Radius(uv));
+     }
+    return sum / 16;
    }
    ENDCG
   }
