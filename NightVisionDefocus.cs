@@ -43,7 +43,6 @@ internal static partial class NightVisionEyepieces
     private static readonly int ShapeWideId = Shader.PropertyToID("_ShapeWide");
     private static readonly int CoverId = Shader.PropertyToID("_Cover");
     private static readonly int CoverWideId = Shader.PropertyToID("_CoverWide");
-    private static readonly int FarSoftId = Shader.PropertyToID("_FarSoft");
 
     // A level blurred wide and smooth (three Gaussians each way), and the same at half its size blurred again: twice as
     // wide.
@@ -149,10 +148,6 @@ internal static partial class NightVisionEyepieces
         // again twice as wide for thin parts; its colour (weighted toward what is nearer) blurred alike.
         Smoothed(_levelColor[1]!, defocus, out RenderTexture soft, out RenderTexture wide);
         Smoothed(_levelCoc[1]!, defocus, out RenderTexture cover, out RenderTexture coverWide);
-        // What is not near, blurred as wide as what is near (the scene about a near thing).
-        Smoothed(_levelFar[1]!, defocus, out RenderTexture farSoft, out RenderTexture farWide);
-        RenderTexture.ReleaseTemporary(farWide);
-        defocus.SetTexture(FarSoftId, farSoft);
         defocus.SetTexture(ShapeId, soft);
         defocus.SetTexture(ShapeWideId, wide);
         defocus.SetTexture(CoverId, cover);
@@ -171,8 +166,6 @@ internal static partial class NightVisionEyepieces
         RenderTexture.ReleaseTemporary(wide);
         RenderTexture.ReleaseTemporary(cover);
         RenderTexture.ReleaseTemporary(coverWide);
-        defocus.SetTexture(FarSoftId, Texture2D.blackTexture);
-        RenderTexture.ReleaseTemporary(farSoft);
         for (int level = 0; level < DefocusLevels; level++)
         {
             defocus.SetTexture(NearAccIds[level], Texture2D.blackTexture);
