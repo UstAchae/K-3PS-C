@@ -325,8 +325,6 @@ internal static class AimArms
             {
                 sightId = bone.GetInstanceID();
                 float relief = rangefinder ? rangefinderRelief - ForwardDistance : gunItself != null ? 0f : SightRelief(animation, bone);
-                if (gunItself == null && !rangefinder)
-                    NoteIron(animation, bone, ironAligned, sightPosition, relief);
                 // From the aiming eye: the camera, or where the eye would be at the chest, where the camera stays.
                 Vector3 aimPoint = new Vector3(CameraPosition.PoseAcross, 0f, ForwardDistance + relief);
                 // The stock at the chest (ChestStance): the gun's own origin there, lower and to the right of the eye. Into it and out of it
@@ -1694,36 +1692,6 @@ internal static class AimArms
         if (Mathf.Abs(yaw) < 0.01f && Mathf.Abs(down) < 0.01f)
             return Quaternion.identity;
         return LookTurn(player.MovementContext, yaw, down);
-    }
-
-    // Temporary: as an iron sight is aimed, what places the eye: the game's sights, the markers found, and where the eye goes, in the
-    // gun's frame (right, up, ahead along the bore, m); once for each sight.
-    private static int _ironNoted;
-    private static string Local(Transform weapon, Vector3 p)
-    {
-        Vector3 l = weapon.InverseTransformPoint(p);
-        return $"({l.x:F3}, {l.z:F3}, {-l.y:F3})";
-    }
-
-    private static void NoteIron(ProceduralWeaponAnimation animation, Transform bone, bool ironAligned, Vector3 eyeLine, float relief)
-    {
-        if (bone.GetInstanceID() == _ironNoted)
-            return;
-        _ironNoted = bone.GetInstanceID();
-        Transform? weapon = animation.HandsContainer?.Weapon;
-        if (weapon == null)
-            return;
-        var scope = Scopes.Current(animation);
-        var text = new System.Text.StringBuilder();
-        text.Append($"Iron check: sight {bone.parent?.name}/{bone.name} at {Local(weapon, bone.position)}, under the gun {bone.IsChildOf(weapon)}, optic {scope?.IsOptic}, align {scope?.AlignIfAvailable}, aligned {ironAligned}, eye line at {Local(weapon, eyeLine)}, relief {relief:F3}; game's sights:");
-        foreach (var s in animation.ScopeAimTransforms)
-            text.Append(' ').Append(s.Bone != null ? s.Bone.parent?.name + "/" + s.Bone.name : "null");
-        text.Append("; markers:");
-        foreach (Transform t in weapon.GetComponentsInChildren<Transform>(true))
-            if (t.name.Contains("mod_align_"))
-                text.Append($" {t.parent?.name}/{t.name} {(t.gameObject.activeInHierarchy ? "on" : "off")} {Local(weapon, t.position)}");
-        text.Append($"; aim plane {animation._currentAimingPlane?.Name} {(animation._currentAimingPlane != null ? animation._currentAimingPlane.Depth : float.NaN):F3}, far {(animation._farPlane != null ? animation._farPlane.Depth : float.NaN):F3}, the gun's shift {animation.HandsContainer.Weapon.localPosition.y:F3}, the eye at {EyeDepth(animation):F3}");
-        NewCameraPlugin.Log?.LogInfo(text.ToString());
     }
 
     private static bool ResolveIronSight(ProceduralWeaponAnimation animation, Transform bone, out Vector3 position, out Vector3 forward)
