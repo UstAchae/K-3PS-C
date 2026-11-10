@@ -46,7 +46,10 @@ Shader "Justachae/NVG/Defocus" {
    float lens = _DefocusLens.y * abs(1 / d - _DefocusLens.x);
    return _DefocusLens.w * (1 - exp(-lens / _DefocusLens.w));
   }
-  bool IsNear(float r) { return r > 1; }
+  // How much of a point is near (spread by its disc), the rest left sharp: none below half a quarter-size pixel, all
+  // from two and a half, eased between, so no line is seen where the spreading begins along a surface going away.
+  float Nearness(float r) { return smoothstep(0.5, 2.5, r); }
+  bool IsNear(float r) { return Nearness(r) > 0; }
 
   float4 Near(float2 uv) {
    float4 n = _NearAcc0.SampleLevel(sampler_linear_clamp, uv, 0) + _NearAcc1.SampleLevel(sampler_linear_clamp, uv, 0)
@@ -80,8 +83,7 @@ Shader "Justachae/NVG/Defocus" {
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
       float2 uv = i.uv + (float2(x, y) - 1.5) * t;
-      if (IsNear(Radius(uv)))
-       sum += float4(tex2D(_MainTex, uv).rgb, 1);
+      sum += float4(tex2D(_MainTex, uv).rgb, 1) * Nearness(Radius(uv));
      }
     return sum / 16;
    }
@@ -98,8 +100,7 @@ Shader "Justachae/NVG/Defocus" {
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
       float r = Radius(i.uv + (float2(x, y) - 1.5) * t);
-      if (IsNear(r))
-       sum += float2(r, 1);
+      sum += float2(r, 1) * Nearness(r);
      }
     return float4(sum / 16, 0, 0);
    }
@@ -116,8 +117,7 @@ Shader "Justachae/NVG/Defocus" {
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
       float2 uv = i.uv + (float2(x, y) - 1.5) * t;
-      if (!IsNear(Radius(uv)))
-       sum += float4(tex2D(_MainTex, uv).rgb, 1);
+      sum += float4(tex2D(_MainTex, uv).rgb, 1) * (1 - Nearness(Radius(uv)));
      }
     return sum / 16;
    }
@@ -177,7 +177,8 @@ Shader "Justachae/NVG/Defocus" {
     float4 n = Near(i.uv);
     float r = Radius(i.uv);
     float3 behind = f.rgb;
-    if (IsNear(r)) {
+    float near = Nearness(r);
+    if (near > 0) {
      // Behind a near thing: what is about it and not near, spread about as wide as its discs (each level's pixel is
      // 1, 2, 4, 8 quarter-size ones), from the first level that has any of it; none at all: the thing's own colour.
      // Only along its edge (its discs' cover going from a half to three quarters): further in, the thing's own spread
@@ -192,6 +193,7 @@ Shader "Justachae/NVG/Defocus" {
        break;
       }
      }
+     behind = lerp(f.rgb, behind, near);
     }
     return float4(n.rgb + (1 - n.a) * behind, f.a);
    }
