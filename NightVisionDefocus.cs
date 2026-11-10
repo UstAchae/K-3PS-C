@@ -43,6 +43,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int ShapeWideId = Shader.PropertyToID("_ShapeWide");
     private static readonly int CoverId = Shader.PropertyToID("_Cover");
     private static readonly int CoverWideId = Shader.PropertyToID("_CoverWide");
+    private static readonly int ZoneId = Shader.PropertyToID("_Zone");
 
     // A level blurred wide and smooth (three Gaussians each way), and the same at half its size blurred again: twice as
     // wide.
@@ -158,6 +159,16 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(ShapeWideId, wide);
         defocus.SetTexture(CoverId, cover);
         defocus.SetTexture(CoverWideId, coverWide);
+        // How far about a near thing all is blurred together: its shape at a sixty-fourth of the size, blurred wide.
+        RenderTexture zoneHalf = Temporary(Mathf.Max(coverWide.width / 2, 1), Mathf.Max(coverWide.height / 2, 1));
+        RenderTexture zone = Temporary(Mathf.Max(zoneHalf.width / 2, 1), Mathf.Max(zoneHalf.height / 2, 1));
+        RenderTexture zoneAcross = Temporary(zone.width, zone.height);
+        Graphics.Blit(coverWide, zoneHalf, defocus, 7);
+        Graphics.Blit(zoneHalf, zone, defocus, 7);
+        RenderTexture.ReleaseTemporary(zoneHalf);
+        Gaussians(zone, zoneAcross, defocus);
+        RenderTexture.ReleaseTemporary(zoneAcross);
+        defocus.SetTexture(ZoneId, zone);
         Graphics.Blit(frame, made, defocus, 5);
         DumpDefocus(frame, made, defocus); // TEMP DIAG
         AddTritium(view, made);
@@ -168,6 +179,8 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(ShapeWideId, Texture2D.blackTexture);
         defocus.SetTexture(CoverId, Texture2D.blackTexture);
         defocus.SetTexture(CoverWideId, Texture2D.blackTexture);
+        defocus.SetTexture(ZoneId, Texture2D.blackTexture);
+        RenderTexture.ReleaseTemporary(zone);
         RenderTexture.ReleaseTemporary(soft);
         RenderTexture.ReleaseTemporary(wide);
         RenderTexture.ReleaseTemporary(cover);

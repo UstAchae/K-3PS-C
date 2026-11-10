@@ -28,7 +28,7 @@ Shader "Justachae/NVG/Defocus" {
   float4 _MainTex_TexelSize;
   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
   Texture2D _ScopeLens, _Src, _Coc;
-  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide, _Cover, _CoverWide;
+  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape, _ShapeWide, _Cover, _CoverWide, _Zone;
   float2 _Step;   // a Gaussian's direction, in texels
   SamplerState sampler_linear_clamp, sampler_point_clamp;
   float _ScopeOn;
@@ -207,9 +207,11 @@ Shader "Justachae/NVG/Defocus" {
     float thin = (1 - smoothstep(0.2, 0.6, max(coverNarrow, coverWide))) * saturate(coverNarrow * 8);
     float4 all = lerp(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0), _ShapeWide.SampleLevel(sampler_linear_clamp, i.uv, 0), thin);
     float3 colour = all.a > 1e-4 ? all.rgb / all.a : f.rgb;
-    // How far that reaches: wholly so wherever anything near is about, easing back to the frame as sharp further out,
-    // as far as the near shape's wide blur reaches.
-    float zone = smoothstep(0, 0.4, max(saturate(lerp(coverNarrow, coverWide, thin)), saturate(coverWide)));
+    // How far that reaches: wholly so on and about anything near, easing back to the frame as sharp far further out
+    // (the near shape at a sixty-fourth of the size, blurred wide), so no edge is seen where the blur ends: raised from
+    // the floor, the scene a little off the gun's edge stayed sharp and the blurred patch showed as a patch.
+    float zone = max(smoothstep(0, 0.4, max(saturate(lerp(coverNarrow, coverWide, thin)), saturate(coverWide))),
+     smoothstep(0, 0.3, _Zone.SampleLevel(sampler_linear_clamp, i.uv, 0).g));
     if (_DefocusShow > 2.5) return float4(zone.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
     if (_DefocusShow > 0.5) return f;
