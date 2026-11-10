@@ -242,21 +242,21 @@ Shader "Justachae/NVG/Defocus" {
     // of the size blurred wide): the more the nearer the thing is, all of it a little out from where it begins to
     // show, back to the frame as sharp as the thing's blur ends. As at a table, where what is about it is blurred too,
     // a sight's outline no longer stands against a sharp, bright scene.
+    // As at a table: there the table about a near thing counts in its blurred colour (the table half a metre off: 0.15
+    // against the gun's nearest 1), so the gun's share falls off slowly out from it, a long soft fall, and its farther
+    // and thinner parts (a sight's top) go into the table's shade. A far scene here counts as that table: how much the
+    // gun shows is its share against the scene's, by how much of the scene is about. Taken as how much the gun blocks
+    // alone, its edge fell off quickly against the scene and its outline stood.
+    float about = 0.15 * saturate(1 - coverNarrow);
+    float shown = shape.a + about > 1e-4 ? shape.a / (shape.a + about) : 0;
     float4 farSoft = _FarSoft.SampleLevel(sampler_linear_clamp, i.uv, 0);
     float3 soft = farSoft.a > 1e-3 ? lerp(fill, farSoft.rgb / farSoft.a, saturate(farSoft.a * 4)) : fill;
-    float3 seen = lerp(f.rgb, soft, smoothstep(0, 0.4, max(blocked, saturate(coverWide))));
+    float3 seen = lerp(f.rgb, soft, smoothstep(0, 0.4, max(max(blocked, shown), saturate(coverWide))));
     float3 behind = lerp(seen, fill, max(Nearness(r), smoothstep(0, 0.5, blocked)));
-    // As at a table: there what is about a near thing counts in its blurred colour as the table does (the table half a
-    // metre off: about 0.15 against the gun's nearest 1), so a sight's top, the gun's farther part, is half the table's
-    // shade and goes into it. A far scene here counts as that table, blurred, by how much of it is about: a sight's top
-    // against a far scene took the gun's dark alone, nearly solid, and its outline stood.
-    float about = 0.15 * saturate(1 - coverNarrow);
-    if (shape.a + about > 1e-4)
-     colour = (shape.rgb + about * soft) / (shape.a + about);
-    if (_DefocusShow > 2.5) return float4(blocked.xxx, 1);   // TEMP DIAG
+    if (_DefocusShow > 2.5) return float4(shown.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
     if (_DefocusShow > 0.5) return float4(behind, 1);
-    return float4(lerp(behind, colour, blocked), f.a);
+    return float4(lerp(behind, colour, shown), f.a);
    }
    ENDCG
   }
