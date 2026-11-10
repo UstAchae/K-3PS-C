@@ -1484,6 +1484,9 @@ internal static class AimArms
         return length < 0.0001f ? Quaternion.identity : new Quaternion(0f, 0f, twist.z / length, twist.w / length);
     }
 
+    internal static Quaternion DiagLook => _smoothLook;  // TEMPORARY (DiagBreath)
+    internal static string DiagSway => $"gun {Now.GunMove:F2}/{Now.GunTurn:F2} arm {Now.ArmMove:F2}/{Now.ArmTurn:F2} head {Now.HeadFollow:F2} breath {Now.Breath:F2} lock {_headLock:F2}";
+
     private static Quaternion AimTurn()
     {
         Quaternion sway = _headTurnSmooth * Quaternion.Inverse(Lean(_headTurnSmooth));
