@@ -235,7 +235,11 @@ Shader "Justachae/NVG/Defocus" {
     float3 behind = lerp(f.rgb, fill, max(Nearness(r), reach * reach));
     // How solid the spread thing shows: its own shape (what of the frame is near), blurred wide and smooth, so its
     // outline fades softly both ways and a thin part, a narrow line in it, all but goes; its colour the discs'.
-    float solid = soft;
+    // Fading out from the thing both in how much it covers (an S: thin at its fringe, as before within) and in its
+    // shade (toward what lies behind as it thins): its spread colour is its own to the last of its fringe, and a faint
+    // but full black there drew a dark ring about it.
+    float solid = smoothstep(0, 1, soft);
+    colour = lerp(behind, colour, smoothstep(0, 0.8, soft));
     if (_DefocusShow > 2.5) return float4(solid.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
     if (_DefocusShow > 0.5) return float4(behind, 1);
