@@ -12,7 +12,7 @@
 // Pass 4: each pixel of a level drawn as its disc (procedural, six vertices a pixel), added; only radii in its band.
 // Pass 5: the frame as the lens lays it on the tube: what is near, spread, over what lies behind it, as solid as
 //         its discs cover thickly, eased from a third (a thin thing gone). Behind a near thing the frame has only the
-//         thing itself: what is about it, spread as wide as the discs, stands for what lies behind it.
+//         thing itself: what is about it, filled in from its edge inward (finest first), stands for what lies behind it.
 // Pass 6: how much of each part of the frame is spread (0 to 1), for the tube's grain (EaseGrain).
 // Pass 7: a level halved: four bilinear taps a texel apart, the four by four under it weighted as a tent, smoother
 //         from frame to frame than the two by two alone.
@@ -179,20 +179,23 @@ Shader "Justachae/NVG/Defocus" {
      return f;
     float r = Radius(i.uv);
     float3 behind = f.rgb;
-    // Behind a near thing, and eased out from it as its discs thin: what is about it, blurred far wider than the discs
-    // (the coarsest level spread again over three of its pixels each way), so nothing in it slides like water as the
-    // view sways, and no line shows where the frame's own picture of what lies behind takes over.
-    float under = max(Nearness(r), smoothstep(0.02, 0.5, n.a));
-    if (under > 0) {
-     float w3, h3;
-     _Far3.GetDimensions(w3, h3);
-     float2 t3 = 1 / float2(w3, h3);
-     float4 far = 0;
-     for (int y = -1; y <= 1; y++)
-      for (int x = -1; x <= 1; x++)
-       far += Far(3, i.uv + float2(x, y) * 1.5 * t3) * ((2 - abs(x)) * (2 - abs(y)));
-     if (far.a > 0.05)
-      behind = lerp(f.rgb, far.rgb / far.a, under);
+    // Behind a near thing (where the frame has only the thing itself): what is about it, filled in from its edge
+    // inward, from the finest level that has enough of it here to the coarsest: by its edge as sharp as the frame's
+    // own just past it, so no line is left where a thin thing was; further in, blurred wider and wider.
+    float near = Nearness(r);
+    if (near > 0) {
+     float3 fill = 0;
+     float need = 1;
+     for (int level = 0; level < 4 && need > 1e-3; level++) {
+      float4 far = Far(level, i.uv);
+      if (far.a < 1e-3)
+       continue;
+      float take = need * saturate(far.a * 2);
+      fill += far.rgb / far.a * take;
+      need -= take;
+     }
+     fill += (n.a > 1e-4 ? n.rgb / n.a : f.rgb) * need;
+     behind = lerp(f.rgb, fill, near);
     }
     // How solid the spread thing shows, by how thickly its discs cover here (eased from 0.3 to all): a thick thing
     // solid within, its edge fading wide and soft; a thin one (its light spread thin, under a third) gone, its shape
