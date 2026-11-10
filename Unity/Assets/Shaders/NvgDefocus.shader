@@ -10,9 +10,9 @@
 //         stays the cover's mean).
 // Pass 3: what is not near, the same way.
 // Pass 4: each pixel of a level drawn as its disc (procedural, six vertices a pixel), added; only radii in its band.
-// Pass 5: the frame as the lens lays it on the tube: what is near, spread, over what lies behind it, with as much of
-//         the lens's light as it blocks. Behind a near thing's own edge the frame has only the thing itself: what is
-//         about it, not near, spread as wide, stands for what lies behind it there, along the edge only.
+// Pass 5: the frame as the lens lays it on the tube: what is near, spread, over what lies behind it, the more solid
+//         the more thickly its discs cover (a thin thing faint and spread). Behind a near thing the frame has only the
+//         thing itself: what is about it, blurred wide, stands for what lies behind it.
 // Pass 6: how much of each part of the frame is spread (0 to 1), for the tube's grain (EaseGrain).
 // Pass 7: a level halved: four bilinear taps a texel apart, the four by four under it weighted as a tent, smoother
 //         from frame to frame than the two by two alone.
@@ -175,16 +175,14 @@ Shader "Justachae/NVG/Defocus" {
    float4 frag (v2f_img i) : SV_Target {
     float4 f = tex2D(_MainTex, i.uv);
     float4 n = Near(i.uv);
+    if (n.a < 1e-4)
+     return f;
     float r = Radius(i.uv);
     float3 behind = f.rgb;
     float near = Nearness(r);
     if (near > 0) {
-     // Behind a near thing: what is about it and not near, spread about as wide as its discs (each level's pixel is
-     // 1, 2, 4, 8 quarter-size ones), from the first level that has any of it; none at all: the thing's own colour.
-     // Only along its edge (its discs' cover going from a half to three quarters): further in, the thing's own spread
-     // colour. And blurred far wider than the discs, from the coarsest level spread again over three of its pixels
-     // each way: what showed there kept its detail, and slid along under the edge as the view swayed, like water.
-     float3 own = n.a > 1e-4 ? n.rgb / n.a : f.rgb;
+     // Behind a near thing: what is about it, blurred far wider than the discs (the coarsest level spread again over
+     // three of its pixels each way), so nothing in it slides like water as the view sways.
      float w3, h3;
      _Far3.GetDimensions(w3, h3);
      float2 t3 = 1 / float2(w3, h3);
@@ -192,10 +190,13 @@ Shader "Justachae/NVG/Defocus" {
      for (int y = -1; y <= 1; y++)
       for (int x = -1; x <= 1; x++)
        far += Far(3, i.uv + float2(x, y) * 1.5 * t3) * ((2 - abs(x)) * (2 - abs(y)));
-     behind = far.a > 0.05 ? lerp(far.rgb / far.a, own, saturate((n.a - 0.5) * 4)) : own;
-     behind = lerp(f.rgb, behind, near);
+     if (far.a > 0.05)
+      behind = lerp(f.rgb, far.rgb / far.a, near);
     }
-    return float4(n.rgb + (1 - n.a) * behind, f.a);
+    // How solid the spread thing shows, by how thickly its discs cover here: a thick thing solid to past its edge, a
+    // thin one (its light spread thin) faint, and fainter the thinner; an opening's middle left to what lies beyond.
+    float solid = smoothstep(0.15, 0.65, n.a);
+    return float4(lerp(behind, n.rgb / n.a, solid), f.a);
    }
    ENDCG
   }
