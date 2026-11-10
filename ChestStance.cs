@@ -283,10 +283,15 @@ internal static class ChestStance
     {
         var sights = animation.ScopeAimTransforms;
         int count = sights?.Count ?? 0;
-        if (weapon.GetInstanceID() == _upWeapon && count == _upSights)
+        // Known by the sights themselves, not only by how many: a sight changed for another in a raid left the count as it was, and the
+        // one taken off, far from the gun, went on placing it, which pulled the gun metres away and round.
+        int which = count;
+        for (int i = 0; i < count; i++)
+            which = which * 31 + (sights![i]?.Bone != null ? sights[i].Bone.GetInstanceID() : 0);
+        if (weapon.GetInstanceID() == _upWeapon && which == _upSights)
             return;
         _upWeapon = weapon.GetInstanceID();
-        _upSights = count;
+        _upSights = which;
         _upLocal = Vector3.forward;
         _uprightSight = null;
         if (sights == null || count == 0)
@@ -300,7 +305,7 @@ internal static class ChestStance
         for (int i = 0; i < count; i++)
         {
             Transform? bone = sights[i]?.Bone;
-            if (bone == null)
+            if (bone == null || !bone.IsChildOf(weapon))
                 continue;
             Vector3 place = weapon.InverseTransformPoint(bone.position);
             Vector3 up = new Vector3(place.x - bore.x, 0f, place.z - bore.z);
