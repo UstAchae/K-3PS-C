@@ -36,6 +36,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int CocId = Shader.PropertyToID("_Coc");
     private static readonly int GridId = Shader.PropertyToID("_Grid");
     private static readonly int BandId = Shader.PropertyToID("_Band");
+    private static readonly int ShapeId = Shader.PropertyToID("_Shape");
     private static readonly int[] NearAccIds = { Shader.PropertyToID("_NearAcc0"), Shader.PropertyToID("_NearAcc1"),
         Shader.PropertyToID("_NearAcc2"), Shader.PropertyToID("_NearAcc3") };
     private static readonly int[] FarIds = { Shader.PropertyToID("_Far0"), Shader.PropertyToID("_Far1"), Shader.PropertyToID("_Far2"),
@@ -110,11 +111,26 @@ internal static partial class NightVisionEyepieces
         }
         DiagDefocus(frame, pixelsPerRadian, ahead); // TEMP DIAG
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
+        // Its outline: the near shape (what of the frame is near, at an eighth of its size) blurred wide and smooth.
+        RenderTexture shape = _levelColor[1]!;
+        RenderTexture across = Temporary(shape.width, shape.height), soft = Temporary(shape.width, shape.height);
+        Graphics.Blit(shape, soft);
+        for (int pass = 0; pass < 2; pass++)
+        {
+            defocus.SetVector(StepId, new Vector2(1f, 0f));
+            Graphics.Blit(soft, across, defocus, 8);
+            defocus.SetVector(StepId, new Vector2(0f, 1f));
+            Graphics.Blit(across, soft, defocus, 8);
+        }
+        RenderTexture.ReleaseTemporary(across);
+        defocus.SetTexture(ShapeId, soft);
         Graphics.Blit(frame, made, defocus, 5);
         AddTritium(view, made);
         ReleaseMask();
         _blurMask = Temporary(width, height);
         Graphics.Blit(frame, _blurMask, defocus, 6);
+        defocus.SetTexture(ShapeId, Texture2D.blackTexture);
+        RenderTexture.ReleaseTemporary(soft);
         for (int level = 0; level < DefocusLevels; level++)
         {
             defocus.SetTexture(NearAccIds[level], Texture2D.blackTexture);

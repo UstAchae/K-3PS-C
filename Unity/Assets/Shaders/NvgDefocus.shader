@@ -11,9 +11,10 @@
 // Pass 3: what is not near, the same way.
 // Pass 4: each pixel of a level drawn as its disc (procedural, six vertices a pixel), added; only radii in its band.
 // Pass 5: the frame as the lens lays it on the tube: what is near, spread, over what lies behind it, as solid as
-//         its discs cover thickly, eased from a third (a thin thing gone). Behind a near thing the frame has only the
+//         its own shape blurred wide (_Shape: a soft outline, a thin thing gone). Behind a near thing the frame has only the
 //         thing itself: what is about it, filled in from its edge inward (finest first), stands for what lies behind it.
 // Pass 6: how much of each part of the frame is spread (0 to 1), for the tube's grain (EaseGrain).
+// Pass 8: a Gaussian of four texels' spread along _Step (the near shape's soft outline, NightVisionDefocus.cs).
 // Pass 7: a level halved: four bilinear taps a texel apart, the four by four under it weighted as a tent, smoother
 //         from frame to frame than the two by two alone.
 // Pass 0 is left empty, so the others keep their numbers.
@@ -25,7 +26,8 @@ Shader "Justachae/NVG/Defocus" {
   float4 _MainTex_TexelSize;
   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
   Texture2D _ScopeLens, _Src, _Coc;
-  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3;
+  Texture2D _NearAcc0, _NearAcc1, _NearAcc2, _NearAcc3, _Far0, _Far1, _Far2, _Far3, _Shape;
+  float2 _Step;   // a Gaussian's direction, in texels
   SamplerState sampler_linear_clamp, sampler_point_clamp;
   float _ScopeOn;
   float4 _DefocusLens;
@@ -197,11 +199,11 @@ Shader "Justachae/NVG/Defocus" {
      fill += (n.a > 1e-4 ? n.rgb / n.a : f.rgb) * need;
      behind = lerp(f.rgb, fill, near);
     }
-    // How solid the spread thing shows, by how thickly its discs cover here (eased from 0.3 to all): a thick thing
-    // solid within, its edge fading wide and soft; a thin one (its light spread thin, under a third) gone, its shape
-    // with it; an opening's middle left to what lies beyond.
-    float solid = smoothstep(0.3, 1, n.a);
-    return float4(lerp(behind, n.rgb / n.a, solid), f.a);
+    // How solid the spread thing shows: its own shape (what of the frame is near), blurred wide and smooth, so its
+    // outline fades softly both ways and a thin part, a narrow line in it, all but goes; its colour the discs'.
+    float solid = saturate(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0).a);
+    float3 colour = n.a > 1e-3 ? n.rgb / n.a : behind;
+    return float4(lerp(behind, colour, solid), f.a);
    }
    ENDCG
   }
@@ -209,7 +211,7 @@ Shader "Justachae/NVG/Defocus" {
    CGPROGRAM
    #pragma vertex vert_img
    #pragma fragment frag
-   float4 frag (v2f_img i) : SV_Target { return saturate(Near(i.uv).a); }
+   float4 frag (v2f_img i) : SV_Target { return saturate(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0).a); }
    ENDCG
   }
   Pass {
@@ -220,6 +222,23 @@ Shader "Justachae/NVG/Defocus" {
     float2 t = _MainTex_TexelSize.xy;
     return 0.25 * (tex2D(_MainTex, i.uv + float2(-t.x, -t.y)) + tex2D(_MainTex, i.uv + float2(t.x, -t.y))
      + tex2D(_MainTex, i.uv + float2(-t.x, t.y)) + tex2D(_MainTex, i.uv + float2(t.x, t.y)));
+   }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   float4 frag (v2f_img i) : SV_Target {
+    float2 d = _Step * _MainTex_TexelSize.xy;
+    float4 sum = 0;
+    float total = 0;
+    for (int k = -6; k <= 6; k++) {
+     float w = exp(-k * k / 32.0);
+     sum += tex2D(_MainTex, i.uv + d * k) * w;
+     total += w;
+    }
+    return sum / total;
    }
    ENDCG
   }
