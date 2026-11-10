@@ -290,10 +290,7 @@ internal static class AimArms
             // whatever sights it carries; only up at the eye is a sight looked through.
             Transform? gunItself = aiming && ChestStance.Active && animation != null ? animation.HandsContainer?.Weapon : null;
             if (gunItself != null)
-            {
-                NoteChestGun(animation!, bone, gunItself);
                 bone = gunItself;
-            }
             Vector3 sightPosition = bone != null ? bone.position : Vector3.zero;
             Vector3 sightForward = Vector3.forward;
             bool ironAligned = gunItself != null || bone != null && animation != null && ResolveIronSight(animation, bone, out sightPosition, out sightForward);
@@ -328,6 +325,8 @@ internal static class AimArms
             {
                 sightId = bone.GetInstanceID();
                 float relief = rangefinder ? rangefinderRelief - ForwardDistance : gunItself != null ? 0f : SightRelief(animation, bone);
+                if (gunItself == null && !rangefinder)
+                    NoteIron(animation, bone, ironAligned, sightPosition, relief);
                 // From the aiming eye: the camera, or where the eye would be at the chest, where the camera stays.
                 Vector3 aimPoint = new Vector3(CameraPosition.PoseAcross, 0f, ForwardDistance + relief);
                 // The stock at the chest (ChestStance): the gun's own origin there, lower and to the right of the eye. Into it and out of it
@@ -1697,16 +1696,36 @@ internal static class AimArms
         return LookTurn(player.MovementContext, yaw, down);
     }
 
-    // Temporary: in the stance, where the gun's origin lies from the sight it would be aimed by (right, up, ahead along the bore, m), to
-    // set the stance's place by; once for each gun and sight.
-    private static int _chestNoted;
-    private static void NoteChestGun(ProceduralWeaponAnimation animation, Transform? sight, Transform gun)
+    // Temporary: as an iron sight is aimed, what places the eye: the game's sights, the markers found, and where the eye goes, in the
+    // gun's frame (right, up, ahead along the bore, m); once for each sight.
+    private static int _ironNoted;
+    private static string Local(Transform weapon, Vector3 p)
     {
-        if (sight == null || !sight.IsChildOf(gun.root) || sight.GetInstanceID() == _chestNoted)
+        Vector3 l = weapon.InverseTransformPoint(p);
+        return $"({l.x:F3}, {l.z:F3}, {-l.y:F3})";
+    }
+
+    private static void NoteIron(ProceduralWeaponAnimation animation, Transform bone, bool ironAligned, Vector3 eyeLine, float relief)
+    {
+        if (bone.GetInstanceID() == _ironNoted)
             return;
-        _chestNoted = sight.GetInstanceID();
-        Vector3 s = gun.InverseTransformPoint(sight.position);
-        NewCameraPlugin.Log?.LogInfo($"Chest check: the gun's origin from its sight {sight.name}: right {-s.x:F3}, up {-s.z:F3}, ahead {s.y:F3} m; the sight's relief {SightRelief(animation, sight):F3} m");
+        _ironNoted = bone.GetInstanceID();
+        Transform? weapon = animation.HandsContainer?.Weapon;
+        if (weapon == null)
+            return;
+        var scope = Scopes.Current(animation);
+        var text = new System.Text.StringBuilder();
+        text.Append($"Iron check: sight {bone.parent?.name}/{bone.name} at {Local(weapon, bone.position)}, under the gun {bone.IsChildOf(weapon)}, optic {scope?.IsOptic}, align {scope?.AlignIfAvailable}, aligned {ironAligned}, eye line at {Local(weapon, eyeLine)}, relief {relief:F3}; game's sights:");
+        foreach (var s in animation.ScopeAimTransforms)
+            text.Append(' ').Append(s.Bone != null ? s.Bone.parent?.name + "/" + s.Bone.name : "null");
+        text.Append("; markers:");
+        foreach (Transform t in weapon.GetComponentsInChildren<Transform>(true))
+            if (t.name.Contains("mod_align_"))
+                text.Append($" {t.parent?.name}/{t.name} {(t.gameObject.activeInHierarchy ? "on" : "off")} {Local(weapon, t.position)}");
+        WeaponPrefab.AimPlane? plane = animation._currentAimingPlane ?? animation.HandsContainer?.DefaultAimPlane;
+        float depth = plane != null ? plane.Depth : float.NaN;
+        text.Append($"; aim plane {depth:F3}");
+        NewCameraPlugin.Log?.LogInfo(text.ToString());
     }
 
     private static bool ResolveIronSight(ProceduralWeaponAnimation animation, Transform bone, out Vector3 position, out Vector3 forward)
