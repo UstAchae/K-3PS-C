@@ -30,6 +30,7 @@ Shader "Justachae/NVG/Defocus" {
   float2 _Step;   // a Gaussian's direction, in texels
   SamplerState sampler_linear_clamp, sampler_point_clamp;
   float _ScopeOn;
+  float _DefocusShow;   // TEMP DIAG: 0 the frame as made; 1 what stands behind; 2 the discs' colour; 3 how solid
   float4 _DefocusLens;
   float2 _TanHalf;
   float4 _Grid;   // a level's width and height; z −1 where a render texture's up is flipped; w its pixel in quarter-size ones
@@ -203,6 +204,9 @@ Shader "Justachae/NVG/Defocus" {
     // outline fades softly both ways and a thin part, a narrow line in it, all but goes; its colour the discs'.
     float solid = saturate(_Shape.SampleLevel(sampler_linear_clamp, i.uv, 0).a);
     float3 colour = n.a > 1e-3 ? n.rgb / n.a : behind;
+    if (_DefocusShow > 2.5) return float4(solid.xxx, 1);   // TEMP DIAG
+    if (_DefocusShow > 1.5) return float4(colour, 1);
+    if (_DefocusShow > 0.5) return float4(behind, 1);
     return float4(lerp(behind, colour, solid), f.a);
    }
    ENDCG

@@ -125,6 +125,7 @@ internal static partial class NightVisionEyepieces
         RenderTexture.ReleaseTemporary(across);
         defocus.SetTexture(ShapeId, soft);
         Graphics.Blit(frame, made, defocus, 5);
+        DumpDefocus(frame, made, defocus); // TEMP DIAG
         AddTritium(view, made);
         ReleaseMask();
         _blurMask = Temporary(width, height);
@@ -147,6 +148,67 @@ internal static partial class NightVisionEyepieces
             NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus by discs at four sizes, over what lies behind ({width}x{height} quarter grid).");
         }
         return true;
+    }
+
+    // TEMP DIAG: once, five seconds into the defocus, each of its layers saved as a picture (BepInEx/defocus-dump):
+    // the frame, what stands behind, the discs' colour, how solid, and the frame as made. Each scaled so its brightest
+    // hundredth is white, as the frame is dark before the tube's gain.
+    private static float _dumpStart = -1f;
+    private static bool _dumped;
+    private static readonly int ShowId = Shader.PropertyToID("_DefocusShow");
+    private static void DumpDefocus(RenderTexture frame, RenderTexture made, Material defocus)
+    {
+        if (_dumped)
+            return;
+        if (_dumpStart < 0f)
+            _dumpStart = Time.time;
+        if (Time.time - _dumpStart < 5f)
+            return;
+        _dumped = true;
+        string folder = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump");
+        System.IO.Directory.CreateDirectory(folder);
+        Save(frame, System.IO.Path.Combine(folder, "0-frame.png"));
+        string[] names = { "", "1-behind.png", "2-disc-colour.png", "3-solid.png" };
+        for (int show = 1; show <= 3; show++)
+        {
+            RenderTexture layer = RenderTexture.GetTemporary(frame.width, frame.height, 0, RenderTextureFormat.ARGBHalf);
+            defocus.SetFloat(ShowId, show);
+            Graphics.Blit(frame, layer, defocus, 5);
+            Save(layer, System.IO.Path.Combine(folder, names[show]), show == 3);
+            RenderTexture.ReleaseTemporary(layer);
+        }
+        defocus.SetFloat(ShowId, 0f);
+        Save(made, System.IO.Path.Combine(folder, "4-made.png"));
+        NewCameraPlugin.Log?.LogInfo("TEMP DIAG defocus layers saved to " + folder);
+    }
+
+    private static void Save(RenderTexture texture, string path, bool asIs = false)
+    {
+        int w = texture.width, h = texture.height;
+        AsyncGPUReadback.Request(texture, 0, TextureFormat.RGBAFloat, r =>
+        {
+            if (r.hasError)
+                return;
+            var data = r.GetData<Color>();
+            float[] lum = new float[data.Length];
+            for (int i = 0; i < data.Length; i++)
+                lum[i] = Mathf.Max(data[i].r, Mathf.Max(data[i].g, data[i].b));
+            float scale = 1f;
+            if (!asIs)
+            {
+                float[] sorted = (float[])lum.Clone();
+                System.Array.Sort(sorted);
+                scale = 1f / Mathf.Max(sorted[(int)(sorted.Length * 0.99f)], 1e-6f);
+            }
+            var pixels = new Color32[data.Length];
+            for (int i = 0; i < data.Length; i++)
+            {
+                Color c = data[i] * scale;
+                pixels[i] = new Color32((byte)(Mathf.Clamp01(c.r) * 255), (byte)(Mathf.Clamp01(c.g) * 255), (byte)(Mathf.Clamp01(c.b) * 255), 255);
+            }
+            byte[] png = ImageConversion.EncodeArrayToPNG(pixels, UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm, (uint)w, (uint)h);
+            System.IO.File.WriteAllBytes(path, png);
+        });
     }
 
     // TEMP DIAG: the discs' radii and how much of the near layer's light they keep, and the frame time, a few times.
