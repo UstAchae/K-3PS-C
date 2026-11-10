@@ -16,7 +16,7 @@ namespace EFTNewCamera;
 internal static partial class NightVisionEyepieces
 {
     private const float DefocusAperture = 0.0225f;      // the objective's, 27 mm at f/1.2 (as the tritium's)
-    private const float DefocusMostDegrees = 5f;        // what a disc's radius eases toward, nearer and nearer
+    private const float DefocusMostDegrees = 3f;        // what a disc's radius eases toward, nearer and nearer
     private const int DefocusScale = 4;
     private const int DefocusLevels = 4;                // radii up to 12, 24, 48 and beyond quarter-size pixels
     // A disc is drawn where its radius is 6 to 12 of the level's pixels: coarser, a pixel's mean of what lies under it

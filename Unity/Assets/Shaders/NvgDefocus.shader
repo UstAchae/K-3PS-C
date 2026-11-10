@@ -11,7 +11,7 @@
 // Pass 3: what is not near, the same way.
 // Pass 4: each pixel of a level drawn as its disc (procedural, six vertices a pixel), added; only radii in its band.
 // Pass 5: the frame as the lens lays it on the tube: what is near, spread, over what lies behind it, as solid as
-//         the square of how thickly its discs cover (a thin thing all but gone). Behind a near thing the frame has only the
+//         its discs cover thickly, eased from a third (a thin thing gone). Behind a near thing the frame has only the
 //         thing itself: what is about it, spread as wide as the discs, stands for what lies behind it.
 // Pass 6: how much of each part of the frame is spread (0 to 1), for the tube's grain (EaseGrain).
 // Pass 7: a level halved: four bilinear taps a texel apart, the four by four under it weighted as a tent, smoother
@@ -194,10 +194,10 @@ Shader "Justachae/NVG/Defocus" {
      if (far.a > 0.05)
       behind = lerp(f.rgb, far.rgb / far.a, under);
     }
-    // How solid the spread thing shows, by how thickly its discs cover here (its square): a thick thing solid within,
-    // its edge fading wide and soft; a thin one (its light spread thin) all but gone, its shape with it, the thinner the
-    // more; an opening's middle left to what lies beyond.
-    float solid = n.a * n.a;
+    // How solid the spread thing shows, by how thickly its discs cover here (eased from 0.3 to all): a thick thing
+    // solid within, its edge fading wide and soft; a thin one (its light spread thin, under a third) gone, its shape
+    // with it; an opening's middle left to what lies beyond.
+    float solid = smoothstep(0.3, 1, n.a);
     return float4(lerp(behind, n.rgb / n.a, solid), f.a);
    }
    ENDCG
