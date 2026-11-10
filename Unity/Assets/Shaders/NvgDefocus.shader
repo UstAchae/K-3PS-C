@@ -179,18 +179,20 @@ Shader "Justachae/NVG/Defocus" {
      return f;
     float r = Radius(i.uv);
     float3 behind = f.rgb;
-    float near = Nearness(r);
-    if (near > 0) {
-     // Behind a near thing: what is about it, spread about as wide as its discs (each level's pixel is 1, 2, 4, 8
-     // quarter-size ones), from the first level that has any of it.
-     int start = (int)clamp(floor(log2(max(r, 1) / 6)), 0, 3);
-     for (int level = start; level < 4; level++) {
-      float4 far = Far(level, i.uv);
-      if (far.a > 0.05) {
-       behind = lerp(f.rgb, far.rgb / far.a, near);
-       break;
-      }
-     }
+    // Behind a near thing, and eased out from it as its discs thin: what is about it, blurred far wider than the discs
+    // (the coarsest level spread again over three of its pixels each way), so nothing in it slides like water as the
+    // view sways, and no line shows where the frame's own picture of what lies behind takes over.
+    float under = max(Nearness(r), smoothstep(0.02, 0.5, n.a));
+    if (under > 0) {
+     float w3, h3;
+     _Far3.GetDimensions(w3, h3);
+     float2 t3 = 1 / float2(w3, h3);
+     float4 far = 0;
+     for (int y = -1; y <= 1; y++)
+      for (int x = -1; x <= 1; x++)
+       far += Far(3, i.uv + float2(x, y) * 1.5 * t3) * ((2 - abs(x)) * (2 - abs(y)));
+     if (far.a > 0.05)
+      behind = lerp(f.rgb, far.rgb / far.a, under);
     }
     // How solid the spread thing shows, by how thickly its discs cover here (its square): a thick thing solid within,
     // its edge fading wide and soft; a thin one (its light spread thin) all but gone, its shape with it, the thinner the
