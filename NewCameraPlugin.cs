@@ -644,6 +644,7 @@ internal static class NewCameraSwitch
     internal static bool Enabled;
     internal static bool FirstPersonSkeleton;
     private static bool _applied;
+    internal static bool Applied => _applied;
     private static int _poseFrame = -1;
     private static Vector3 _posePosition;
 
@@ -734,6 +735,7 @@ internal static class NewCameraSwitch
         HeadwearTilt.Release();
         HideoutGear.Release(player);
         HideoutCinemachine.Release();
+        ChestStance.Release();
         _skeletonOf = null;
         if (player == null || Enabled)
             return;

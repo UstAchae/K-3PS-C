@@ -69,6 +69,10 @@ internal static class ChestStance
     // (the tactical device's mode), would otherwise be the game's Ctrl+aim, the next sight.
     internal static bool TranslatePrefix(ref ECommand command, ref InputNode.ETranslateResult __result)
     {
+        // Not this mod's to touch while it is not applied (switched off, the free camera): a press held back here is then
+        // never let go (Update is not run), and the game's own sight change, Alt or Ctrl with the aim key, stayed blocked.
+        if (!NewCameraSwitch.Applied)
+            return true;
         if ((Active || _pending) && (command == ECommand.ChangeScope || command == ECommand.ChangeScopeMagnification))
         {
             __result = default;
@@ -99,6 +103,13 @@ internal static class ChestStance
         _pressTime = Time.time;
         __result = default;
         return false;
+    }
+
+    // This mod let go of: nothing held back or kept, as if never pressed.
+    internal static void Release()
+    {
+        _pending = _held = _latched = _peeking = _easingBack = _pendingWatched = Active = false;
+        Weight = 0f;
     }
 
     // Each frame: a held-back press taken as a click or a hold once it is known, and the stance ended when let go.
