@@ -498,6 +498,7 @@ Shader "Justachae/NVG/Defocus" {
    #pragma fragment frag
    Texture2D _History;
    float _Take;
+   float4 _Tol;
    float4 frag (v2f_img i) : SV_Target {
     float2 t = _MainTex_TexelSize.xy;
     float4 now = tex2D(_MainTex, i.uv), lo = now, hi = now;
@@ -507,7 +508,10 @@ Shader "Justachae/NVG/Defocus" {
       lo = min(lo, c);
       hi = max(hi, c);
      }
-    float4 kept = clamp(_History.SampleLevel(sampler_linear_clamp, i.uv, 0), lo, hi);
+    // held within this frame's three by three, and nearer still: no further from this frame's own than the jitter moves
+    // it (_Tol); held by the three by three alone, a thin part's blur trailed it as it swayed (the three by three
+    // has the part and what is about it both)
+    float4 kept = clamp(_History.SampleLevel(sampler_linear_clamp, i.uv, 0), max(lo, now - _Tol), min(hi, now + _Tol));
     return lerp(kept, now, _Take);
    }
    ENDCG

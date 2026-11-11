@@ -265,8 +265,8 @@ internal static partial class NightVisionEyepieces
     // How much wider (quarter-size pixels) the layers are blurred again for the share they show by (as against a table).
     private const float DefocusShareSigma = 5f;
     private static RenderTexture? _gatheredQRad;
-    private static readonly int HistoryId = Shader.PropertyToID("_History"), TakeId = Shader.PropertyToID("_Take");
-    private const float DefocusTake = 0.25f;
+    private static readonly int HistoryId = Shader.PropertyToID("_History"), TakeId = Shader.PropertyToID("_Take"), TolId = Shader.PropertyToID("_Tol");
+    private const float DefocusTake = 0.35f;
     private static RenderTexture Gathered(RenderTexture current, Material defocus)
     {
         if (_gatheredQRad == null || _gatheredQRad.width != current.width || _gatheredQRad.height != current.height)
@@ -279,6 +279,9 @@ internal static partial class NightVisionEyepieces
         RenderTexture gathered = Temporary(current.width, current.height);
         defocus.SetTexture(HistoryId, _gatheredQRad);
         defocus.SetFloat(TakeId, DefocusTake);
+        // how far the jitter moves each (radius, nearness, nearness by Front) at a thin part (raw floats, 2026-11-11: near
+        // changed by up to 0.12 a frame where the picture stood still)
+        defocus.SetVector(TolId, new Vector4(1.5f, 0.12f, 0.06f, 1f));
         Graphics.Blit(current, gathered, defocus, 18);
         defocus.SetTexture(HistoryId, Texture2D.blackTexture);
         Graphics.Blit(gathered, _gatheredQRad);
