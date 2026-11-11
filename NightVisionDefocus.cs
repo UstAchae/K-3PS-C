@@ -86,6 +86,7 @@ internal static partial class NightVisionEyepieces
         float tanUp = Mathf.Tan(view.fieldOfView * 0.5f * Mathf.Deg2Rad);
         float pixelsPerRadian = height / (2f * tanUp);
         float ahead = Mathf.Clamp(Vector3.Dot(_body!.TransformPoint(_objectiveFront) - _renderedFrom, _renderedForward), 0f, MaxEyeDistance);
+        _diagAhead = ahead; // TEMP DIAG
         // x: 1 over the focus distance (far away: 0); y: a disc's radius in quarter-size pixels per unit of |1/d − 1/s|;
         // z: how far the objective is ahead of the camera; w: the radius it eases toward (quarter-size pixels).
         defocus.SetVector(DefocusLensId, new Vector4(0f, 0.5f * DefocusAperture * pixelsPerRadian, ahead,
@@ -322,6 +323,7 @@ internal static partial class NightVisionEyepieces
     // TEMP DIAG: on F11, each of its layers saved as a picture (BepInEx/defocus-dump):
     // the frame, what stands behind, the discs' colour, how solid, and the frame as made. Each scaled so its brightest
     // hundredth is white, as the frame is dark before the tube's gain.
+    internal static float _diagAhead; // TEMP DIAG
     private static int _dumps;
     private static readonly int ShowId = Shader.PropertyToID("_DefocusShow");
     private static void DumpDefocus(RenderTexture frame, RenderTexture made, Material defocus)

@@ -204,8 +204,17 @@ internal static partial class NightVisionEyepieces
             Save(mask, System.IO.Path.Combine(folder, "4-lens-mask.png"), true);
             RenderTexture.ReleaseTemporary(mask);
         }
+        if (_defocus != null)
+        {
+            RenderTexture radius = RenderTexture.GetTemporary(from.width, from.height, 0, RenderTextureFormat.ARGBHalf);
+            _defocus.SetFloat(Shader.PropertyToID("_DefocusShow"), 4f);
+            Graphics.Blit(from, radius, _defocus, 5);
+            _defocus.SetFloat(Shader.PropertyToID("_DefocusShow"), 0f);
+            Save(radius, System.IO.Path.Combine(folder, "5-radius.png"), true);
+            RenderTexture.ReleaseTemporary(radius);
+        }
         Camera? view = camera as Camera;
-        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG steps {_stepDumps}/{k}: through {_scope.Through}, pullback {ScopePullback:F3}, masked {masked}, lens noted {ScopeLensNoted}, light {_scope.Light:F3}, fov {(view != null ? view.fieldOfView : -1f):F2}, frame {from.width}x{from.height}, defocus on {_defocus != null}");
+        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG steps {_stepDumps}/{k}: through {_scope.Through}, pullback {ScopePullback:F3}, masked {masked}, lens noted {ScopeLensNoted}, light {_scope.Light:F3}, ahead {_diagAhead:F4}, fov {(view != null ? view.fieldOfView : -1f):F2}, frame {from.width}x{from.height}, defocus on {_defocus != null}");
     }
 
     // What the lenses show this frame, from the frame as it stands: made into a temporary (made) when it is made here.
