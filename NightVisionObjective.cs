@@ -11,8 +11,9 @@ namespace EFTNewCamera;
 // Steps 1 and 3 of the eyepieces' picture (the steps are listed at the head of NightVisionComposite.cs).
 internal static partial class NightVisionEyepieces
 {
-    internal static float NearBlurDistance = 1f;        // from the lens, where the blur is half its limit (m)
-    internal static float NearBlurLimit = 0.75f;        // what a blur's radius eases toward, the nearer (degrees)
+    internal static bool NearBlurOn = true;             // F12 近处虚化
+    private const float NearBlurDistance = 1f;          // from the lens, where the blur is half its limit (m)
+    private const float NearBlurLimit = 0.75f;          // what a blur's radius eases toward, the nearer (degrees)
     private const int Scale = 4;                        // the blur is made at a quarter of the frame's size
     private const int Levels = 5;                       // blurs spread over 1.5, 3, 6, 12, 24 quarter-size pixels
 
@@ -99,7 +100,7 @@ internal static partial class NightVisionEyepieces
     // the rim (NvgObjective.shader); its light was cut to what reaches the tube in step 2 (ForTube).
     private static RenderTexture ThroughObjective(Component camera, RenderTexture frame, ref RenderTexture? made)
     {
-        if (NearBlurDistance <= 0f || NearBlurLimit <= 0f || !AtObjective(camera, out Camera view))
+        if (!NearBlurOn || !AtObjective(camera, out Camera view))
             return frame;
         // As a lens makes it, with what lies behind the player's own drawn (NightVisionDefocus.cs).
         if (DefocusThrough(view, frame, ref made))
