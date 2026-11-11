@@ -325,12 +325,17 @@ Shader "Justachae/NVG/Defocus" {
    #pragma target 3.5
    float4 frag (v2f_img i) : SV_Target {
     float2 t = _MainTex_TexelSize.xy;
-    float r = 0;
+    // The radius of the nearest thing under the pixel (which band it is blurred in), how much of the pixel is near
+    // (the mean): averaged, a pixel half gun and half far scene took a middle radius, fell in a band blurred little,
+    // and as the gun swayed by a sub-pixel such pixels popped between bands (the rim of a sight shimmered while still).
+    float r = 0, near = 0;
     for (int y = 0; y < 4; y++)
-     for (int x = 0; x < 4; x++)
-      r += Radius(i.uv + (float2(x, y) - 1.5) * t);
-    r /= 16;
-    float near = Nearness(r);
+     for (int x = 0; x < 4; x++) {
+      float ri = Radius(i.uv + (float2(x, y) - 1.5) * t);
+      r = max(r, ri);
+      near += Nearness(ri);
+     }
+    near /= 16;
     return float4(r, near, near * Front(r), 0);
    }
    ENDCG
