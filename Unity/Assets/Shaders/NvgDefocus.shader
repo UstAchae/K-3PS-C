@@ -186,7 +186,9 @@ Shader "Justachae/NVG/Defocus" {
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
       float2 uv = i.uv + (float2(x, y) - 1.5) * t;
-      sum += float4(tex2D(_MainTex, uv).rgb, 1) * (1 - _QRad.SampleLevel(sampler_linear_clamp, uv, 0).g);
+      // a magnified sight's picture kept out of what lies behind the gun: it shows only within the sight's own field,
+      // and taken in, its bright parts (an IR laser's dot) spread over the sight's rim as a glow
+      sum += float4(tex2D(_MainTex, uv).rgb, 1) * (1 - _QRad.SampleLevel(sampler_linear_clamp, uv, 0).g) * (1 - ScopeNear(uv));
      }
     return sum / 16;
    }
