@@ -342,17 +342,22 @@ Shader "Justachae/NVG/Defocus" {
     float2 t = _MainTex_TexelSize.xy;
     // A tent over eight by eight of the frame's pixels (twice the quarter-size pixel), not a box of four: as the gun
     // swayed by less than a quarter-size pixel a box's mean stepped, and the blurred gun moved in steps (jitter).
-    float4 sum = 0;
-    float total = 0;
+    // A magnified sight's picture left out of the colour: it is no part of what is near, and taken into the colour of
+    // a pixel at its rim, its bright parts (an IR laser) were spread over the rim with the gun, a glow about the lens.
+    float3 sum = 0;
+    float near = 0, total = 0, kept = 0;
     for (int y = 0; y < 8; y++)
      for (int x = 0; x < 8; x++) {
       float2 o = float2(x, y) - 3.5;
       float w = (4 - abs(o.x)) * (4 - abs(o.y));
       float2 uv = i.uv + o * t;
-      sum += float4(tex2D(_MainTex, uv).rgb, Nearness(Radius(uv))) * w;
+      float k = InLens(uv) ? 0 : w;
+      sum += tex2D(_MainTex, uv).rgb * k;
+      kept += k;
+      near += Nearness(Radius(uv)) * w;
       total += w;
      }
-    return sum / total;
+    return float4(kept > 0 ? sum / kept : tex2D(_MainTex, i.uv).rgb, near / total);
    }
    ENDCG
   }
