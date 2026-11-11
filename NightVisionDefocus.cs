@@ -113,19 +113,13 @@ internal static partial class NightVisionEyepieces
         RenderTexture qColor = Temporary(width, height), qRad = Temporary(width, height);
         Graphics.Blit(frame, qColor, defocus, 9);
         Graphics.Blit(frame, qRad, defocus, 10);
-        // How thick each near part is: kept by square openings of 9 to 17 quarter-size pixels' half-width, a fifth each
-        // (the tuner's thick = smoothstep((half-width - 8) / 10)).
+        // Thin parts taken as the thick ones, everywhere: with a table behind it a sight's thin parts joined the table
+        // into one thick near shape and showed full and soft, and that is the look wanted; alone against a far scene
+        // they were measured thin and went into it (transparent), so swinging the gun across the edge of what is near
+        // flipped them. No part is measured thin now (the thin layers below stay empty).
         RenderTexture nearMask = Threshold(qRad, 0.5f, defocus);
-        RenderTexture thick = Temporary(width, height);
+        RenderTexture thick = Temporary(1, 1);
         Graphics.Blit(Texture2D.blackTexture, thick);
-        foreach (float half in DefocusThickSteps)
-        {
-            RenderTexture eroded = MinMax(nearMask, half * scale, false, defocus), opened = MinMax(eroded, half * scale, true, defocus);
-            RenderTexture.ReleaseTemporary(eroded);
-            defocus.SetFloat(ScaleId, 0.2f);
-            Graphics.Blit(opened, thick, defocus, 13);
-            RenderTexture.ReleaseTemporary(opened);
-        }
         // What the near parts close about (5 quarter-size pixels): a sight's window and the gaps between parts.
         RenderTexture grown = MinMax(nearMask, 5f * scale, true, defocus), closed = MinMax(grown, 5f * scale, false, defocus);
         RenderTexture.ReleaseTemporary(grown);
@@ -135,15 +129,16 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(QRadId, qRad);
         defocus.SetTexture(ThickId, thick);
         defocus.SetTexture(ClosedId, closed);
-        // Thin parts only of what is spread by more than 3 quarter-size pixels (not the targets a few metres off).
-        defocus.SetFloat(ThinNearId, 3f * scale);
-        RenderTexture layerThick = Layer(0, width, height, defocus), layerThin = Layer(1, width, height, defocus), masks = Layer(2, width, height, defocus);
+        // No part is thin (above): nothing passes the thin parts' gate.
+        defocus.SetFloat(ThinNearId, 1e6f);
+        RenderTexture layerThick = Layer(0, width, height, defocus), masks = Layer(2, width, height, defocus);
         RenderTexture thickBlurred = Blur(layerThick, 3f * scale, defocus), masksBlurred = Blur(masks, 3f * scale, defocus);
-        RenderTexture thinBlurred = BlurWide(layerThin, 40f * scale, defocus);
-        // the thin parts' wash: 40 x 2.5 + 6 quarter-size pixels
-        RenderTexture thinWash = BlurWide(layerThin, 106f * scale, defocus), masksWash = BlurWide(masks, 106f * scale, defocus);
+        // the thin layers, empty
+        RenderTexture thinBlurred = Temporary(1, 1), thinWash = Temporary(1, 1), masksWash = Temporary(1, 1);
+        Graphics.Blit(Texture2D.blackTexture, thinBlurred);
+        Graphics.Blit(Texture2D.blackTexture, thinWash);
+        Graphics.Blit(Texture2D.blackTexture, masksWash);
         RenderTexture.ReleaseTemporary(layerThick);
-        RenderTexture.ReleaseTemporary(layerThin);
         RenderTexture.ReleaseTemporary(masks);
         // About any near thing (one quarter-size pixel out, eased), what lies behind is the filled-in.
         RenderTexture anyNear = Threshold(qRad, 0.02f, defocus), anyGrown = MinMax(anyNear, Mathf.Max(1f, Mathf.Round(scale)), true, defocus);
@@ -187,7 +182,7 @@ internal static partial class NightVisionEyepieces
         if (!_defocusNoted)
         {
             _defocusNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus as chosen on the tuner page (thick 3, thin 40 gone, thin wash 106; {width}x{height} quarter grid, scale {scale:F2}).");
+            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus as chosen on the tuner page (all near parts as thick, blurred 3, gaps closed 5; {width}x{height} quarter grid, scale {scale:F2}).");
         }
         return true;
     }
