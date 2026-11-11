@@ -366,6 +366,7 @@ internal static partial class NightVisionEyepieces
         _flipTarget = -1f;
         _flipWasOn = false;
         _flipSeenMoving = false;
+        _flipPending = false;
         _split = 0f;
         _searchedFrame = -100;
         ReleaseEyes();
@@ -390,21 +391,38 @@ internal static partial class NightVisionEyepieces
             _flipWasOn = on;
             _flipOnSince = Time.time;
         }
+        // Set going, it is going to the switch's new state: taken as the switch stands once it has changed too, or a
+        // moment later if it does not. Taken at once, flipped up while aiming (the game sets the device going before it
+        // switches it off) it was learned the wrong way round, and every flip after showed the tubes on as it went up
+        // (the game's filter switching off in them: a flash of the bare picture), until the device was found again.
         if (target != _flipTarget)
         {
             if (_flipTarget >= 0f)
             {
-                _rotatorReversed = on == target < 0.5f;
-                _flipSeenMoving = true;
+                _flipPending = true;
+                _flipPendingOn = on;
+                _flipPendingSince = Time.time;
             }
             _flipTarget = target;
         }
         else if (on && !_flipSeenMoving && !_rotator.ShouldRotate() && Time.time - _flipOnSince > FlipSettleSeconds)
             _rotatorReversed = eased < 0.5f;
+        if (_flipPending && (on != _flipPendingOn || Time.time - _flipPendingSince > FlipSwitchWait))
+        {
+            _flipPending = false;
+            _flipSeenMoving = true;
+            bool reversed = on == _flipTarget < 0.5f;
+            if (reversed != _rotatorReversed)
+                NewCameraPlugin.Log?.LogInfo($"NVG flip: down is the rotator's {(reversed ? "0" : "1")} end (set going to {_flipTarget:F1}, switched {(on ? "on" : "off")}).");
+            _rotatorReversed = reversed;
+        }
         return _rotatorReversed ? 1f - eased : eased;
     }
 
     private const float FlipSettleSeconds = 3f;
+    private const float FlipSwitchWait = 1f;   // how long the switch may lag the device set going (s)
+    private static bool _flipPending, _flipPendingOn;
+    private static float _flipPendingSince;
     private static readonly FieldInfo? RotatorTarget = AccessTools.Field(typeof(CurveRotator), "_targetT");
     private static float _flipTarget = -1f, _flipOnSince;
     private static bool _flipWasOn, _flipSeenMoving;
