@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Collections.Generic;
 using EFT.Visual;
 using HarmonyLib;
@@ -561,13 +562,13 @@ internal static partial class NightVisionEyepieces
             return;
         _diagReticleAt = Time.time;
         EFT.CameraControl.OpticSight? sight = EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight;
-        Material? m = sight?.ScopeData?.Reticle?.Material;
+        Material? m = sight?.LensRenderer != null ? sight.LensRenderer.sharedMaterial : null;
         var goggle = EFT.CameraControl.CameraManager.Instance?.NightVision;
         var sb = new System.Text.StringBuilder();
         sb.Append($"TEMP DIAG reticle: sight {(sight != null ? sight.name : "none")}, goggle {(goggle != null && goggle.On)}, global NV {Shader.GetGlobalFloat(NightVisionOnId)}, ");
         if (m != null)
         {
-            sb.Append($"shader {m.shader.name}, keywords [{string.Join(",", m.shaderKeywords)}]");
+            sb.Append($"lens shader {m.shader.name}, keywords [{string.Join(",", m.shaderKeywords)}], global keywords NV-ish [{string.Join(",", System.Array.FindAll(Shader.enabledGlobalKeywords, k => k.name.ToUpperInvariant().Contains("NIGHT") || k.name.ToUpperInvariant().Contains("NV")).Select(k => k.name))}], ratio {Shader.GetGlobalFloat("_NightVisionRatio"):F2}");
             for (int i = 0; i < m.shader.GetPropertyCount(); i++)
             {
                 string n = m.shader.GetPropertyName(i);
