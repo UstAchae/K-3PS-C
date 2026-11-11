@@ -52,7 +52,10 @@ Shader "Justachae/NVG/Defocus" {
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
   }
-  float4 _CameraDepthTexture_TexelSize;
+  // The frame's own texel (set by NightVisionDefocus.cs): Unity's _CameraDepthTexture_TexelSize is a global that the
+  // other cameras that make a depth texture (the eyes', the sight's) set to their own size, and from frame to frame the
+  // reach of the nearest-depth taps below changed with it, and every near thing's outline flickered.
+  float4 _DepthTexel;
   // A disc's radius (quarter-size pixels) for what the frame shows at uv: none through a sight's lens. Taken from the
   // nearest depth within two pixels each way: along a near thing's outline the frame's colour is the thing's and what
   // lies beyond mixed (smoothed, scaled), while its depth is one or the other, and a ring of the thing's colour was
@@ -72,7 +75,7 @@ Shader "Justachae/NVG/Defocus" {
    float scope = ScopeNear(uv);
    if (scope > 0.999)
     return 0;
-   float2 o = 2 * _CameraDepthTexture_TexelSize.xy;
+   float2 o = 2 * _DepthTexel.xy;
    float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
    float z = LinearEyeDepth(raw);
    z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(o.x, o.y))));

@@ -92,6 +92,7 @@ internal static partial class NightVisionEyepieces
         defocus.SetVector(DefocusLensId, new Vector4(0f, 0.5f * DefocusAperture * pixelsPerRadian, ahead,
             DefocusMostDegrees * Mathf.Deg2Rad * pixelsPerRadian));
         defocus.SetVector(TanHalfId, TanHalf(view, frame));
+        defocus.SetVector(DepthTexelId, new Vector4(1f / frame.width, 1f / frame.height, frame.width, frame.height));
         // the frame's width over its height, and how far about a magnified sight's lens its eyepiece's own dark ring
         // reaches (of the frame's height): neither blurred
         defocus.SetFloat(AspectId, (float)frame.width / frame.height);
@@ -246,6 +247,7 @@ internal static partial class NightVisionEyepieces
     private const float DefocusBlurPerRadius = 0.35f;
     // How much wider (quarter-size pixels) the layers are blurred again for the share they show by (as against a table).
     private const float DefocusShareSigma = 5f;
+    private static readonly int DepthTexelId = Shader.PropertyToID("_DepthTexel");
     private static readonly int LThickWId = Shader.PropertyToID("_LThickW"), MaskWId = Shader.PropertyToID("_MaskW");
     private static readonly float[] DefocusFillSigmas = { 1.5f, 4f, 10f, 24f };
     private static readonly int BandHatId = Shader.PropertyToID("_BandHat"), EncInId = Shader.PropertyToID("_EncIn"),

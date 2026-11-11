@@ -225,8 +225,6 @@ internal static partial class NightVisionEyepieces
 
     private static void DumpSteps(RenderTexture from, RenderTexture forTube, RenderTexture throughObjective, Texture picture, Component camera)
     {
-        if (camera is Camera attachTo)
-            DepthDiagAttach(attachTo, from.width, from.height);
         if (Input.GetKeyDown(KeyCode.F11))
         {
             _stepDumps++;
@@ -267,7 +265,7 @@ internal static partial class NightVisionEyepieces
             SaveDepth(Shader.GetGlobalTexture("_CameraDepthTexture"), System.IO.Path.Combine(f6, "8-depth-read-now.png"), from.width, from.height);
         }
         Camera? view = camera as Camera;
-        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG steps {_stepDumps}/{k}: through {_scope.Through}, pullback {ScopePullback:F3}, masked {masked}, lens noted {ScopeLensNoted}, light {_scope.Light:F3}, ahead {_diagAhead:F4}, fov {(view != null ? view.fieldOfView : -1f):F2}, frame {from.width}x{from.height}, defocus on {_defocus != null}");
+        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG steps {_stepDumps}/{k}: through {_scope.Through}, pullback {ScopePullback:F3}, masked {masked}, lens noted {ScopeLensNoted}, light {_scope.Light:F3}, ahead {_diagAhead:F4}, depth texel global {Shader.GetGlobalVector("_CameraDepthTexture_TexelSize")}, fov {(view != null ? view.fieldOfView : -1f):F2}, frame {from.width}x{from.height}, defocus on {_defocus != null}");
     }
 
     // What the lenses show this frame, from the frame as it stands: made into a temporary (made) when it is made here.
