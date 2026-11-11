@@ -125,14 +125,6 @@ internal static partial class NightVisionEyepieces
         // Each a Gaussian of the quarter-size one (1.5, 4, 10 and 24 quarter-size pixels), not halvings: a halved level's
         // pixels jumped as the gun swayed with the breath, and what was filled in behind its top swayed with them while
         // the view was still.
-        RenderTexture farQuarter = Temporary(width, height);
-        Graphics.Blit(frame, farQuarter, defocus, 3);
-        for (int level = 0; level < DefocusLevels; level++)
-        {
-            _levelFar[level] = BlurWide(farQuarter, DefocusFillSigmas[level] * scale, defocus);
-            defocus.SetTexture(FarIds[level], _levelFar[level]);
-        }
-        RenderTexture.ReleaseTemporary(farQuarter);
 
         // The frame and how near each part of it is, at a quarter of the size.
         RenderTexture qColor = Temporary(width, height), qRad = Temporary(width, height);
@@ -144,6 +136,17 @@ internal static partial class NightVisionEyepieces
         // of four frames, 2026-11-11: the depth alternating at 45 thousand pixels where the picture stood still), and
         // the blur pulsed with it. The two frames' mean is where the outline truly is; a frame behind at most.
         qRad = MeanWithLast(qRad, defocus);
+        // What is not near (by the nearness just made, not each pixel's own depth taken at the jittered texel nearest
+        // it), for what is filled in behind a near thing.
+        defocus.SetTexture(QRadId, qRad);
+        RenderTexture farQuarter = Temporary(width, height);
+        Graphics.Blit(frame, farQuarter, defocus, 3);
+        for (int level = 0; level < DefocusLevels; level++)
+        {
+            _levelFar[level] = BlurWide(farQuarter, DefocusFillSigmas[level] * scale, defocus);
+            defocus.SetTexture(FarIds[level], _levelFar[level]);
+        }
+        RenderTexture.ReleaseTemporary(farQuarter);
         // Thin parts taken as the thick ones, everywhere: with a table behind it a sight's thin parts joined the table
         // into one thick near shape and showed full and soft, and that is the look wanted; alone against a far scene
         // they were measured thin and went into it (transparent), so swinging the gun across the edge of what is near

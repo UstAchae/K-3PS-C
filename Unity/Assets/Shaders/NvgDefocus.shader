@@ -186,7 +186,7 @@ Shader "Justachae/NVG/Defocus" {
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
       float2 uv = i.uv + (float2(x, y) - 1.5) * t;
-      sum += float4(tex2D(_MainTex, uv).rgb, 1) * (1 - Nearness(Radius(uv)));
+      sum += float4(tex2D(_MainTex, uv).rgb, 1) * (1 - _QRad.SampleLevel(sampler_linear_clamp, uv, 0).g);
      }
     return sum / 16;
    }
