@@ -28,7 +28,6 @@ internal static class AimArms
     private const float ReleaseSeconds = 0.3f;
     private const float HeadLockSeconds = 0.2f;
 
-    internal static float ForwardDistance;
     internal sealed class SwayAmounts
     {
         public float GunMove;
@@ -324,9 +323,11 @@ internal static class AimArms
             if (aiming && bone != null && animation != null)
             {
                 sightId = bone.GetInstanceID();
-                float relief = rangefinder ? rangefinderRelief - ForwardDistance : gunItself != null ? 0f : SightRelief(animation, bone);
+                // How far ahead of the eye, as the game's first person has it for the sight aimed through (EyeDepth); in the stance
+                // at the chest the same, for the gun's own origin, so the gun is as far forward as when aimed.
+                float relief = rangefinder ? rangefinderRelief : SightRelief(animation, bone);
                 // From the aiming eye: the camera, or where the eye would be at the chest, where the camera stays.
-                Vector3 aimPoint = new Vector3(CameraPosition.PoseAcross, 0f, ForwardDistance + relief);
+                Vector3 aimPoint = new Vector3(CameraPosition.PoseAcross, 0f, relief);
                 // The stock at the chest (ChestStance): the gun's own origin there, lower and to the right of the eye. Into it and out of it
                 // the gun goes as the change of what places it has it (the blend below).
                 float chest = gunItself != null ? 1f : 0f;
@@ -1037,7 +1038,7 @@ internal static class AimArms
             up = -up;
 
         rotation = Quaternion.LookRotation(forward, up);
-        position = sightPosition - forward * (ForwardDistance + SightRelief(animation, bone));
+        position = sightPosition - forward * SightRelief(animation, bone);
         return true;
     }
 
@@ -1567,9 +1568,9 @@ internal static class AimArms
             return;
 
         bool aiming = player.HandsController != null && player.HandsController.IsAiming;
-        // The stock at the chest leaves the head free, as at the hip: the view goes with the head (and the balance),
-        // so nothing changes as the stance is let go.
-        float target = aiming && !ChestStance.Active && _smoothedHead.sqrMagnitude <= 0.01f ? 1f : 0f;
+        // The stock at the chest too: it is the aim, the gun only placed elsewhere, and the gun is placed on this steadied head. Left
+        // free (and balanced), the view kept part of the head's own motion that the gun did not, and the gun shook on the screen.
+        float target = aiming && _smoothedHead.sqrMagnitude <= 0.01f ? 1f : 0f;
         _headLock = Mathf.MoveTowards(_headLock, target, Time.deltaTime / (target > _headLock ? HeadLockSeconds : LeaveSeconds));
     }
 
