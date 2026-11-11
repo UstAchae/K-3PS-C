@@ -93,6 +93,9 @@ internal static partial class NightVisionEyepieces
             DefocusMostDegrees * Mathf.Deg2Rad * pixelsPerRadian));
         defocus.SetVector(TanHalfId, TanHalf(view, frame));
         defocus.SetVector(DepthTexelId, new Vector4(1f / frame.width, 1f / frame.height, frame.width, frame.height));
+        // Where in the depth the picture's (unjittered) point is: a point at p in NDC is drawn at p - jitter, half that
+        // in UV. Without it each near outline in the depth walked about the picture's from frame to frame.
+        defocus.SetVector(DepthJitterId, new Vector4(-0.5f * _renderedJitter.x, -0.5f * _renderedJitter.y, 0f, 0f));
         // the frame's width over its height, and how far about a magnified sight's lens its eyepiece's own dark ring
         // reaches (of the frame's height): neither blurred
         defocus.SetFloat(AspectId, (float)frame.width / frame.height);
@@ -273,7 +276,7 @@ internal static partial class NightVisionEyepieces
         RenderTexture.ReleaseTemporary(current);
         return mean;
     }
-    private static readonly int DepthTexelId = Shader.PropertyToID("_DepthTexel");
+    private static readonly int DepthTexelId = Shader.PropertyToID("_DepthTexel"), DepthJitterId = Shader.PropertyToID("_DepthJitter");
     private static readonly int LThickWId = Shader.PropertyToID("_LThickW"), MaskWId = Shader.PropertyToID("_MaskW");
     private static readonly float[] DefocusFillSigmas = { 1.5f, 4f, 10f, 24f };
     private static readonly int BandHatId = Shader.PropertyToID("_BandHat"), EncInId = Shader.PropertyToID("_EncIn"),

@@ -35,6 +35,7 @@ internal static partial class NightVisionEyepieces
     private static Vector3 _renderedFrom, _renderedForward;
     private static Matrix4x4 _renderedViewProjection, _renderedView, _renderedProjection;
     private static int _renderedFrame = -1;
+    internal static Vector2 _renderedJitter;
 
     internal static void NoteRendered(Camera camera)
     {
@@ -46,6 +47,10 @@ internal static partial class NightVisionEyepieces
         _renderedForward = camera.transform.forward;
         _renderedView = camera.worldToCameraMatrix;
         _renderedProjection = camera.nonJitteredProjectionMatrix;
+        // The projection's jitter this frame (the game's upscaler moves the camera by part of a pixel of its render, frame
+        // by frame, and smooths its picture over them; its depth stays as rendered): NDC units.
+        Matrix4x4 jittered = camera.projectionMatrix;
+        _renderedJitter = new Vector2(jittered.m02 - _renderedProjection.m02, jittered.m12 - _renderedProjection.m12);
         _renderedViewProjection = _renderedProjection * _renderedView;
         _renderedFrame = Time.frameCount;
         NoteScope();

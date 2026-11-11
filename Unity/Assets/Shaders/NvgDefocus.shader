@@ -56,6 +56,7 @@ Shader "Justachae/NVG/Defocus" {
   // other cameras that make a depth texture (the eyes', the sight's) set to their own size, and from frame to frame the
   // reach of the nearest-depth taps below changed with it, and every near thing's outline flickered.
   float4 _DepthTexel;
+  float4 _DepthJitter;   // where in the depth the picture's point is, from it (UV): the camera's jitter this frame
   // A disc's radius (quarter-size pixels) for what the frame shows at uv: none through a sight's lens. Taken from the
   // nearest depth within two pixels each way: along a near thing's outline the frame's colour is the thing's and what
   // lies beyond mixed (smoothed, scaled), while its depth is one or the other, and a ring of the thing's colour was
@@ -76,13 +77,15 @@ Shader "Justachae/NVG/Defocus" {
    if (scope > 0.999)
     return 0;
    float2 o = 2 * _DepthTexel.xy;
+   float2 picture = uv;
+   uv += _DepthJitter.xy;
    float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
    float z = LinearEyeDepth(raw);
    z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(o.x, o.y))));
    z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(-o.x, o.y))));
    z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(o.x, -o.y))));
    z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(-o.x, -o.y))));
-   float2 ray = (uv * 2 - 1) * _TanHalf;
+   float2 ray = (picture * 2 - 1) * _TanHalf;
    float d = max(z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z, 0.001);
    float lens = _DefocusLens.y * abs(1 / d - _DefocusLens.x);
    return _DefocusLens.w * (1 - exp(-lens / _DefocusLens.w)) * (1 - scope);
