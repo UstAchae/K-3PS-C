@@ -503,16 +503,17 @@ internal static partial class NightVisionEyepieces
     internal static void OnOpticPreCullIr(Camera camera)
     {
         // The goggle's filter says night vision is on (_NightVisionOn, set as the main camera culls, and the sight's camera
-        // renders after), and a sight's reticle drawn under it goes unlit, as for a picture the goggle amplifies. Looked
-        // through bare (a monocular before the other eye) the eye sees the sight as it is: its reticle lit.
-        if (OpticPicture.IsCamera(camera) && !OpticSeesNightVision()
+        // renders after), and a sight's reticle drawn under it goes unlit. Left lit whether the sight is looked through
+        // with the goggle or bare (a monocular before the other eye): its own light, seen as it is or through the tube.
+        // A sight with its own night vision sets it again below.
+        if (OpticPicture.IsCamera(camera)
             && EFT.CameraControl.CameraManager.Instance?.NightVision is BSG.CameraEffects.NightVision goggle && goggle.On)
         {
             Shader.SetGlobalFloat(NightVisionOnId, 0f);
             if (!_bareReticleNoted)
             {
                 _bareReticleNoted = true;
-                NewCameraPlugin.Log?.LogInfo("NVG: a sight looked through bare under the goggle, its reticle drawn lit (night vision off for its camera).");
+                NewCameraPlugin.Log?.LogInfo("NVG: a sight under the goggle drawn with its reticle lit (night vision off for its camera).");
             }
         }
         if (!IrWanted || !OpticPicture.IsCamera(camera))
