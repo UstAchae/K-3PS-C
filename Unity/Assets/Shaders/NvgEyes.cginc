@@ -85,10 +85,9 @@ void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover, out fl
   eyeSide(uv, right, eye, light, cover, dark);
   float shown = smoothstep(0, 0.5 + _Overscan * 0.5, right ? uv.x : 1 - uv.x);
   shown = _Monocular.z > 0 ? pow(max(shown, 1e-5), _Monocular.z) : 1;
+  // Only the housing fades: the eyepiece's own picture (and its glass, which keeps the scene from showing through it) is
+  // the tube's, seen whole wherever the lens is; faded with the housing, part of the eyepiece showed the bare scene.
   eye *= shown;
-  light *= shown;
-  cover *= shown;
-  dark *= shown;
   return;
  }
  if (toRight <= 0) { eyeSide(uv, false, eye, light, cover, dark); return; }
