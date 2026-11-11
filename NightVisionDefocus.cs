@@ -189,6 +189,9 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(LThinBId, thinBlurred);
         defocus.SetTexture(LThinFId, thinWash);
         defocus.SetTexture(MaskBId, masksBlurred);
+        RenderTexture thickWide = Blur(thickBlurred, DefocusShareSigma * scale, defocus), masksWide = Blur(masksBlurred, DefocusShareSigma * scale, defocus);
+        defocus.SetTexture(LThickWId, thickWide);
+        defocus.SetTexture(MaskWId, masksWide);
         defocus.SetTexture(MaskFId, masksWash);
         defocus.SetTexture(SeamId, seam);
         Graphics.Blit(frame, made, defocus, 5);
@@ -203,6 +206,10 @@ internal static partial class NightVisionEyepieces
             defocus.SetTexture(id, Texture2D.blackTexture);
         RenderTexture.ReleaseTemporary(thickBlurred);
         RenderTexture.ReleaseTemporary(masksBlurred);
+        defocus.SetTexture(LThickWId, Texture2D.blackTexture);
+        defocus.SetTexture(MaskWId, Texture2D.blackTexture);
+        RenderTexture.ReleaseTemporary(thickWide);
+        RenderTexture.ReleaseTemporary(masksWide);
         RenderTexture.ReleaseTemporary(thinBlurred);
         RenderTexture.ReleaseTemporary(thinWash);
         RenderTexture.ReleaseTemporary(masksWash);
@@ -234,6 +241,9 @@ internal static partial class NightVisionEyepieces
     private static readonly float[] DefocusBandMiddles = { 1f, 2.5f, 4.5f, 7f, 10.5f, 15f, 20.2f };
     private const int DefocusEncBand = 4;   // what the near parts close about goes with the gun's own (10.5)
     private const float DefocusBlurPerRadius = 0.35f;
+    // How much wider (quarter-size pixels) the layers are blurred again for the share they show by (as against a table).
+    private const float DefocusShareSigma = 5f;
+    private static readonly int LThickWId = Shader.PropertyToID("_LThickW"), MaskWId = Shader.PropertyToID("_MaskW");
     private static readonly float[] DefocusFillSigmas = { 1.5f, 4f, 10f, 24f };
     private static readonly int BandHatId = Shader.PropertyToID("_BandHat"), EncInId = Shader.PropertyToID("_EncIn"),
         AspectId = Shader.PropertyToID("_Aspect"), ScopeMarginId = Shader.PropertyToID("_ScopeMargin"),

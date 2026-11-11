@@ -43,6 +43,7 @@ Shader "Justachae/NVG/Defocus" {
   float4 _Grid;   // a level's width and height; z −1 where a render texture's up is flipped; w its pixel in quarter-size ones
   float2 _Band;   // the radii (quarter-size pixels) a level draws: above x, up to y
   // The look chosen on the tuner page (_build/tuner.html), all at a quarter of the frame's size:
+  Texture2D _LThickW, _MaskW;
   Texture2D _QColor, _QRad, _Thick, _Closed, _LThickB, _LThinB, _LThinF, _MaskB, _MaskF, _Seam;
   float _Radius, _Mode, _Sigma, _Which, _Thresh, _Scale, _ThinNear;
   float3 _BandHat;   // a band of radii: rising from x to its middle y, falling to z (x < 0: whole below; z huge: whole above)
@@ -237,7 +238,12 @@ Shader "Justachae/NVG/Defocus" {
     // Front at a quarter of the most), by how much of it is about. By cover alone, against a far scene the gun showed
     // thinner and spread less than with the table behind it.
     float cover = saturate(_MaskB.SampleLevel(sampler_linear_clamp, i.uv, 0).r);
-    float ak = max(cover, ck.a / max(ck.a + 0.08 * (1 - cover), 1e-6));
+    // The share taken from the layers blurred wider still (DefocusShareSigma): over a far scene the share lifts a
+    // little of the gun about to most of it, and taken from the narrow blur it lifted a pixel of the gun's stepped
+    // outline flipping with the breath into a whole patch pulsing; over the wider blur a pixel is as little as it is.
+    float wa = _LThickW.SampleLevel(sampler_linear_clamp, i.uv, 0).a;
+    float wcover = saturate(_MaskW.SampleLevel(sampler_linear_clamp, i.uv, 0).r);
+    float ak = max(cover, wa / max(wa + 0.08 * (1 - wcover), 1e-6));
     float a2 = saturate(_MaskF.SampleLevel(sampler_linear_clamp, i.uv, 0).g);
     float af = a2 / max(a2 + 0.3 * (1 - a2), 1e-6);
     float shown = 1 - (1 - ak) * (1 - af);
@@ -325,16 +331,18 @@ Shader "Justachae/NVG/Defocus" {
    #pragma target 3.5
    float4 frag (v2f_img i) : SV_Target {
     float2 t = _MainTex_TexelSize.xy;
-    // The radius of the nearest thing under the pixel (which band it is blurred in), how much of the pixel is near
-    // (the mean): averaged, a pixel half gun and half far scene took a middle radius, fell in a band blurred little,
-    // and as the gun swayed by a sub-pixel such pixels popped between bands (the rim of a sight shimmered while still).
+    // The radius of what is near under the pixel (its mean, weighted by how near), how much of the pixel is near (the
+    // mean): the mean of all of it gave a pixel half gun and half far scene a middle radius, the nearest one jumped as a
+    // single pixel of the gun's outline flipped.
     float r = 0, near = 0;
     for (int y = 0; y < 4; y++)
      for (int x = 0; x < 4; x++) {
       float ri = Radius(i.uv + (float2(x, y) - 1.5) * t);
-      r = max(r, ri);
-      near += Nearness(ri);
+      float ni = Nearness(ri);
+      r += ri * ni;
+      near += ni;
      }
+    r = near > 1e-4 ? r / near : 0;   // the mean radius of what is near under the pixel: it moves on as smoothly as that does
     near /= 16;
     return float4(r, near, near * Front(r), 0);
    }
