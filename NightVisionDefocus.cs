@@ -132,6 +132,12 @@ internal static partial class NightVisionEyepieces
         RenderTexture qColor = Temporary(width, height), qRad = Temporary(width, height);
         Graphics.Blit(frame, qColor, defocus, 9);
         Graphics.Blit(frame, qRad, defocus, 10);
+        // How near, as the mean of this frame and the last: the game's camera is jittered by half a pixel of its render
+        // (1707 by 960 at 2560 by 1440) one way and the other on alternate frames, and its picture is smoothed over them,
+        // but its depth is not: each near thing's outline in the depth stepped back and forth every frame (the raw floats
+        // of four frames, 2026-11-11: the depth alternating at 45 thousand pixels where the picture stood still), and
+        // the blur pulsed with it. The two frames' mean is where the outline truly is; a frame behind at most.
+        qRad = MeanWithLast(qRad, defocus);
         // Thin parts taken as the thick ones, everywhere: with a table behind it a sight's thin parts joined the table
         // into one thick near shape and showed full and soft, and that is the look wanted; alone against a far scene
         // they were measured thin and went into it (transparent), so swinging the gun across the edge of what is near
@@ -248,6 +254,25 @@ internal static partial class NightVisionEyepieces
     private const float DefocusBlurPerRadius = 0.35f;
     // How much wider (quarter-size pixels) the layers are blurred again for the share they show by (as against a table).
     private const float DefocusShareSigma = 5f;
+    private static RenderTexture? _lastQRad;
+    private static readonly int PrevTexId = Shader.PropertyToID("_Prev");
+    private static RenderTexture MeanWithLast(RenderTexture current, Material defocus)
+    {
+        if (_lastQRad == null || _lastQRad.width != current.width || _lastQRad.height != current.height)
+        {
+            _lastQRad?.Release();
+            _lastQRad = new RenderTexture(current.width, current.height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG defocus last nearness", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            _lastQRad.Create();
+            Graphics.Blit(current, _lastQRad);
+        }
+        RenderTexture mean = Temporary(current.width, current.height);
+        defocus.SetTexture(PrevTexId, _lastQRad);
+        Graphics.Blit(current, mean, defocus, 17);
+        defocus.SetTexture(PrevTexId, Texture2D.blackTexture);
+        Graphics.Blit(current, _lastQRad);
+        RenderTexture.ReleaseTemporary(current);
+        return mean;
+    }
     private static readonly int DepthTexelId = Shader.PropertyToID("_DepthTexel");
     private static readonly int LThickWId = Shader.PropertyToID("_LThickW"), MaskWId = Shader.PropertyToID("_MaskW");
     private static readonly float[] DefocusFillSigmas = { 1.5f, 4f, 10f, 24f };
