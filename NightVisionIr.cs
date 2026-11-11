@@ -496,12 +496,25 @@ internal static partial class NightVisionEyepieces
     //   the goggle's (ThroughScope): off, so that visible lasers are drawn at their own light for the tube to amplify, as
     //   in the lenses' picture, and the IR lasers drawn by us with it on after the transparent things (_opticIrLasers).
     // IkLight lights the IR lights for it in either case (OpticSeesNightVision).
-    private static bool _opticIr;
+    private static bool _opticIr, _bareReticleNoted;
     private static CommandBuffer? _opticIrLasers;
     private static Camera? _opticIrLasersOn;
 
     internal static void OnOpticPreCullIr(Camera camera)
     {
+        // The goggle's filter says night vision is on (_NightVisionOn, set as the main camera culls, and the sight's camera
+        // renders after), and a sight's reticle drawn under it goes unlit, as for a picture the goggle amplifies. Looked
+        // through bare (a monocular before the other eye) the eye sees the sight as it is: its reticle lit.
+        if (OpticPicture.IsCamera(camera) && !OpticSeesNightVision()
+            && EFT.CameraControl.CameraManager.Instance?.NightVision is BSG.CameraEffects.NightVision goggle && goggle.On)
+        {
+            Shader.SetGlobalFloat(NightVisionOnId, 0f);
+            if (!_bareReticleNoted)
+            {
+                _bareReticleNoted = true;
+                NewCameraPlugin.Log?.LogInfo("NVG: a sight looked through bare under the goggle, its reticle drawn lit (night vision off for its camera).");
+            }
+        }
         if (!IrWanted || !OpticPicture.IsCamera(camera))
             return;
         if (OpticOwnNightVision())
