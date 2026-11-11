@@ -18,6 +18,11 @@
 // Pass 8: a Gaussian of four texels' spread along _Step (the near shape's soft outline, NightVisionDefocus.cs).
 // Pass 7: a level halved: four bilinear taps a texel apart, the four by four under it weighted as a tent, smoother
 //         from frame to frame than the two by two alone.
+// Pass 9: the frame at a quarter of the size, and how near (alpha). Pass 10: the disc's radius (r), how near (g),
+//         how near times Front (b). Pass 11: a square min (_Mode 0) or max (1) of red along _Step, _Radius texels.
+// Pass 12: 1 where green is above _Thresh. Pass 13: red times _Scale, added. Pass 14: the tuner's layers (_Which 0
+//         the thick parts' colour by weight, 1 the thin parts', 2 the thick parts' cover and what they close about
+//         (r) and the thin parts' (g)). Pass 15: a Gaussian of _Sigma texels along _Step.
 // Pass 0 is left empty, so the others keep their numbers.
 Shader "Justachae/NVG/Defocus" {
  Properties { _MainTex ("frame", 2D) = "black" {} }
@@ -36,6 +41,9 @@ Shader "Justachae/NVG/Defocus" {
   float2 _TanHalf;
   float4 _Grid;   // a level's width and height; z −1 where a render texture's up is flipped; w its pixel in quarter-size ones
   float2 _Band;   // the radii (quarter-size pixels) a level draws: above x, up to y
+  // The look chosen on the tuner page (_build/tuner.html), all at a quarter of the frame's size:
+  Texture2D _QColor, _QRad, _Thick, _Closed, _LThickB, _LThinB, _LThinF, _MaskB, _MaskF, _Seam;
+  float _Radius, _Mode, _Sigma, _Which, _Thresh, _Scale, _ThinNear;
 
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
@@ -197,19 +205,25 @@ Shader "Justachae/NVG/Defocus" {
     // Through a sight's lens: its own picture, as it is.
     if (InLens(i.uv))
      return f;
-    // The near things as at a table (the baseline): one blur alike, each point weighted by how near it is (Front),
-    // their own colour only, so thin parts go and thick parts keep their shading.
-    float4 shape = _Shape.SampleLevel(sampler_linear_clamp, i.uv, 0);
-    float cover = saturate(_Cover.SampleLevel(sampler_linear_clamp, i.uv, 0).g);
-    if (shape.a < 1e-5)
-     return f;
-    float3 colour = shape.rgb / shape.a;
-    // How much they show over what lies behind: as at the table, their share against what is about them, that
-    // counted as the table half a metre off counts there (0.08), by how much of it is about; wholly within them.
-    float shown = shape.a / (shape.a + 0.08 * (1 - cover));
-    // What lies behind: the frame as it is, sharp; where the frame has the near thing itself (and easing in toward
-    // its edge, so its own sharp outline is not drawn), what is about it filled in, finest first.
+    // The look chosen on the tuner page, laid over the frame:
+    //  colour: the thick parts (blurred a little), the thin parts (blurred wide) and a wider wash of the thin parts,
+    //  each weighted by how near (Front), averaged together;
+    //  how solid: the thick parts' cover (and what they close about) blurred a little, and the thin parts' wash, the
+    //  more of it shown the less there is (a / (a + 0.3 (1 - a))); the thin parts themselves go into what lies behind.
+    float4 ck = _LThickB.SampleLevel(sampler_linear_clamp, i.uv, 0);
+    float4 cn = _LThinB.SampleLevel(sampler_linear_clamp, i.uv, 0);
+    float4 cf = _LThinF.SampleLevel(sampler_linear_clamp, i.uv, 0);
+    float wsum = ck.a + cn.a + cf.a;
+    float3 colour = wsum > 1e-6 ? (ck.rgb + cn.rgb + cf.rgb) / wsum : f.rgb;
+    float ak = saturate(_MaskB.SampleLevel(sampler_linear_clamp, i.uv, 0).r);
+    float a2 = saturate(_MaskF.SampleLevel(sampler_linear_clamp, i.uv, 0).g);
+    float af = a2 / max(a2 + 0.3 * (1 - a2), 1e-6);
+    float shown = 1 - (1 - ak) * (1 - af);
+    // What lies behind: the frame as it is; where the frame has a near thing itself, and a little about it, what is
+    // about it filled in (finest first).
     float r = Radius(i.uv);
+    float near = Nearness(r);
+    float k = max(near > 0.02 ? near : 0, saturate(_Seam.SampleLevel(sampler_linear_clamp, i.uv, 0).r * 1.5));
     float3 fill = 0;
     float found = 0, need = 1;
     for (int level = 0; level < 4 && need > 1e-3; level++) {
@@ -222,7 +236,7 @@ Shader "Justachae/NVG/Defocus" {
      need -= take;
     }
     fill = found > 1e-3 ? lerp(colour, fill / found, saturate(found * 2)) : colour;
-    float3 behind = lerp(f.rgb, fill, max(Nearness(r), smoothstep(0.3, 0.7, cover)));
+    float3 behind = lerp(f.rgb, fill, k);
     if (_DefocusShow > 2.5) return float4(shown.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
     if (_DefocusShow > 0.5) return float4(behind, 1);
@@ -234,7 +248,7 @@ Shader "Justachae/NVG/Defocus" {
    CGPROGRAM
    #pragma vertex vert_img
    #pragma fragment frag
-   float4 frag (v2f_img i) : SV_Target { return saturate(_Cover.SampleLevel(sampler_linear_clamp, i.uv, 0).g); }
+   float4 frag (v2f_img i) : SV_Target { return saturate(_Cover.SampleLevel(sampler_linear_clamp, i.uv, 0).r); }
    ENDCG
   }
   Pass {
@@ -260,6 +274,112 @@ Shader "Justachae/NVG/Defocus" {
      float w = exp(-k * k / 32.0);
      sum += tex2D(_MainTex, i.uv + d * k) * w;
      total += w;
+    }
+    return sum / total;
+   }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f_img i) : SV_Target {
+    float2 t = _MainTex_TexelSize.xy;
+    float4 sum = 0;
+    for (int y = 0; y < 4; y++)
+     for (int x = 0; x < 4; x++) {
+      float2 uv = i.uv + (float2(x, y) - 1.5) * t;
+      sum += float4(tex2D(_MainTex, uv).rgb, Nearness(Radius(uv)));
+     }
+    return sum / 16;
+   }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f_img i) : SV_Target {
+    float2 t = _MainTex_TexelSize.xy;
+    float r = 0;
+    for (int y = 0; y < 4; y++)
+     for (int x = 0; x < 4; x++)
+      r += Radius(i.uv + (float2(x, y) - 1.5) * t);
+    r /= 16;
+    float near = Nearness(r);
+    return float4(r, near, near * Front(r), 0);
+   }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f_img i) : SV_Target {
+    float2 d = _Step * _MainTex_TexelSize.xy;
+    float v = tex2D(_MainTex, i.uv).r;
+    for (int k = 1; k <= 48; k++) {
+     if (k > _Radius) break;
+     float a = tex2D(_MainTex, i.uv + d * k).r, b = tex2D(_MainTex, i.uv - d * k).r;
+     v = _Mode > 0.5 ? max(v, max(a, b)) : min(v, min(a, b));
+    }
+    return v;
+   }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   float4 frag (v2f_img i) : SV_Target { return tex2D(_MainTex, i.uv).g > _Thresh ? 1 : 0; }
+   ENDCG
+  }
+  Pass {
+   Blend One One
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   float4 frag (v2f_img i) : SV_Target { return tex2D(_MainTex, i.uv).r * _Scale; }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = _QColor.SampleLevel(sampler_point_clamp, i.uv, 0);
+    float4 q = _QRad.SampleLevel(sampler_point_clamp, i.uv, 0);
+    float near = q.g;
+    float thick = _Thick.SampleLevel(sampler_point_clamp, i.uv, 0).r;
+    float gate = smoothstep(0, 1, saturate((q.r - _ThinNear) / 2));
+    float tn = near * (1 - thick) * gate, th = near - tn;
+    float w = near * (q.r / _DefocusLens.w * q.r / _DefocusLens.w + 0.02);
+    float enc = max(0, _Closed.SampleLevel(sampler_point_clamp, i.uv, 0).r - near);
+    if (_Which < 0.5) return float4(c.rgb * th * w, th * w);
+    if (_Which < 1.5) return float4(c.rgb * tn * w, tn * w);
+    return float4(th + enc, tn, 0, 0);
+   }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f_img i) : SV_Target {
+    float2 d = _Step * _MainTex_TexelSize.xy;
+    float4 sum = tex2D(_MainTex, i.uv);
+    float total = 1;
+    float reach = min(3 * _Sigma, 48);
+    for (int k = 1; k <= 48; k++) {
+     if (k > reach) break;
+     float w = exp(-k * k / (2 * _Sigma * _Sigma));
+     sum += (tex2D(_MainTex, i.uv + d * k) + tex2D(_MainTex, i.uv - d * k)) * w;
+     total += 2 * w;
     }
     return sum / total;
    }

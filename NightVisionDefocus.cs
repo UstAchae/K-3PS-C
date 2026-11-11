@@ -93,103 +93,176 @@ internal static partial class NightVisionEyepieces
         defocus.SetVector(TanHalfId, TanHalf(view, frame));
         BindScope(defocus);
 
-        // What is near, and its discs' radii (as radius times cover, and cover), at a quarter of the size, then each
-        // level half the last: a plain halving keeps the mean of both, so the radius stays the cover's mean.
+        // The look chosen on the tuner page (_build/tuner.html, its numbers for a 1440-line frame: quarter-size pixels
+        // there, scaled here by the frame's height).
+        float scale = height / 360f;
+
+        // What is not near, at a quarter of the size and each level half the last: what lies behind a near thing,
+        // filled in from about it.
         for (int level = 0; level < DefocusLevels; level++)
         {
-            int w = Mathf.Max(width >> level, 1), h = Mathf.Max(height >> level, 1);
-            _levelColor[level] = Temporary(w, h);
-            _levelCoc[level] = Temporary(w, h);
-            _levelAcc[level] = Temporary(w, h);
-            _levelFar[level] = Temporary(w, h);
+            _levelFar[level] = Temporary(Mathf.Max(width >> level, 1), Mathf.Max(height >> level, 1));
             if (level == 0)
-            {
-                Graphics.Blit(frame, _levelColor[0], defocus, 1);
-                Graphics.Blit(frame, _levelCoc[0], defocus, 2);
                 Graphics.Blit(frame, _levelFar[0], defocus, 3);
-            }
             else
-            {
-                Graphics.Blit(_levelColor[level - 1], _levelColor[level], defocus, 7);
-                Graphics.Blit(_levelCoc[level - 1], _levelCoc[level], defocus, 7);
                 Graphics.Blit(_levelFar[level - 1], _levelFar[level], defocus, 7);
-            }
-        }
-
-        CommandBuffer discs = _discBuffer ??= new CommandBuffer { name = "Justachae NVG objective discs" };
-        discs.Clear();
-        float flip = SystemInfo.graphicsUVStartsAtTop ? -1f : 1f;
-        for (int level = 0; level < DefocusLevels; level++)
-        {
-            RenderTexture acc = _levelAcc[level]!;
-            discs.SetRenderTarget(acc);
-            discs.ClearRenderTarget(false, true, Color.clear);
-            MaterialPropertyBlock block = _discBlocks[level];
-            block.Clear();
-            block.SetTexture(SrcId, _levelColor[level]);
-            block.SetTexture(CocId, _levelCoc[level]);
-            // Into a render texture the frame's up is flipped where textures start at the top; w: this level's pixel
-            // in quarter-size pixels.
-            block.SetVector(GridId, new Vector4(acc.width, acc.height, flip, 1 << level));
-            // The radii (quarter-size pixels) this level draws: above the last level's, up to twice that.
-            float least = level == 0 ? 0f : DefocusBand * (1 << (level - 1)), most = level == DefocusLevels - 1 ? 1e6f : DefocusBand * (1 << level);
-            block.SetVector(BandId, new Vector4(least, most, 0f, 0f));
-            discs.DrawProcedural(Matrix4x4.identity, defocus, 4, MeshTopology.Triangles, acc.width * acc.height * 6, 1, block);
-        }
-        Graphics.ExecuteCommandBuffer(discs);
-
-        for (int level = 0; level < DefocusLevels; level++)
-        {
-            defocus.SetTexture(NearAccIds[level], _levelAcc[level]);
             defocus.SetTexture(FarIds[level], _levelFar[level]);
         }
-        DiagDefocus(frame, pixelsPerRadian, ahead); // TEMP DIAG
+
+        // The frame and how near each part of it is, at a quarter of the size.
+        RenderTexture qColor = Temporary(width, height), qRad = Temporary(width, height);
+        Graphics.Blit(frame, qColor, defocus, 9);
+        Graphics.Blit(frame, qRad, defocus, 10);
+        // How thick each near part is: kept by square openings of 9 to 17 quarter-size pixels' half-width, a fifth each
+        // (the tuner's thick = smoothstep((half-width - 8) / 10)).
+        RenderTexture nearMask = Threshold(qRad, 0.5f, defocus);
+        RenderTexture thick = Temporary(width, height);
+        Graphics.Blit(Texture2D.blackTexture, thick);
+        foreach (float half in DefocusThickSteps)
+        {
+            RenderTexture eroded = MinMax(nearMask, half * scale, false, defocus), opened = MinMax(eroded, half * scale, true, defocus);
+            RenderTexture.ReleaseTemporary(eroded);
+            defocus.SetFloat(ScaleId, 0.2f);
+            Graphics.Blit(opened, thick, defocus, 13);
+            RenderTexture.ReleaseTemporary(opened);
+        }
+        // What the near parts close about (5 quarter-size pixels): a sight's window and the gaps between parts.
+        RenderTexture grown = MinMax(nearMask, 5f * scale, true, defocus), closed = MinMax(grown, 5f * scale, false, defocus);
+        RenderTexture.ReleaseTemporary(grown);
+        RenderTexture.ReleaseTemporary(nearMask);
+
+        defocus.SetTexture(QColorId, qColor);
+        defocus.SetTexture(QRadId, qRad);
+        defocus.SetTexture(ThickId, thick);
+        defocus.SetTexture(ClosedId, closed);
+        // Thin parts only of what is spread by more than 3 quarter-size pixels (not the targets a few metres off).
+        defocus.SetFloat(ThinNearId, 3f * scale);
+        RenderTexture layerThick = Layer(0, width, height, defocus), layerThin = Layer(1, width, height, defocus), masks = Layer(2, width, height, defocus);
+        RenderTexture thickBlurred = Blur(layerThick, 3f * scale, defocus), masksBlurred = Blur(masks, 3f * scale, defocus);
+        RenderTexture thinBlurred = BlurWide(layerThin, 40f * scale, defocus);
+        // the thin parts' wash: 40 x 2.5 + 6 quarter-size pixels
+        RenderTexture thinWash = BlurWide(layerThin, 106f * scale, defocus), masksWash = BlurWide(masks, 106f * scale, defocus);
+        RenderTexture.ReleaseTemporary(layerThick);
+        RenderTexture.ReleaseTemporary(layerThin);
+        RenderTexture.ReleaseTemporary(masks);
+        // About any near thing (one quarter-size pixel out, eased), what lies behind is the filled-in.
+        RenderTexture anyNear = Threshold(qRad, 0.02f, defocus), anyGrown = MinMax(anyNear, Mathf.Max(1f, Mathf.Round(scale)), true, defocus);
+        RenderTexture seam = Blur(anyGrown, scale, defocus);
+        RenderTexture.ReleaseTemporary(anyNear);
+        RenderTexture.ReleaseTemporary(anyGrown);
+
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
-        // Its outline: the near shape (what of the frame is near, at an eighth of its size) blurred wide and smooth, and
-        // again twice as wide for thin parts; its colour (weighted toward what is nearer) blurred alike.
-        Smoothed(_levelColor[1]!, defocus, out RenderTexture soft, out RenderTexture wide);
-        Smoothed(_levelCoc[1]!, defocus, out RenderTexture cover, out RenderTexture coverWide);
-        defocus.SetTexture(ShapeId, soft);
-        defocus.SetTexture(ShapeWideId, wide);
-        defocus.SetTexture(CoverId, cover);
-        defocus.SetTexture(CoverWideId, coverWide);
-        // What is not near, at an eighth of the size blurred as the near shape is: what lies behind seen through its
-        // soft edge.
-        Smoothed(_levelFar[1]!, defocus, out RenderTexture farSoft, out RenderTexture farWide);
-        RenderTexture.ReleaseTemporary(farWide);
-        defocus.SetTexture(FarSoftId, farSoft);
+        defocus.SetTexture(LThickBId, thickBlurred);
+        defocus.SetTexture(LThinBId, thinBlurred);
+        defocus.SetTexture(LThinFId, thinWash);
+        defocus.SetTexture(MaskBId, masksBlurred);
+        defocus.SetTexture(MaskFId, masksWash);
+        defocus.SetTexture(SeamId, seam);
         Graphics.Blit(frame, made, defocus, 5);
         DumpDefocus(frame, made, defocus); // TEMP DIAG
         AddTritium(view, made);
         ReleaseMask();
         _blurMask = Temporary(width, height);
+        defocus.SetTexture(CoverId, masksBlurred);
         Graphics.Blit(frame, _blurMask, defocus, 6);
-        defocus.SetTexture(ShapeId, Texture2D.blackTexture);
-        defocus.SetTexture(ShapeWideId, Texture2D.blackTexture);
         defocus.SetTexture(CoverId, Texture2D.blackTexture);
-        defocus.SetTexture(CoverWideId, Texture2D.blackTexture);
-        defocus.SetTexture(FarSoftId, Texture2D.blackTexture);
-        RenderTexture.ReleaseTemporary(farSoft);
-        RenderTexture.ReleaseTemporary(soft);
-        RenderTexture.ReleaseTemporary(wide);
-        RenderTexture.ReleaseTemporary(cover);
-        RenderTexture.ReleaseTemporary(coverWide);
+        foreach (int id in TunerTextureIds)
+            defocus.SetTexture(id, Texture2D.blackTexture);
+        RenderTexture.ReleaseTemporary(thickBlurred);
+        RenderTexture.ReleaseTemporary(masksBlurred);
+        RenderTexture.ReleaseTemporary(thinBlurred);
+        RenderTexture.ReleaseTemporary(thinWash);
+        RenderTexture.ReleaseTemporary(masksWash);
+        RenderTexture.ReleaseTemporary(seam);
+        RenderTexture.ReleaseTemporary(qColor);
+        RenderTexture.ReleaseTemporary(qRad);
+        RenderTexture.ReleaseTemporary(thick);
+        RenderTexture.ReleaseTemporary(closed);
         for (int level = 0; level < DefocusLevels; level++)
         {
-            defocus.SetTexture(NearAccIds[level], Texture2D.blackTexture);
             defocus.SetTexture(FarIds[level], Texture2D.blackTexture);
-            RenderTexture.ReleaseTemporary(_levelColor[level]);
-            RenderTexture.ReleaseTemporary(_levelCoc[level]);
-            RenderTexture.ReleaseTemporary(_levelAcc[level]);
             RenderTexture.ReleaseTemporary(_levelFar[level]);
-            _levelColor[level] = _levelCoc[level] = _levelAcc[level] = _levelFar[level] = null;
+            _levelFar[level] = null;
         }
         if (!_defocusNoted)
         {
             _defocusNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus by discs at four sizes, over what lies behind ({width}x{height} quarter grid).");
+            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus as chosen on the tuner page (thick 3, thin 40 gone, thin wash 106; {width}x{height} quarter grid, scale {scale:F2}).");
         }
         return true;
+    }
+
+
+    private static readonly float[] DefocusThickSteps = { 9f, 11f, 13f, 15f, 17f };
+    private static readonly int QColorId = Shader.PropertyToID("_QColor"), QRadId = Shader.PropertyToID("_QRad"),
+        ThickId = Shader.PropertyToID("_Thick"), ClosedId = Shader.PropertyToID("_Closed"), LThickBId = Shader.PropertyToID("_LThickB"),
+        LThinBId = Shader.PropertyToID("_LThinB"), LThinFId = Shader.PropertyToID("_LThinF"), MaskBId = Shader.PropertyToID("_MaskB"),
+        MaskFId = Shader.PropertyToID("_MaskF"), SeamId = Shader.PropertyToID("_Seam"), RadiusId = Shader.PropertyToID("_Radius"),
+        MinMaxModeId = Shader.PropertyToID("_Mode"), SigmaId = Shader.PropertyToID("_Sigma"), WhichId = Shader.PropertyToID("_Which"),
+        ThreshId = Shader.PropertyToID("_Thresh"), ScaleId = Shader.PropertyToID("_Scale"), ThinNearId = Shader.PropertyToID("_ThinNear");
+    private static readonly int[] TunerTextureIds = { LThickBId, LThinBId, LThinFId, MaskBId, MaskFId, SeamId, QColorId, QRadId, ThickId, ClosedId };
+
+    // 1 where how near (green) is above the threshold.
+    private static RenderTexture Threshold(RenderTexture source, float threshold, Material defocus)
+    {
+        RenderTexture result = Temporary(source.width, source.height);
+        defocus.SetFloat(ThreshId, threshold);
+        Graphics.Blit(source, result, defocus, 12);
+        return result;
+    }
+
+    // A square min (or max) of red, `radius` texels each way.
+    private static RenderTexture MinMax(RenderTexture source, float radius, bool max, Material defocus)
+    {
+        RenderTexture across = Temporary(source.width, source.height), result = Temporary(source.width, source.height);
+        defocus.SetFloat(RadiusId, radius);
+        defocus.SetFloat(MinMaxModeId, max ? 1f : 0f);
+        defocus.SetVector(StepId, new Vector2(1f, 0f));
+        Graphics.Blit(source, across, defocus, 11);
+        defocus.SetVector(StepId, new Vector2(0f, 1f));
+        Graphics.Blit(across, result, defocus, 11);
+        RenderTexture.ReleaseTemporary(across);
+        return result;
+    }
+
+    private static RenderTexture Layer(int which, int width, int height, Material defocus)
+    {
+        RenderTexture result = Temporary(width, height);
+        defocus.SetFloat(WhichId, which);
+        Graphics.Blit(Texture2D.blackTexture, result, defocus, 14);
+        return result;
+    }
+
+    // A Gaussian of `sigma` texels.
+    private static RenderTexture Blur(RenderTexture source, float sigma, Material defocus)
+    {
+        RenderTexture across = Temporary(source.width, source.height), result = Temporary(source.width, source.height);
+        defocus.SetFloat(SigmaId, Mathf.Max(sigma, 0.3f));
+        defocus.SetVector(StepId, new Vector2(1f, 0f));
+        Graphics.Blit(source, across, defocus, 15);
+        defocus.SetVector(StepId, new Vector2(0f, 1f));
+        Graphics.Blit(across, result, defocus, 15);
+        RenderTexture.ReleaseTemporary(across);
+        return result;
+    }
+
+    // A wide Gaussian (`sigma` quarter-size pixels): halved until it is a dozen texels or less, then blurred.
+    private static RenderTexture BlurWide(RenderTexture source, float sigma, Material defocus)
+    {
+        RenderTexture current = source;
+        while (sigma > 12f && current.width > 8 && current.height > 8)
+        {
+            RenderTexture half = Temporary(Mathf.Max(current.width / 2, 1), Mathf.Max(current.height / 2, 1));
+            Graphics.Blit(current, half, defocus, 7);
+            if (current != source)
+                RenderTexture.ReleaseTemporary(current);
+            current = half;
+            sigma /= 2f;
+        }
+        RenderTexture result = Blur(current, sigma, defocus);
+        if (current != source)
+            RenderTexture.ReleaseTemporary(current);
+        return result;
     }
 
     // TEMP DIAG: on F11, each of its layers saved as a picture (BepInEx/defocus-dump):
