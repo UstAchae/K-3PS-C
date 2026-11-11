@@ -23,7 +23,7 @@
 // Pass 12: 1 where green is above _Thresh. Pass 13: red times _Scale, added. Pass 14: the tuner's layers (_Which 0
 //         the thick parts' colour by weight, 1 the thin parts', 2 the thick parts' cover and what they close about
 //         (r) and the thin parts' (g)), each only its band's share (_BandHat). Pass 15: a Gaussian of _Sigma texels
-//         along _Step. Pass 16: added as it is. Pass 17: _Keep of the last frame's (_Prev) kept.
+//         along _Step. Pass 16: added as it is.
 // Pass 0 is left empty, so the others keep their numbers.
 Shader "Justachae/NVG/Defocus" {
  Properties { _MainTex ("frame", 2D) = "black" {} }
@@ -427,17 +427,6 @@ Shader "Justachae/NVG/Defocus" {
    #pragma vertex vert_img
    #pragma fragment frag
    float4 frag (v2f_img i) : SV_Target { return tex2D(_MainTex, i.uv); }
-   ENDCG
-  }
-  Pass {
-   CGPROGRAM
-   #pragma vertex vert_img
-   #pragma fragment frag
-   Texture2D _Prev;
-   float _Keep;
-   float4 frag (v2f_img i) : SV_Target {
-    return lerp(tex2D(_MainTex, i.uv), _Prev.SampleLevel(sampler_linear_clamp, i.uv, 0), _Keep);
-   }
    ENDCG
   }
  }
