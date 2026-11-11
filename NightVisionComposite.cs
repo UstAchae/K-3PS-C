@@ -151,7 +151,10 @@ internal static partial class NightVisionEyepieces
             RenderTexture? made = null, tubed = null, focused = null;
             // The steps at the head of this file, in order.
             ScopeLensStep(camera, from);
-            Texture picture = LensPicture(camera, ThroughObjective(camera, ForTube(from, ref tubed), ref focused), ref made);
+            RenderTexture forTube = ForTube(from, ref tubed);
+            RenderTexture throughObjective = ThroughObjective(camera, forTube, ref focused);
+            Texture picture = LensPicture(camera, throughObjective, ref made);
+            DumpSteps(from, forTube, throughObjective, picture, camera); // TEMP DIAG
             picture = EaseGrain(picture, ref made);
             ReleaseMask();
             Compose(composite, glow, from, into, picture);
@@ -169,6 +172,40 @@ internal static partial class NightVisionEyepieces
         }
         if (staged)
             propagator!.ReleaseSourceDestination(from, to);
+    }
+
+    // TEMP DIAG: on F11, each step of the pipeline saved for this frame and the three after it
+    // (BepInEx/defocus-dump/steps-N/frame-K): the frame as it came (0), after ForTube (1), after ThroughObjective (2),
+    // the lenses' picture (3), and a magnified sight's lens mask (4, as it is); with the sight's state in the log.
+    private static int _stepDumps, _stepFrames;
+    private static void DumpSteps(RenderTexture from, RenderTexture forTube, RenderTexture throughObjective, Texture picture, Component camera)
+    {
+        if (Input.GetKeyDown(KeyCode.F11))
+        {
+            _stepDumps++;
+            _stepFrames = 4;
+        }
+        if (_stepFrames <= 0)
+            return;
+        int k = 4 - _stepFrames;
+        _stepFrames--;
+        string folder = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump", "steps-" + _stepDumps, "frame-" + k);
+        System.IO.Directory.CreateDirectory(folder);
+        Save(from, System.IO.Path.Combine(folder, "0-from.png"));
+        Save(forTube, System.IO.Path.Combine(folder, "1-for-tube.png"));
+        Save(throughObjective, System.IO.Path.Combine(folder, "2-through-objective.png"));
+        if (picture is RenderTexture pictureTexture)
+            Save(pictureTexture, System.IO.Path.Combine(folder, "3-lens-picture.png"));
+        bool masked = ScopeMasked;
+        if (masked)
+        {
+            RenderTexture mask = RenderTexture.GetTemporary(_scopeLens!.width, _scopeLens.height, 0, RenderTextureFormat.ARGBHalf);
+            Graphics.Blit(_scopeLens, mask);
+            Save(mask, System.IO.Path.Combine(folder, "4-lens-mask.png"), true);
+            RenderTexture.ReleaseTemporary(mask);
+        }
+        Camera? view = camera as Camera;
+        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG steps {_stepDumps}/{k}: through {_scope.Through}, pullback {ScopePullback:F3}, masked {masked}, lens noted {ScopeLensNoted}, light {_scope.Light:F3}, fov {(view != null ? view.fieldOfView : -1f):F2}, frame {from.width}x{from.height}, defocus on {_defocus != null}");
     }
 
     // What the lenses show this frame, from the frame as it stands: made into a temporary (made) when it is made here.
