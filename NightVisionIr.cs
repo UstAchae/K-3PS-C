@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Collections.Generic;
 using EFT.Visual;
 using HarmonyLib;
@@ -497,27 +496,12 @@ internal static partial class NightVisionEyepieces
     //   the goggle's (ThroughScope): off, so that visible lasers are drawn at their own light for the tube to amplify, as
     //   in the lenses' picture, and the IR lasers drawn by us with it on after the transparent things (_opticIrLasers).
     // IkLight lights the IR lights for it in either case (OpticSeesNightVision).
-    private static bool _opticIr, _bareReticleNoted;
+    private static bool _opticIr;
     private static CommandBuffer? _opticIrLasers;
     private static Camera? _opticIrLasersOn;
 
     internal static void OnOpticPreCullIr(Camera camera)
     {
-        // The goggle's filter says night vision is on (_NightVisionOn, set as the main camera culls, and the sight's camera
-        // renders after), and a sight's reticle drawn under it goes unlit. Left lit whether the sight is looked through
-        // with the goggle or bare (a monocular before the other eye): its own light, seen as it is or through the tube.
-        // A sight with its own night vision sets it again below.
-        if (OpticPicture.IsCamera(camera)
-            && EFT.CameraControl.CameraManager.Instance?.NightVision is BSG.CameraEffects.NightVision goggle && goggle.On)
-        {
-            Shader.SetGlobalFloat(NightVisionOnId, 0f);
-            if (!_bareReticleNoted)
-            {
-                _bareReticleNoted = true;
-                NewCameraPlugin.Log?.LogInfo("NVG: a sight under the goggle drawn with its reticle lit (night vision off for its camera).");
-            }
-        }
-        DiagReticle(camera); // TEMP DIAG
         if (!IrWanted || !OpticPicture.IsCamera(camera))
             return;
         if (OpticOwnNightVision())
@@ -551,43 +535,6 @@ internal static partial class NightVisionEyepieces
             return 0;
         _opticIrLasers!.DrawMesh(m.Mesh, m.Matrix, m.Material, 0, 0, m.Block);
         return 1;
-    }
-
-    // TEMP DIAG: once a second while a sight is looked through, the reticle's material (shader, keywords, every float
-    // and colour it has), the goggle's state and the global _NightVisionOn, to set beside the same without the goggle.
-    private static float _diagReticleAt;
-    private static void DiagReticle(Camera camera)
-    {
-        if (!OpticPicture.IsCamera(camera) || Time.time - _diagReticleAt < 1f)
-            return;
-        _diagReticleAt = Time.time;
-        EFT.CameraControl.OpticSight? sight = EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight;
-        Material? m = sight?.LensRenderer != null ? sight.LensRenderer.sharedMaterial : null;
-        var goggle = EFT.CameraControl.CameraManager.Instance?.NightVision;
-        var sb = new System.Text.StringBuilder();
-        sb.Append($"TEMP DIAG reticle: sight {(sight != null ? sight.name : "none")}, goggle {(goggle != null && goggle.On)}, global NV {Shader.GetGlobalFloat(NightVisionOnId)}, ");
-        if (m != null)
-        {
-            sb.Append($"lens shader {m.shader.name}, keywords [{string.Join(",", m.shaderKeywords)}], global keywords NV-ish [{string.Join(",", System.Array.FindAll(Shader.enabledGlobalKeywords, k => k.name.ToUpperInvariant().Contains("NIGHT") || k.name.ToUpperInvariant().Contains("NV")).Select(k => k.name))}], ratio {Shader.GetGlobalFloat("_NightVisionRatio"):F2}");
-            for (int i = 0; i < m.shader.GetPropertyCount(); i++)
-            {
-                string n = m.shader.GetPropertyName(i);
-                var t = m.shader.GetPropertyType(i);
-                if (t == UnityEngine.Rendering.ShaderPropertyType.Float || t == UnityEngine.Rendering.ShaderPropertyType.Range)
-                    sb.Append($", {n}={m.GetFloat(n):F3}");
-                else if (t == UnityEngine.Rendering.ShaderPropertyType.Color)
-                    sb.Append($", {n}={m.GetColor(n)}");
-            }
-        }
-        else sb.Append("no reticle material");
-        if (goggle != null)
-        {
-            sb.Append(" | switched on with it: ");
-            foreach (MonoBehaviour b in goggle.SwitchComponentsOn) sb.Append(b != null ? $"{b.GetType().Name}({b.enabled}) " : "null ");
-            sb.Append("| switched off with it: ");
-            foreach (MonoBehaviour b in goggle.SwitchComponentsOff) sb.Append(b != null ? $"{b.GetType().Name}({b.enabled}) " : "null ");
-        }
-        NewCameraPlugin.Log?.LogInfo(sb.ToString());
     }
 
     // The sight's own night vision on: its picture is the game's own night-vision one.
