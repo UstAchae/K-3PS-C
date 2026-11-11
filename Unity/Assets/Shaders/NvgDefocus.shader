@@ -215,7 +215,13 @@ Shader "Justachae/NVG/Defocus" {
     float4 cf = _LThinF.SampleLevel(sampler_linear_clamp, i.uv, 0);
     float wsum = ck.a + cn.a + cf.a;
     float3 colour = wsum > 1e-6 ? (ck.rgb + cn.rgb + cf.rgb) / wsum : f.rgb;
-    float ak = saturate(_MaskB.SampleLevel(sampler_linear_clamp, i.uv, 0).r);
+    // How solid the near parts show: as with a table behind them. There the table is near too and blurred with them,
+    // and they show by their share of the weight against it (the gun's Front ten times the table's), so their colour
+    // reaches out further and fuller than their cover alone; a far scene counts here as that table (0.08 a point,
+    // Front at a quarter of the most), by how much of it is about. By cover alone, against a far scene the gun showed
+    // thinner and spread less than with the table behind it.
+    float cover = saturate(_MaskB.SampleLevel(sampler_linear_clamp, i.uv, 0).r);
+    float ak = max(cover, ck.a / max(ck.a + 0.08 * (1 - cover), 1e-6));
     float a2 = saturate(_MaskF.SampleLevel(sampler_linear_clamp, i.uv, 0).g);
     float af = a2 / max(a2 + 0.3 * (1 - a2), 1e-6);
     float shown = 1 - (1 - ak) * (1 - af);
