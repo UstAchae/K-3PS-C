@@ -184,6 +184,16 @@ internal static partial class NightVisionEyepieces
         RenderTexture.ReleaseTemporary(anyGrown);
         RenderTexture.ReleaseTemporary(nearSoft);
 
+        // The near parts' layers eased from frame to frame: the frame has no smoothing of its edges, the gun's outline
+        // stepped a pixel this way and that as it swayed with the breath, and the blurred gun, shown fuller than it
+        // covers (as against a table), pulsed with it while the view was still. Half the last frame's is kept while
+        // the view turns slowly (the gun turns with the view, so it stays where it is), none while it turns fast (no
+        // trail of what is near on the floor).
+        float turned = Vector3.Angle(_easedForward, _renderedForward);
+        _easedForward = _renderedForward;
+        float keep = DefocusKeep * (1f - Mathf.Clamp01((turned - 0.2f) / 0.8f));
+        Ease(ref _prevThick, ref thickBlurred, keep, defocus);
+        Ease(ref _prevMasks, ref masksBlurred, keep, defocus);
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
         defocus.SetTexture(LThickBId, thickBlurred);
         defocus.SetTexture(LThinBId, thinBlurred);
@@ -234,6 +244,31 @@ internal static partial class NightVisionEyepieces
     private static readonly float[] DefocusBandMiddles = { 1f, 2.5f, 4.5f, 7f, 10.5f, 15f, 20.2f };
     private const int DefocusEncBand = 4;   // what the near parts close about goes with the gun's own (10.5)
     private const float DefocusBlurPerRadius = 0.35f;
+    private const float DefocusKeep = 0.5f;
+    private static Vector3 _easedForward;
+    private static RenderTexture? _prevThick, _prevMasks;
+    private static readonly int PrevId = Shader.PropertyToID("_Prev"), KeepId = Shader.PropertyToID("_Keep");
+
+    // current as it is eased from the last frame's (kept persistent, replaced at a new size), keep of that kept.
+    private static void Ease(ref RenderTexture? previous, ref RenderTexture current, float keep, Material defocus)
+    {
+        if (previous == null || previous.width != current.width || previous.height != current.height)
+        {
+            if (previous != null)
+                previous.Release();
+            previous = new RenderTexture(current.width, current.height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG defocus eased", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            previous.Create();
+            keep = 0f;
+        }
+        RenderTexture eased = Temporary(current.width, current.height);
+        defocus.SetTexture(PrevId, previous);
+        defocus.SetFloat(KeepId, keep);
+        Graphics.Blit(current, eased, defocus, 17);
+        defocus.SetTexture(PrevId, Texture2D.blackTexture);
+        Graphics.Blit(eased, previous);
+        RenderTexture.ReleaseTemporary(current);
+        current = eased;
+    }
     private static readonly float[] DefocusFillSigmas = { 1.5f, 4f, 10f, 24f };
     private static readonly int BandHatId = Shader.PropertyToID("_BandHat"), EncInId = Shader.PropertyToID("_EncIn"),
         AspectId = Shader.PropertyToID("_Aspect"), ScopeMarginId = Shader.PropertyToID("_ScopeMargin"),
