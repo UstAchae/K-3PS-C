@@ -249,8 +249,10 @@ Shader "Justachae/NVG/Defocus" {
     float shown = 1 - (1 - ak) * (1 - af);
     // What lies behind: the frame as it is; where the frame has a near thing itself, and a little about it, what is
     // about it filled in (finest first).
-    float r = Radius(i.uv);
-    float near = Nearness(r);
+    // How near, from the quarter-size layer (over a tent of the frame's pixels), not the frame's own depth: the depth's
+    // edges stepped a pixel this way and that from frame to frame while the colour stood still, and each near thing's
+    // outline (and a far target's, a little near) flickered between the frame and what is filled in behind it.
+    float near = _QRad.SampleLevel(sampler_linear_clamp, i.uv, 0).g;
     float k = max(near, saturate(_Seam.SampleLevel(sampler_linear_clamp, i.uv, 0).r * 1.5));
     float3 fill = 0;
     float found = 0, need = 1;
