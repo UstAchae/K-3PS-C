@@ -199,6 +199,7 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(MaskFId, masksWash);
         defocus.SetTexture(SeamId, seam);
         Graphics.Blit(frame, made, defocus, 5);
+        RawDump(frame, made, qRad, thickBlurred, masksBlurred, defocus); // TEMP DIAG
         DumpDefocus(frame, made, defocus); // TEMP DIAG
         AddTritium(view, made);
         ReleaseMask();
@@ -322,6 +323,57 @@ internal static partial class NightVisionEyepieces
         if (current != source)
             RenderTexture.ReleaseTemporary(current);
         return result;
+    }
+
+    // TEMP DIAG: for the four frames after F11 (RawFrames, set by DumpSteps), every layer of the defocus saved as raw
+    // floats (BepInEx/defocus-dump/raw-N/frame-K/name.f32: width, height as int32, then RGBA float32 rows), no scaling.
+    internal static int RawFrames, RawDumps;
+    private static void RawDump(RenderTexture frame, RenderTexture made, RenderTexture qRad, RenderTexture thick, RenderTexture masks, Material defocus)
+    {
+        if (RawFrames <= 0)
+            return;
+        int k = 4 - RawFrames;
+        RawFrames--;
+        string folder = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump", "raw-" + RawDumps, "frame-" + k);
+        System.IO.Directory.CreateDirectory(folder);
+        RenderTexture radius = RenderTexture.GetTemporary(frame.width, frame.height, 0, RenderTextureFormat.ARGBFloat);
+        defocus.SetFloat(ShowId, 4f);
+        Graphics.Blit(frame, radius, defocus, 5);
+        defocus.SetFloat(ShowId, 0f);
+        SaveRaw(radius, System.IO.Path.Combine(folder, "radius.f32"), true);
+        SaveRaw(frame, System.IO.Path.Combine(folder, "frame.f32"), false);
+        SaveRaw(made, System.IO.Path.Combine(folder, "made.f32"), false);
+        SaveRaw(qRad, System.IO.Path.Combine(folder, "qrad.f32"), false);
+        SaveRaw(thick, System.IO.Path.Combine(folder, "thick.f32"), false);
+        SaveRaw(masks, System.IO.Path.Combine(folder, "masks.f32"), false);
+    }
+
+    private static void SaveRaw(RenderTexture texture, string path, bool owned)
+    {
+        int w = texture.width, h = texture.height;
+        RenderTexture copy = texture;
+        if (texture.format != RenderTextureFormat.ARGBFloat && texture.format != RenderTextureFormat.ARGBHalf)
+        {
+            copy = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGBFloat);
+            Graphics.Blit(texture, copy);
+        }
+        RenderTexture held = copy;
+        AsyncGPUReadback.Request(copy, 0, TextureFormat.RGBAFloat, r =>
+        {
+            if (r.hasError)
+                return;
+            var data = r.GetData<float>();
+            using var file = new System.IO.BinaryWriter(System.IO.File.Create(path));
+            file.Write(w);
+            file.Write(h);
+            byte[] bytes = new byte[data.Length * 4];
+            System.Buffer.BlockCopy(data.ToArray(), 0, bytes, 0, bytes.Length);
+            file.Write(bytes);
+        });
+        if (held != texture)
+            RenderTexture.ReleaseTemporary(held);
+        if (owned)
+            RenderTexture.ReleaseTemporary(texture);
     }
 
     // TEMP DIAG: on F11, each of its layers saved as a picture (BepInEx/defocus-dump):

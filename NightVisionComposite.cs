@@ -229,6 +229,8 @@ internal static partial class NightVisionEyepieces
         {
             _stepDumps++;
             _stepFrames = 4;
+            RawDumps++;
+            RawFrames = 4;
         }
         if (_stepFrames <= 0)
             return;
