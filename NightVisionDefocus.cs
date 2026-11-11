@@ -130,12 +130,13 @@ internal static partial class NightVisionEyepieces
         RenderTexture qColor = Temporary(width, height), qRad = Temporary(width, height);
         Graphics.Blit(frame, qColor, defocus, 9);
         Graphics.Blit(frame, qRad, defocus, 10);
-        // How near, as the mean of this frame and the last: the game's camera is jittered by half a pixel of its render
-        // (1707 by 960 at 2560 by 1440) one way and the other on alternate frames, and its picture is smoothed over them,
-        // but its depth is not: each near thing's outline in the depth stepped back and forth every frame (the raw floats
-        // of four frames, 2026-11-11: the depth alternating at 45 thousand pixels where the picture stood still), and
-        // the blur pulsed with it. The two frames' mean is where the outline truly is; a frame behind at most.
-        qRad = MeanWithLast(qRad, defocus);
+        // How near, gathered over the frames as the game gathers its picture: the game's camera is jittered by part of a
+        // pixel of its render on every frame in a long cycle, and its picture smoothed over them, but not its depth: a
+        // thin part (a sight's ring, two or three texels of the depth) covered more texels or fewer as the jitter went,
+        // and its blur pulsed while the picture stood still (raw floats of four frames, 2026-11-11). A quarter of this
+        // frame's is taken each frame, the rest the gathered one held within what this frame has about each pixel (its
+        // three by three): what moves is followed at once, only what stands still is gathered.
+        qRad = Gathered(qRad, defocus);
         // What is not near (by the nearness just made, not each pixel's own depth taken at the jittered texel nearest
         // it), for what is filled in behind a near thing.
         defocus.SetTexture(QRadId, qRad);
@@ -263,6 +264,27 @@ internal static partial class NightVisionEyepieces
     private const float DefocusBlurPerRadius = 0.35f;
     // How much wider (quarter-size pixels) the layers are blurred again for the share they show by (as against a table).
     private const float DefocusShareSigma = 5f;
+    private static RenderTexture? _gatheredQRad;
+    private static readonly int HistoryId = Shader.PropertyToID("_History"), TakeId = Shader.PropertyToID("_Take");
+    private const float DefocusTake = 0.25f;
+    private static RenderTexture Gathered(RenderTexture current, Material defocus)
+    {
+        if (_gatheredQRad == null || _gatheredQRad.width != current.width || _gatheredQRad.height != current.height)
+        {
+            _gatheredQRad?.Release();
+            _gatheredQRad = new RenderTexture(current.width, current.height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG defocus gathered nearness", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            _gatheredQRad.Create();
+            Graphics.Blit(current, _gatheredQRad);
+        }
+        RenderTexture gathered = Temporary(current.width, current.height);
+        defocus.SetTexture(HistoryId, _gatheredQRad);
+        defocus.SetFloat(TakeId, DefocusTake);
+        Graphics.Blit(current, gathered, defocus, 18);
+        defocus.SetTexture(HistoryId, Texture2D.blackTexture);
+        Graphics.Blit(gathered, _gatheredQRad);
+        RenderTexture.ReleaseTemporary(current);
+        return gathered;
+    }
     private static RenderTexture? _lastQRad;
     private static readonly int PrevTexId = Shader.PropertyToID("_Prev");
     private static RenderTexture MeanWithLast(RenderTexture current, Material defocus)
