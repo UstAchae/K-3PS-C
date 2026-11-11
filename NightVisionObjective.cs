@@ -96,12 +96,6 @@ internal static partial class NightVisionEyepieces
     {
         if (NearBlurDistance <= 0f || NearBlurLimit <= 0f || !AtObjective(camera, out Camera view))
             return frame;
-        // Through a magnified sight (the goggle's picture made through it, the camera at its objective with its narrow
-        // field): what the sight shows is at infinity for the goggle's lens, so nothing is spread. Taken by the depth,
-        // with the sight's field ten times narrower, a floor a few metres off counted as spread by the most and a
-        // jagged patch of the sight's picture was blurred.
-        if (_scope.Through)
-            return frame;
         // As a lens makes it, with what lies behind the player's own drawn (NightVisionDefocus.cs).
         if (DefocusThrough(view, frame, ref made))
             return made!;
