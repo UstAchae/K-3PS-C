@@ -56,8 +56,22 @@ Shader "Justachae/NVG/Defocus" {
   // nearest depth within two pixels each way: along a near thing's outline the frame's colour is the thing's and what
   // lies beyond mixed (smoothed, scaled), while its depth is one or the other, and a ring of the thing's colour was
   // left out of what is near and stayed sharp.
+  // Through a magnified sight: its lens and the dark ring of its eyepiece about it (the sight's own, what one aims in)
+  // stay as they are: no blur within a margin (_ScopeMargin, of the frame's height) of the lens.
+  float _ScopeMargin, _Aspect;
+  bool InScope(float2 uv) {
+   if (_ScopeOn < 0.5) return false;
+   if (InLens(uv)) return true;
+   float2 m = float2(_ScopeMargin / _Aspect, _ScopeMargin);
+   [unroll] for (int k = 0; k < 8; k++) {
+    float a = k * 0.785398;
+    float2 d = float2(cos(a), sin(a));
+    if (InLens(uv + d * m) || InLens(uv + d * m * 0.5)) return true;
+   }
+   return false;
+  }
   float Radius(float2 uv) {
-   if (InLens(uv))
+   if (InScope(uv))
     return 0;
    float2 o = 2 * _CameraDepthTexture_TexelSize.xy;
    float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
@@ -373,6 +387,10 @@ Shader "Justachae/NVG/Defocus" {
     th *= wb;
     float w = near * (q.r / _DefocusLens.w * q.r / _DefocusLens.w + 0.02);
     float enc = max(0, _Closed.SampleLevel(sampler_point_clamp, i.uv, 0).r - near);
+    // About the aiming point (the frame's middle) the gaps are left open: a sight's window, what one aims through,
+    // shows the scene as it is.
+    float aim = length((i.uv - 0.5) * float2(_Aspect, 1));
+    enc *= smoothstep(0.06, 0.09, aim);
     if (_Which < 0.5) return float4(c.rgb * th * w, th * w);
     if (_Which < 1.5) return float4(c.rgb * tn * w, tn * w);
     return float4(th + (_EncIn > 0.5 ? enc : 0), tn, 0, 0);
