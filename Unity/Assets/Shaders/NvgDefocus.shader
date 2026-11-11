@@ -22,7 +22,8 @@
 //         how near times Front (b). Pass 11: a square min (_Mode 0) or max (1) of red along _Step, _Radius texels.
 // Pass 12: 1 where green is above _Thresh. Pass 13: red times _Scale, added. Pass 14: the tuner's layers (_Which 0
 //         the thick parts' colour by weight, 1 the thin parts', 2 the thick parts' cover and what they close about
-//         (r) and the thin parts' (g)). Pass 15: a Gaussian of _Sigma texels along _Step.
+//         (r) and the thin parts' (g)), each only its band's share (_BandHat). Pass 15: a Gaussian of _Sigma texels
+//         along _Step. Pass 16: added as it is.
 // Pass 0 is left empty, so the others keep their numbers.
 Shader "Justachae/NVG/Defocus" {
  Properties { _MainTex ("frame", 2D) = "black" {} }
@@ -44,6 +45,8 @@ Shader "Justachae/NVG/Defocus" {
   // The look chosen on the tuner page (_build/tuner.html), all at a quarter of the frame's size:
   Texture2D _QColor, _QRad, _Thick, _Closed, _LThickB, _LThinB, _LThinF, _MaskB, _MaskF, _Seam;
   float _Radius, _Mode, _Sigma, _Which, _Thresh, _Scale, _ThinNear;
+  float3 _BandHat;   // a band of radii: rising from x to its middle y, falling to z (x < 0: whole below; z huge: whole above)
+  float _EncIn;      // 1: this band also takes what the near parts close about
 
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
@@ -229,7 +232,7 @@ Shader "Justachae/NVG/Defocus" {
     // about it filled in (finest first).
     float r = Radius(i.uv);
     float near = Nearness(r);
-    float k = max(near > 0.02 ? near : 0, saturate(_Seam.SampleLevel(sampler_linear_clamp, i.uv, 0).r * 1.5));
+    float k = max(near, saturate(_Seam.SampleLevel(sampler_linear_clamp, i.uv, 0).r * 1.5));
     float3 fill = 0;
     float found = 0, need = 1;
     for (int level = 0; level < 4 && need > 1e-3; level++) {
@@ -340,7 +343,7 @@ Shader "Justachae/NVG/Defocus" {
    CGPROGRAM
    #pragma vertex vert_img
    #pragma fragment frag
-   float4 frag (v2f_img i) : SV_Target { return tex2D(_MainTex, i.uv).g > _Thresh ? 1 : 0; }
+   float4 frag (v2f_img i) : SV_Target { float g = tex2D(_MainTex, i.uv).g; return _Thresh < 0 ? g : (g > _Thresh ? 1 : 0); }
    ENDCG
   }
   Pass {
@@ -363,11 +366,16 @@ Shader "Justachae/NVG/Defocus" {
     float thick = _Thick.SampleLevel(sampler_point_clamp, i.uv, 0).r;
     float gate = smoothstep(0, 1, saturate((q.r - _ThinNear) / 2));
     float tn = near * (1 - thick) * gate, th = near - tn;
+    // this band's share of the point, by its radius (the bands' hats sum to one)
+    float rr = q.r;
+    float wb = rr <= _BandHat.y ? (_BandHat.x < 0 ? 1 : saturate((rr - _BandHat.x) / (_BandHat.y - _BandHat.x)))
+     : (_BandHat.z > 1e5 ? 1 : saturate((_BandHat.z - rr) / (_BandHat.z - _BandHat.y)));
+    th *= wb;
     float w = near * (q.r / _DefocusLens.w * q.r / _DefocusLens.w + 0.02);
     float enc = max(0, _Closed.SampleLevel(sampler_point_clamp, i.uv, 0).r - near);
     if (_Which < 0.5) return float4(c.rgb * th * w, th * w);
     if (_Which < 1.5) return float4(c.rgb * tn * w, tn * w);
-    return float4(th + enc, tn, 0, 0);
+    return float4(th + (_EncIn > 0.5 ? enc : 0), tn, 0, 0);
    }
    ENDCG
   }
@@ -389,6 +397,14 @@ Shader "Justachae/NVG/Defocus" {
     }
     return sum / total;
    }
+   ENDCG
+  }
+  Pass {
+   Blend One One
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   float4 frag (v2f_img i) : SV_Target { return tex2D(_MainTex, i.uv); }
    ENDCG
   }
  }

@@ -117,13 +117,14 @@ internal static partial class NightVisionEyepieces
         // into one thick near shape and showed full and soft, and that is the look wanted; alone against a far scene
         // they were measured thin and went into it (transparent), so swinging the gun across the edge of what is near
         // flipped them. No part is measured thin now (the thin layers below stay empty).
-        RenderTexture nearMask = Threshold(qRad, 0.5f, defocus);
+        // How near, as it is (no line drawn at a threshold: the frame's jitter moved such a line from frame to frame
+        // and what was blurred seemed to sway when still).
+        RenderTexture nearSoft = Threshold(qRad, -1f, defocus);
         RenderTexture thick = Temporary(1, 1);
         Graphics.Blit(Texture2D.blackTexture, thick);
         // What the near parts close about (5 quarter-size pixels): a sight's window and the gaps between parts.
-        RenderTexture grown = MinMax(nearMask, 5f * scale, true, defocus), closed = MinMax(grown, 5f * scale, false, defocus);
+        RenderTexture grown = MinMax(nearSoft, 5f * scale, true, defocus), closed = MinMax(grown, 5f * scale, false, defocus);
         RenderTexture.ReleaseTemporary(grown);
-        RenderTexture.ReleaseTemporary(nearMask);
 
         defocus.SetTexture(QColorId, qColor);
         defocus.SetTexture(QRadId, qRad);
@@ -131,21 +132,40 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(ClosedId, closed);
         // No part is thin (above): nothing passes the thin parts' gate.
         defocus.SetFloat(ThinNearId, 1e6f);
-        RenderTexture layerThick = Layer(0, width, height, defocus), masks = Layer(2, width, height, defocus);
-        // As the A version blurred the near things (8 quarter-size pixels, the baseline at the table).
-        RenderTexture thickBlurred = Blur(layerThick, 8f * scale, defocus), masksBlurred = Blur(masks, 8f * scale, defocus);
+        // Each near point blurred as much as it is near: in bands of its disc's radius (their shares easing from band to
+        // band), each band by DefocusBlurPerRadius of its radius, so the blur grows on from what is just near to the
+        // nearest, with no step where what is near begins. One blur for all (the A version's 8) made what was only a
+        // little near as soft as the gun.
+        RenderTexture thickBlurred = Temporary(width, height), masksBlurred = Temporary(width, height);
+        Graphics.Blit(Texture2D.blackTexture, thickBlurred);
+        Graphics.Blit(Texture2D.blackTexture, masksBlurred);
+        for (int band = 0; band < DefocusBandMiddles.Length; band++)
+        {
+            float middle = DefocusBandMiddles[band] * scale;
+            float below = band == 0 ? -1f : DefocusBandMiddles[band - 1] * scale;
+            float above = band == DefocusBandMiddles.Length - 1 ? 1e6f : DefocusBandMiddles[band + 1] * scale;
+            defocus.SetVector(BandHatId, new Vector3(below, middle, above));
+            defocus.SetFloat(EncInId, band == DefocusEncBand ? 1f : 0f);
+            RenderTexture layer = Layer(0, width, height, defocus), mask = Layer(2, width, height, defocus);
+            float sigma = DefocusBlurPerRadius * middle;
+            RenderTexture layerBlurred = Blur(layer, sigma, defocus), maskBlurred = Blur(mask, sigma, defocus);
+            Graphics.Blit(layerBlurred, thickBlurred, defocus, 16);
+            Graphics.Blit(maskBlurred, masksBlurred, defocus, 16);
+            RenderTexture.ReleaseTemporary(layer);
+            RenderTexture.ReleaseTemporary(mask);
+            RenderTexture.ReleaseTemporary(layerBlurred);
+            RenderTexture.ReleaseTemporary(maskBlurred);
+        }
         // the thin layers, empty
         RenderTexture thinBlurred = Temporary(1, 1), thinWash = Temporary(1, 1), masksWash = Temporary(1, 1);
         Graphics.Blit(Texture2D.blackTexture, thinBlurred);
         Graphics.Blit(Texture2D.blackTexture, thinWash);
         Graphics.Blit(Texture2D.blackTexture, masksWash);
-        RenderTexture.ReleaseTemporary(layerThick);
-        RenderTexture.ReleaseTemporary(masks);
         // About any near thing (one quarter-size pixel out, eased), what lies behind is the filled-in.
-        RenderTexture anyNear = Threshold(qRad, 0.02f, defocus), anyGrown = MinMax(anyNear, Mathf.Max(1f, Mathf.Round(scale)), true, defocus);
+        RenderTexture anyGrown = MinMax(nearSoft, Mathf.Max(1f, Mathf.Round(scale)), true, defocus);
         RenderTexture seam = Blur(anyGrown, scale, defocus);
-        RenderTexture.ReleaseTemporary(anyNear);
         RenderTexture.ReleaseTemporary(anyGrown);
+        RenderTexture.ReleaseTemporary(nearSoft);
 
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
         defocus.SetTexture(LThickBId, thickBlurred);
@@ -183,13 +203,18 @@ internal static partial class NightVisionEyepieces
         if (!_defocusNoted)
         {
             _defocusNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus as chosen on the tuner page (A: all near parts blurred 8, shown as against a table, gaps closed 5; {width}x{height} quarter grid, scale {scale:F2}).");
+            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus as chosen on the tuner page (each near part blurred 0.35 x its radius, shown as against a table, gaps closed 5; {width}x{height} quarter grid, scale {scale:F2}).");
         }
         return true;
     }
 
 
-    private static readonly float[] DefocusThickSteps = { 9f, 11f, 13f, 15f, 17f };
+    // Bands of a disc's radius (quarter-size pixels at 1440 lines; the most is 20.2) and how much each is blurred per
+    // quarter-size pixel of it: the nearest by 0.35 × 20 = 7, a thing spread by 2.5 by under one.
+    private static readonly float[] DefocusBandMiddles = { 1f, 2.5f, 4.5f, 7f, 10.5f, 15f, 20.2f };
+    private const int DefocusEncBand = 4;   // what the near parts close about goes with the gun's own (10.5)
+    private const float DefocusBlurPerRadius = 0.35f;
+    private static readonly int BandHatId = Shader.PropertyToID("_BandHat"), EncInId = Shader.PropertyToID("_EncIn");
     private static readonly int QColorId = Shader.PropertyToID("_QColor"), QRadId = Shader.PropertyToID("_QRad"),
         ThickId = Shader.PropertyToID("_Thick"), ClosedId = Shader.PropertyToID("_Closed"), LThickBId = Shader.PropertyToID("_LThickB"),
         LThinBId = Shader.PropertyToID("_LThinB"), LThinFId = Shader.PropertyToID("_LThinF"), MaskBId = Shader.PropertyToID("_MaskB"),
