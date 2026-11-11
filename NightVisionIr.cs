@@ -516,6 +516,7 @@ internal static partial class NightVisionEyepieces
                 NewCameraPlugin.Log?.LogInfo("NVG: a sight under the goggle drawn with its reticle lit (night vision off for its camera).");
             }
         }
+        DiagReticle(camera); // TEMP DIAG
         if (!IrWanted || !OpticPicture.IsCamera(camera))
             return;
         if (OpticOwnNightVision())
@@ -549,6 +550,36 @@ internal static partial class NightVisionEyepieces
             return 0;
         _opticIrLasers!.DrawMesh(m.Mesh, m.Matrix, m.Material, 0, 0, m.Block);
         return 1;
+    }
+
+    // TEMP DIAG: once a second while a sight is looked through, the reticle's material (shader, keywords, every float
+    // and colour it has), the goggle's state and the global _NightVisionOn, to set beside the same without the goggle.
+    private static float _diagReticleAt;
+    private static void DiagReticle(Camera camera)
+    {
+        if (!OpticPicture.IsCamera(camera) || Time.time - _diagReticleAt < 1f)
+            return;
+        _diagReticleAt = Time.time;
+        EFT.CameraControl.OpticSight? sight = EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight;
+        Material? m = sight?.ScopeData?.Reticle?.Material;
+        var goggle = EFT.CameraControl.CameraManager.Instance?.NightVision;
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"TEMP DIAG reticle: sight {(sight != null ? sight.name : "none")}, goggle {(goggle != null && goggle.On)}, global NV {Shader.GetGlobalFloat(NightVisionOnId)}, ");
+        if (m != null)
+        {
+            sb.Append($"shader {m.shader.name}, keywords [{string.Join(",", m.shaderKeywords)}]");
+            for (int i = 0; i < m.shader.GetPropertyCount(); i++)
+            {
+                string n = m.shader.GetPropertyName(i);
+                var t = m.shader.GetPropertyType(i);
+                if (t == UnityEngine.Rendering.ShaderPropertyType.Float || t == UnityEngine.Rendering.ShaderPropertyType.Range)
+                    sb.Append($", {n}={m.GetFloat(n):F3}");
+                else if (t == UnityEngine.Rendering.ShaderPropertyType.Color)
+                    sb.Append($", {n}={m.GetColor(n)}");
+            }
+        }
+        else sb.Append("no reticle material");
+        NewCameraPlugin.Log?.LogInfo(sb.ToString());
     }
 
     // The sight's own night vision on: its picture is the game's own night-vision one.
