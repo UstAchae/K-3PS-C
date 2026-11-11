@@ -95,6 +95,17 @@ internal static partial class NightVisionEyepieces
         // reaches (of the frame's height): neither blurred
         defocus.SetFloat(AspectId, (float)frame.width / frame.height);
         defocus.SetFloat(ScopeMarginId, 0.04f);
+        // A magnified sight's lens mask at a quarter of the size, blurred over that margin: what of the frame is the
+        // sight's own, eased (its edge stepped, and differently each frame).
+        RenderTexture? scopeSoft = null;
+        if (ScopeMasked)
+        {
+            RenderTexture quarterLens = Temporary(width, height);
+            Graphics.Blit(_scopeLens!, quarterLens);
+            scopeSoft = Blur(quarterLens, 0.04f * height * 0.5f, defocus);
+            RenderTexture.ReleaseTemporary(quarterLens);
+        }
+        defocus.SetTexture(ScopeSoftId, scopeSoft != null ? scopeSoft : Texture2D.blackTexture);
         BindScope(defocus);
 
         // The look chosen on the tuner page (_build/tuner.html, its numbers for a 1440-line frame: quarter-size pixels
@@ -198,6 +209,9 @@ internal static partial class NightVisionEyepieces
         RenderTexture.ReleaseTemporary(qRad);
         RenderTexture.ReleaseTemporary(thick);
         RenderTexture.ReleaseTemporary(closed);
+        defocus.SetTexture(ScopeSoftId, Texture2D.blackTexture);
+        if (scopeSoft != null)
+            RenderTexture.ReleaseTemporary(scopeSoft);
         for (int level = 0; level < DefocusLevels; level++)
         {
             defocus.SetTexture(FarIds[level], Texture2D.blackTexture);
@@ -219,7 +233,8 @@ internal static partial class NightVisionEyepieces
     private const int DefocusEncBand = 4;   // what the near parts close about goes with the gun's own (10.5)
     private const float DefocusBlurPerRadius = 0.35f;
     private static readonly int BandHatId = Shader.PropertyToID("_BandHat"), EncInId = Shader.PropertyToID("_EncIn"),
-        AspectId = Shader.PropertyToID("_Aspect"), ScopeMarginId = Shader.PropertyToID("_ScopeMargin");
+        AspectId = Shader.PropertyToID("_Aspect"), ScopeMarginId = Shader.PropertyToID("_ScopeMargin"),
+        ScopeSoftId = Shader.PropertyToID("_ScopeSoft");
     private static readonly int QColorId = Shader.PropertyToID("_QColor"), QRadId = Shader.PropertyToID("_QRad"),
         ThickId = Shader.PropertyToID("_Thick"), ClosedId = Shader.PropertyToID("_Closed"), LThickBId = Shader.PropertyToID("_LThickB"),
         LThinBId = Shader.PropertyToID("_LThinB"), LThinFId = Shader.PropertyToID("_LThinF"), MaskBId = Shader.PropertyToID("_MaskB"),

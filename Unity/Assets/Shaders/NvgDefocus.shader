@@ -59,19 +59,17 @@ Shader "Justachae/NVG/Defocus" {
   // Through a magnified sight: its lens and the dark ring of its eyepiece about it (the sight's own, what one aims in)
   // stay as they are: no blur within a margin (_ScopeMargin, of the frame's height) of the lens.
   float _ScopeMargin, _Aspect;
-  bool InScope(float2 uv) {
-   if (_ScopeOn < 0.5) return false;
-   if (InLens(uv)) return true;
-   float2 m = float2(_ScopeMargin / _Aspect, _ScopeMargin);
-   [unroll] for (int k = 0; k < 8; k++) {
-    float a = k * 0.785398;
-    float2 d = float2(cos(a), sin(a));
-    if (InLens(uv + d * m) || InLens(uv + d * m * 0.5)) return true;
-   }
-   return false;
+  // How much of a magnified sight is about uv, 0 to 1, eased: the lens's mask counted over the margin about uv (its
+  // own edge is stepped and stepped differently frame to frame: taken as it was, a jagged ring about the lens's picture
+  // was blurred and flickered while still).
+  Texture2D _ScopeSoft;   // the lens's mask at a quarter of the size, blurred over the margin (NightVisionDefocus.cs)
+  float ScopeNear(float2 uv) {
+   if (_ScopeOn < 0.5) return 0;
+   return smoothstep(0.03, 0.3, _ScopeSoft.SampleLevel(sampler_linear_clamp, uv, 0).r);
   }
   float Radius(float2 uv) {
-   if (InScope(uv))
+   float scope = ScopeNear(uv);
+   if (scope > 0.999)
     return 0;
    float2 o = 2 * _CameraDepthTexture_TexelSize.xy;
    float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
@@ -83,7 +81,7 @@ Shader "Justachae/NVG/Defocus" {
    float2 ray = (uv * 2 - 1) * _TanHalf;
    float d = max(z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z, 0.001);
    float lens = _DefocusLens.y * abs(1 / d - _DefocusLens.x);
-   return _DefocusLens.w * (1 - exp(-lens / _DefocusLens.w));
+   return _DefocusLens.w * (1 - exp(-lens / _DefocusLens.w)) * (1 - scope);
   }
   // How much of a point is near (spread by its disc), the rest left sharp: none below half a quarter-size pixel, all
   // from two and a half, eased between, so no line is seen where the spreading begins along a surface going away.
@@ -219,8 +217,9 @@ Shader "Justachae/NVG/Defocus" {
    float4 frag (v2f_img i) : SV_Target {
     float4 f = tex2D(_MainTex, i.uv);
     if (_DefocusShow > 3.5) return float4(Radius(i.uv) / _DefocusLens.w, InLens(i.uv) ? 1 : 0, 0, 1);   // TEMP DIAG
-    // Through a sight's lens: its own picture, as it is.
-    if (InLens(i.uv))
+    // Through a magnified sight's lens and about it (its eyepiece's ring): its own picture, as it is, eased out.
+    float scopeKeep = ScopeNear(i.uv);
+    if (scopeKeep > 0.999)
      return f;
     // The look chosen on the tuner page, laid over the frame:
     //  colour: the thick parts (blurred a little), the thin parts (blurred wide) and a wider wash of the thin parts,
@@ -263,7 +262,7 @@ Shader "Justachae/NVG/Defocus" {
     if (_DefocusShow > 2.5) return float4(shown.xxx, 1);   // TEMP DIAG
     if (_DefocusShow > 1.5) return float4(colour, 1);
     if (_DefocusShow > 0.5) return float4(behind, 1);
-    return float4(lerp(behind, colour, shown), f.a);
+    return float4(lerp(lerp(behind, colour, shown), f.rgb, scopeKeep), f.a);
    }
    ENDCG
   }
