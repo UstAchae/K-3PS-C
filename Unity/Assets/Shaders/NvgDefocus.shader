@@ -90,6 +90,26 @@ Shader "Justachae/NVG/Defocus" {
    float lens = _DefocusLens.y * abs(1 / d - _DefocusLens.x);
    return _DefocusLens.w * (1 - exp(-lens / _DefocusLens.w)) * (1 - scope);
   }
+  // The radius of the depth's own texel (its index in the depth texture, as it is), at the picture's point it shows
+  // (its centre less the jitter): what is nearest in it and its four neighbours one texel out each way diagonally.
+  float4 _DepthSize;   // the depth texture's width, height, and one over each
+  float RadiusTexel(float2 texel, out float2 picture) {
+   float2 du = (texel + 0.5) * _DepthSize.zw;
+   picture = du - _DepthJitter.xy;
+   float scope = ScopeNear(picture);
+   if (scope > 0.999)
+    return 0;
+   float2 o = _DepthSize.zw;
+   float z = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(o.x, o.y))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(-o.x, o.y))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(o.x, -o.y))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(-o.x, -o.y))));
+   float2 ray = (picture * 2 - 1) * _TanHalf;
+   float d = max(z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z, 0.001);
+   float lens = _DefocusLens.y * abs(1 / d - _DefocusLens.x);
+   return _DefocusLens.w * (1 - exp(-lens / _DefocusLens.w)) * (1 - scope);
+  }
   // How much of a point is near (spread by its disc), the rest left sharp: none below half a quarter-size pixel, all
   // from two and a half, eased between, so no line is seen where the spreading begins along a surface going away.
   float Nearness(float r) { return smoothstep(0.5, 2.5, r); }
@@ -348,19 +368,26 @@ Shader "Justachae/NVG/Defocus" {
     // The radius of what is near under the pixel (its mean, weighted by how near), how much of the pixel is near (the
     // mean): the mean of all of it gave a pixel half gun and half far scene a middle radius, the nearest one jumped as a
     // single pixel of the gun's outline flipped.
+    // Over the depth's own texels (not the frame's pixels, each taking the texel nearest it): each texel at the
+    // picture's point it shows this frame (its centre less the jitter), weighted by a tent of four of the frame's
+    // pixels about this pixel's middle at that point. Taken by the frame's pixels, which texel each took jumped as the
+    // jitter moved by part of a texel, and what was near flickered at every outline.
+    float2 reach = 4 * t;
+    float2 first = floor((i.uv + _DepthJitter.xy - reach) * _DepthSize.xy - 0.5);
     float r = 0, near = 0, total = 0;
-    for (int y = 0; y < 8; y++)
-     for (int x = 0; x < 8; x++) {
-      float2 o = float2(x, y) - 3.5;
-      float w = (4 - abs(o.x)) * (4 - abs(o.y));   // the same tent as the colour's
-      float ri = Radius(i.uv + o * t);
+    for (int y = 0; y < 7; y++)
+     for (int x = 0; x < 7; x++) {
+      float2 picture;
+      float ri = RadiusTexel(first + float2(x, y), picture);
+      float2 o = abs(picture - i.uv) / reach;
+      float w = saturate(1 - o.x) * saturate(1 - o.y);
       float ni = Nearness(ri) * w;
       r += ri * ni;
       near += ni;
       total += w;
      }
     r = near > 1e-4 ? r / near : 0;   // the mean radius of what is near under the pixel: it moves on as smoothly as that does
-    near /= total;
+    near /= max(total, 1e-6);
     return float4(r, near, near * Front(r), 0);
    }
    ENDCG
