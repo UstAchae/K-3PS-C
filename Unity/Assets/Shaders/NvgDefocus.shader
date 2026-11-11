@@ -38,7 +38,6 @@ Shader "Justachae/NVG/Defocus" {
   float2 _Step;   // a Gaussian's direction, in texels
   SamplerState sampler_linear_clamp, sampler_point_clamp;
   float _ScopeOn;
-  float _DefocusShow;   // TEMP DIAG: 0 the frame as made; 1 what stands behind; 2 the discs' colour; 3 how solid
   float4 _DefocusLens;
   float2 _TanHalf;
   float4 _Grid;   // a level's width and height; z −1 where a render texture's up is flipped; w its pixel in quarter-size ones
@@ -244,7 +243,6 @@ Shader "Justachae/NVG/Defocus" {
    #pragma target 3.5
    float4 frag (v2f_img i) : SV_Target {
     float4 f = tex2D(_MainTex, i.uv);
-    if (_DefocusShow > 3.5) return float4(Radius(i.uv) / _DefocusLens.w, InLens(i.uv) ? 1 : 0, 0, 1);   // TEMP DIAG
     // Through a magnified sight's lens and about it (its eyepiece's ring): its own picture, as it is, eased out.
     float scopeKeep = ScopeNear(i.uv);
     if (scopeKeep > 0.999)
@@ -294,9 +292,6 @@ Shader "Justachae/NVG/Defocus" {
     }
     fill = found > 1e-3 ? lerp(colour, fill / found, saturate(found * 2)) : colour;
     float3 behind = lerp(f.rgb, fill, k);
-    if (_DefocusShow > 2.5) return float4(shown.xxx, 1);   // TEMP DIAG
-    if (_DefocusShow > 1.5) return float4(colour, 1);
-    if (_DefocusShow > 0.5) return float4(behind, 1);
     return float4(lerp(lerp(behind, colour, shown), f.rgb, scopeKeep), f.a);
    }
    ENDCG

@@ -5,74 +5,26 @@ namespace EFTNewCamera;
 
 // The objective's defocus (step 3 of the eyepieces' picture, NightVisionComposite.cs). A point at a distance d from a
 // lens of aperture D focused at s is spread over a disc of even light, whose diameter seen from the lens is
-// D·|1/d − 1/s|. A few metres off that is a fraction of a degree, as the lens has it. Nearer it grows without end
-// (things a few centimetres from the objective spread over the whole field and are not seen at all), so here it eases
-// toward DefocusMostDegrees instead: the arms and the gun stay things seen, softly, the nearer the softer, never at a
-// fixed most. Each point near enough to be spread more than a quarter-size pixel is drawn as its disc
-// (NvgDefocus.shader): the small ones at a quarter of the frame's size, the larger at an eighth, a sixteenth and a
-// thirty-second, each where its disc is 6 to 12 of that level's pixels across. What is near is laid over what lies
-// behind it with as much of the lens's light as it blocks: through a sight's window, the scene beyond, sharp; behind
-// its own edge, where the frame has nothing but the thing itself, what is about it spread as wide (NvgDefocus.shader).
+// D·|1/d − 1/s|; nearer, it eases toward DefocusMostDegrees instead of growing without end, so the arms and the gun stay
+// things seen, softly, the nearer the softer. At a quarter of the frame's size (NvgDefocus.shader): how near each part
+// is, from the depth's own texels at the points they show this frame (the camera is jittered, its picture smoothed over
+// it, its depth not) and gathered over the frames; the near parts blurred in bands of their radius, each as much as it
+// is near; shown over what lies behind them by their share against it, as a table behind them would count; what lies
+// behind them filled in from about them. A magnified sight's lens and the ring of its eyepiece are left as they are.
 internal static partial class NightVisionEyepieces
 {
     private const float DefocusAperture = 0.0225f;      // the objective's, 27 mm at f/1.2 (as the tritium's)
     private const float DefocusMostDegrees = 3f;        // what a disc's radius eases toward, nearer and nearer
     private const int DefocusScale = 4;
-    // How many times (each way) a near thing's shape and colour are blurred for its soft outline (F12 头戴式成像装备
-    // 近处轮廓模糊遍数): each one more widens it about as the square root of the count.
-    internal static int DefocusOutlinePasses = 3;
-    private const int DefocusLevels = 4;                // radii up to 12, 24, 48 and beyond quarter-size pixels
-    // A disc is drawn where its radius is 6 to 12 of the level's pixels: coarser, a pixel's mean of what lies under it
-    // jumped from frame to frame as the view moved, and what was spread rippled like water.
-    private const float DefocusBand = 12f;
+    private const int DefocusLevels = 4;                // the sizes of what is filled in behind a near thing
 
     private static Shader? _defocusShader;
     private static Material? _defocus;
-    private static CommandBuffer? _discBuffer;
-    private static readonly MaterialPropertyBlock[] _discBlocks = { new(), new(), new(), new() };
-    private static readonly RenderTexture?[] _levelColor = new RenderTexture?[DefocusLevels], _levelCoc = new RenderTexture?[DefocusLevels],
-        _levelAcc = new RenderTexture?[DefocusLevels], _levelFar = new RenderTexture?[DefocusLevels];
+    private static readonly RenderTexture?[] _levelFar = new RenderTexture?[DefocusLevels];
     private static bool _defocusNoted;
 
     private static readonly int DefocusLensId = Shader.PropertyToID("_DefocusLens");
-    private static readonly int SrcId = Shader.PropertyToID("_Src");
-    private static readonly int CocId = Shader.PropertyToID("_Coc");
-    private static readonly int GridId = Shader.PropertyToID("_Grid");
-    private static readonly int BandId = Shader.PropertyToID("_Band");
-    private static readonly int ShapeId = Shader.PropertyToID("_Shape");
-    private static readonly int ShapeWideId = Shader.PropertyToID("_ShapeWide");
     private static readonly int CoverId = Shader.PropertyToID("_Cover");
-    private static readonly int CoverWideId = Shader.PropertyToID("_CoverWide");
-    private static readonly int FarSoftId = Shader.PropertyToID("_FarSoft");
-
-    // A level blurred wide and smooth (three Gaussians each way), and the same at half its size blurred again: twice as
-    // wide.
-    private static void Smoothed(RenderTexture source, Material defocus, out RenderTexture soft, out RenderTexture wide)
-    {
-        soft = Temporary(source.width, source.height);
-        RenderTexture across = Temporary(source.width, source.height);
-        Graphics.Blit(source, soft);
-        Gaussians(soft, across, defocus);
-        RenderTexture.ReleaseTemporary(across);
-        wide = Temporary(Mathf.Max(soft.width / 2, 1), Mathf.Max(soft.height / 2, 1));
-        RenderTexture wideAcross = Temporary(wide.width, wide.height);
-        Graphics.Blit(soft, wide, defocus, 7);
-        Gaussians(wide, wideAcross, defocus);
-        RenderTexture.ReleaseTemporary(wideAcross);
-    }
-
-    private static void Gaussians(RenderTexture texture, RenderTexture across, Material defocus)
-    {
-        for (int pass = 0; pass < DefocusOutlinePasses; pass++)
-        {
-            defocus.SetVector(StepId, new Vector2(1f, 0f));
-            Graphics.Blit(texture, across, defocus, 8);
-            defocus.SetVector(StepId, new Vector2(0f, 1f));
-            Graphics.Blit(across, texture, defocus, 8);
-        }
-    }
-    private static readonly int[] NearAccIds = { Shader.PropertyToID("_NearAcc0"), Shader.PropertyToID("_NearAcc1"),
-        Shader.PropertyToID("_NearAcc2"), Shader.PropertyToID("_NearAcc3") };
     private static readonly int[] FarIds = { Shader.PropertyToID("_Far0"), Shader.PropertyToID("_Far1"), Shader.PropertyToID("_Far2"),
         Shader.PropertyToID("_Far3") };
 
@@ -86,7 +38,6 @@ internal static partial class NightVisionEyepieces
         float tanUp = Mathf.Tan(view.fieldOfView * 0.5f * Mathf.Deg2Rad);
         float pixelsPerRadian = height / (2f * tanUp);
         float ahead = Mathf.Clamp(Vector3.Dot(_body!.TransformPoint(_objectiveFront) - _renderedFrom, _renderedForward), 0f, MaxEyeDistance);
-        _diagAhead = ahead; // TEMP DIAG
         // x: 1 over the focus distance (far away: 0); y: a disc's radius in quarter-size pixels per unit of |1/d − 1/s|;
         // z: how far the objective is ahead of the camera; w: the radius it eases toward (quarter-size pixels).
         defocus.SetVector(DefocusLensId, new Vector4(0f, 0.5f * DefocusAperture * pixelsPerRadian, ahead,
@@ -116,15 +67,8 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(ScopeSoftId, scopeSoft != null ? scopeSoft : Texture2D.blackTexture);
         BindScope(defocus);
 
-        // The look chosen on the tuner page (_build/tuner.html, its numbers for a 1440-line frame: quarter-size pixels
-        // there, scaled here by the frame's height).
+        // Its numbers are for a 1440-line frame (quarter-size pixels there), scaled by the frame's height.
         float scale = height / 360f;
-
-        // What is not near, at a quarter of the size and each level half the last: what lies behind a near thing,
-        // filled in from about it.
-        // Each a Gaussian of the quarter-size one (1.5, 4, 10 and 24 quarter-size pixels), not halvings: a halved level's
-        // pixels jumped as the gun swayed with the breath, and what was filled in behind its top swayed with them while
-        // the view was still.
 
         // The frame and how near each part of it is, at a quarter of the size.
         RenderTexture qColor = Temporary(width, height), qRad = Temporary(width, height);
@@ -138,7 +82,8 @@ internal static partial class NightVisionEyepieces
         // three by three): what moves is followed at once, only what stands still is gathered.
         qRad = Gathered(qRad, defocus);
         // What is not near (by the nearness just made, not each pixel's own depth taken at the jittered texel nearest
-        // it), for what is filled in behind a near thing.
+        // it), for what is filled in behind a near thing: each a Gaussian of the quarter-size one (1.5, 4, 10 and 24
+        // quarter-size pixels), not halvings, whose pixels jumped as the gun swayed with the breath.
         defocus.SetTexture(QRadId, qRad);
         RenderTexture farQuarter = Temporary(width, height);
         Graphics.Blit(frame, farQuarter, defocus, 3);
@@ -148,24 +93,20 @@ internal static partial class NightVisionEyepieces
             defocus.SetTexture(FarIds[level], _levelFar[level]);
         }
         RenderTexture.ReleaseTemporary(farQuarter);
-        // Thin parts taken as the thick ones, everywhere: with a table behind it a sight's thin parts joined the table
-        // into one thick near shape and showed full and soft, and that is the look wanted; alone against a far scene
-        // they were measured thin and went into it (transparent), so swinging the gun across the edge of what is near
-        // flipped them. No part is measured thin now (the thin layers below stay empty).
-        // How near, as it is (no line drawn at a threshold: the frame's jitter moved such a line from frame to frame
-        // and what was blurred seemed to sway when still).
+        // How near, as it is (no line drawn at a threshold: such a line moved from frame to frame).
         RenderTexture nearSoft = Threshold(qRad, -1f, defocus);
-        RenderTexture thick = Temporary(1, 1);
-        Graphics.Blit(Texture2D.blackTexture, thick);
         // What the near parts close about (5 quarter-size pixels): a sight's window and the gaps between parts.
         RenderTexture grown = MinMax(nearSoft, 5f * scale, true, defocus), closed = MinMax(grown, 5f * scale, false, defocus);
         RenderTexture.ReleaseTemporary(grown);
 
         defocus.SetTexture(QColorId, qColor);
         defocus.SetTexture(QRadId, qRad);
-        defocus.SetTexture(ThickId, thick);
         defocus.SetTexture(ClosedId, closed);
-        // No part is thin (above): nothing passes the thin parts' gate.
+        // Thin parts taken as the thick ones, everywhere: with a table behind it a sight's thin parts joined the table
+        // into one thick near shape and showed full and soft, the look wanted; measured thin against a far scene, they
+        // went into it (transparent), and flipped as the gun swung across the edge of what is near. Nothing passes the
+        // thin parts' gate, and their layers stay empty.
+        defocus.SetTexture(ThickId, Texture2D.blackTexture);
         defocus.SetFloat(ThinNearId, 1e6f);
         // Each near point blurred as much as it is near: in bands of its disc's radius (their shares easing from band to
         // band), each band by DefocusBlurPerRadius of its radius, so the blur grows on from what is just near to the
@@ -193,11 +134,6 @@ internal static partial class NightVisionEyepieces
             RenderTexture.ReleaseTemporary(layerBlurred);
             RenderTexture.ReleaseTemporary(maskBlurred);
         }
-        // the thin layers, empty
-        RenderTexture thinBlurred = Temporary(1, 1), thinWash = Temporary(1, 1), masksWash = Temporary(1, 1);
-        Graphics.Blit(Texture2D.blackTexture, thinBlurred);
-        Graphics.Blit(Texture2D.blackTexture, thinWash);
-        Graphics.Blit(Texture2D.blackTexture, masksWash);
         // About any near thing (one quarter-size pixel out, eased), what lies behind is the filled-in.
         RenderTexture anyGrown = MinMax(nearSoft, Mathf.Max(1f, Mathf.Round(scale)), true, defocus);
         RenderTexture seam = Blur(anyGrown, scale, defocus);
@@ -206,17 +142,15 @@ internal static partial class NightVisionEyepieces
 
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
         defocus.SetTexture(LThickBId, thickBlurred);
-        defocus.SetTexture(LThinBId, thinBlurred);
-        defocus.SetTexture(LThinFId, thinWash);
+        defocus.SetTexture(LThinBId, Texture2D.blackTexture);
+        defocus.SetTexture(LThinFId, Texture2D.blackTexture);
         defocus.SetTexture(MaskBId, masksBlurred);
         RenderTexture thickWide = Blur(thickBlurred, DefocusShareSigma * scale, defocus), masksWide = Blur(masksBlurred, DefocusShareSigma * scale, defocus);
         defocus.SetTexture(LThickWId, thickWide);
         defocus.SetTexture(MaskWId, masksWide);
-        defocus.SetTexture(MaskFId, masksWash);
+        defocus.SetTexture(MaskFId, Texture2D.blackTexture);
         defocus.SetTexture(SeamId, seam);
         Graphics.Blit(frame, made, defocus, 5);
-        RawDump(frame, made, qRad, thickBlurred, masksBlurred, defocus); // TEMP DIAG
-        DumpDefocus(frame, made, defocus); // TEMP DIAG
         AddTritium(view, made);
         ReleaseMask();
         _blurMask = Temporary(width, height);
@@ -231,13 +165,9 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(MaskWId, Texture2D.blackTexture);
         RenderTexture.ReleaseTemporary(thickWide);
         RenderTexture.ReleaseTemporary(masksWide);
-        RenderTexture.ReleaseTemporary(thinBlurred);
-        RenderTexture.ReleaseTemporary(thinWash);
-        RenderTexture.ReleaseTemporary(masksWash);
         RenderTexture.ReleaseTemporary(seam);
         RenderTexture.ReleaseTemporary(qColor);
         RenderTexture.ReleaseTemporary(qRad);
-        RenderTexture.ReleaseTemporary(thick);
         RenderTexture.ReleaseTemporary(closed);
         defocus.SetTexture(ScopeSoftId, Texture2D.blackTexture);
         if (scopeSoft != null)
@@ -251,7 +181,7 @@ internal static partial class NightVisionEyepieces
         if (!_defocusNoted)
         {
             _defocusNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus as chosen on the tuner page (each near part blurred 0.35 x its radius, shown as against a table, gaps closed 5; {width}x{height} quarter grid, scale {scale:F2}).");
+            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus by bands of nearness (each blurred 0.35 x its radius, shown as against a table), depth jitter-corrected and gathered over frames ({width}x{height} quarter grid, scale {scale:F2}).");
         }
         return true;
     }
@@ -287,25 +217,6 @@ internal static partial class NightVisionEyepieces
         Graphics.Blit(gathered, _gatheredQRad);
         RenderTexture.ReleaseTemporary(current);
         return gathered;
-    }
-    private static RenderTexture? _lastQRad;
-    private static readonly int PrevTexId = Shader.PropertyToID("_Prev");
-    private static RenderTexture MeanWithLast(RenderTexture current, Material defocus)
-    {
-        if (_lastQRad == null || _lastQRad.width != current.width || _lastQRad.height != current.height)
-        {
-            _lastQRad?.Release();
-            _lastQRad = new RenderTexture(current.width, current.height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG defocus last nearness", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
-            _lastQRad.Create();
-            Graphics.Blit(current, _lastQRad);
-        }
-        RenderTexture mean = Temporary(current.width, current.height);
-        defocus.SetTexture(PrevTexId, _lastQRad);
-        Graphics.Blit(current, mean, defocus, 17);
-        defocus.SetTexture(PrevTexId, Texture2D.blackTexture);
-        Graphics.Blit(current, _lastQRad);
-        RenderTexture.ReleaseTemporary(current);
-        return mean;
     }
     private static readonly int DepthTexelId = Shader.PropertyToID("_DepthTexel"), DepthJitterId = Shader.PropertyToID("_DepthJitter"),
         DepthSizeId = Shader.PropertyToID("_DepthSize"), CameraDepthId = Shader.PropertyToID("_CameraDepthTexture");
@@ -383,166 +294,5 @@ internal static partial class NightVisionEyepieces
         if (current != source)
             RenderTexture.ReleaseTemporary(current);
         return result;
-    }
-
-    // TEMP DIAG: for the four frames after F11 (RawFrames, set by DumpSteps), every layer of the defocus saved as raw
-    // floats (BepInEx/defocus-dump/raw-N/frame-K/name.f32: width, height as int32, then RGBA float32 rows), no scaling.
-    internal static int RawFrames, RawDumps;
-    private static void RawDump(RenderTexture frame, RenderTexture made, RenderTexture qRad, RenderTexture thick, RenderTexture masks, Material defocus)
-    {
-        if (RawFrames <= 0)
-            return;
-        int k = 4 - RawFrames;
-        RawFrames--;
-        string folder = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump", "raw-" + RawDumps, "frame-" + k);
-        System.IO.Directory.CreateDirectory(folder);
-        RenderTexture radius = RenderTexture.GetTemporary(frame.width, frame.height, 0, RenderTextureFormat.ARGBFloat);
-        defocus.SetFloat(ShowId, 4f);
-        Graphics.Blit(frame, radius, defocus, 5);
-        defocus.SetFloat(ShowId, 0f);
-        SaveRaw(radius, System.IO.Path.Combine(folder, "radius.f32"), true);
-        SaveRaw(frame, System.IO.Path.Combine(folder, "frame.f32"), false);
-        SaveRaw(made, System.IO.Path.Combine(folder, "made.f32"), false);
-        SaveRaw(qRad, System.IO.Path.Combine(folder, "qrad.f32"), false);
-        SaveRaw(thick, System.IO.Path.Combine(folder, "thick.f32"), false);
-        SaveRaw(masks, System.IO.Path.Combine(folder, "masks.f32"), false);
-    }
-
-    private static void SaveRaw(RenderTexture texture, string path, bool owned)
-    {
-        int w = texture.width, h = texture.height;
-        RenderTexture copy = texture;
-        if (texture.format != RenderTextureFormat.ARGBFloat && texture.format != RenderTextureFormat.ARGBHalf)
-        {
-            copy = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGBFloat);
-            Graphics.Blit(texture, copy);
-        }
-        RenderTexture held = copy;
-        AsyncGPUReadback.Request(copy, 0, TextureFormat.RGBAFloat, r =>
-        {
-            if (r.hasError)
-                return;
-            var data = r.GetData<float>();
-            using var file = new System.IO.BinaryWriter(System.IO.File.Create(path));
-            file.Write(w);
-            file.Write(h);
-            byte[] bytes = new byte[data.Length * 4];
-            System.Buffer.BlockCopy(data.ToArray(), 0, bytes, 0, bytes.Length);
-            file.Write(bytes);
-        });
-        if (held != texture)
-            RenderTexture.ReleaseTemporary(held);
-        if (owned)
-            RenderTexture.ReleaseTemporary(texture);
-    }
-
-    // TEMP DIAG: on F11, each of its layers saved as a picture (BepInEx/defocus-dump):
-    // the frame, what stands behind, the discs' colour, how solid, and the frame as made. Each scaled so its brightest
-    // hundredth is white, as the frame is dark before the tube's gain.
-    internal static float _diagAhead; // TEMP DIAG
-    private static int _dumps;
-    private static readonly int ShowId = Shader.PropertyToID("_DefocusShow");
-    private static void DumpDefocus(RenderTexture frame, RenderTexture made, Material defocus)
-    {
-        // On F11 (no other mod here binds it), as often as pressed.
-        if (!Input.GetKeyDown(KeyCode.F11))
-            return;
-        _dumps++;
-        string folder = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump", _dumps.ToString());
-        System.IO.Directory.CreateDirectory(folder);
-        Save(frame, System.IO.Path.Combine(folder, "0-frame.png"));
-        string[] names = { "", "1-behind.png", "2-near-colour.png", "3-shown.png", "5-radius.png" };
-        for (int show = 1; show <= 4; show++)
-        {
-            RenderTexture layer = RenderTexture.GetTemporary(frame.width, frame.height, 0, RenderTextureFormat.ARGBHalf);
-            defocus.SetFloat(ShowId, show);
-            Graphics.Blit(frame, layer, defocus, 5);
-            Save(layer, System.IO.Path.Combine(folder, names[show]), show >= 3);
-            RenderTexture.ReleaseTemporary(layer);
-        }
-        defocus.SetFloat(ShowId, 0f);
-        Save(made, System.IO.Path.Combine(folder, "4-made.png"));
-        NewCameraPlugin.Log?.LogInfo("TEMP DIAG defocus layers saved to " + folder);
-    }
-
-    private static void Save(RenderTexture texture, string path, bool asIs = false)
-    {
-        int w = texture.width, h = texture.height;
-        AsyncGPUReadback.Request(texture, 0, TextureFormat.RGBAFloat, r =>
-        {
-            if (r.hasError)
-                return;
-            var data = r.GetData<Color>();
-            float[] lum = new float[data.Length];
-            for (int i = 0; i < data.Length; i++)
-                lum[i] = Mathf.Max(data[i].r, Mathf.Max(data[i].g, data[i].b));
-            float scale = 1f;
-            if (!asIs)
-            {
-                float[] sorted = (float[])lum.Clone();
-                System.Array.Sort(sorted);
-                scale = 1f / Mathf.Max(sorted[(int)(sorted.Length * 0.99f)], 1e-6f);
-            }
-            var pixels = new Color32[data.Length];
-            for (int i = 0; i < data.Length; i++)
-            {
-                Color c = data[i] * scale;
-                pixels[i] = new Color32((byte)(Mathf.Clamp01(c.r) * 255), (byte)(Mathf.Clamp01(c.g) * 255), (byte)(Mathf.Clamp01(c.b) * 255), 255);
-            }
-            byte[] png = ImageConversion.EncodeArrayToPNG(pixels, UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B8A8_UNorm, (uint)w, (uint)h);
-            System.IO.File.WriteAllBytes(path, png);
-        });
-    }
-
-    // TEMP DIAG: the discs' radii and how much of the near layer's light they keep, and the frame time, a few times.
-    private static float _diagDefocusAt, _diagFrameSum;
-    private static int _diagDefocusCount, _diagFrames;
-    private static void DiagDefocus(RenderTexture frame, float pixelsPerRadian, float ahead)
-    {
-        _diagFrameSum += Time.unscaledDeltaTime;
-        _diagFrames++;
-        if (_diagDefocusCount >= 6 || Time.time - _diagDefocusAt < 3f)
-            return;
-        float ms = 1000f * _diagFrameSum / Mathf.Max(_diagFrames, 1);
-        _diagFrameSum = 0f;
-        _diagFrames = 0;
-        _diagDefocusAt = Time.time;
-        int n = ++_diagDefocusCount;
-        string head = $"frame {frame.width}x{frame.height}, mean frame {ms:F1} ms, px/rad {pixelsPerRadian:F0}, objective ahead {ahead:F3} m, most radius {DefocusMostDegrees * Mathf.Deg2Rad * pixelsPerRadian:F1}";
-        float cover = 0f, maxR = 0f, sumR = 0f;
-        int count = 0;
-        AsyncGPUReadback.Request(_levelCoc[0]!, 0, TextureFormat.RGBAFloat, r =>
-        {
-            if (r.hasError) return;
-            var d = r.GetData<Color>();
-            for (int i = 0; i < d.Length; i++)
-            {
-                if (d[i].g <= 0f) continue;
-                float radius = d[i].r / d[i].g;
-                maxR = Mathf.Max(maxR, radius);
-                sumR += radius;
-                cover += d[i].g;
-                count++;
-            }
-        });
-        float[] kept = new float[DefocusLevels];
-        int done = 0;
-        for (int level = 0; level < DefocusLevels; level++)
-        {
-            int l = level, scale = 1 << level;
-            AsyncGPUReadback.Request(_levelAcc[level]!, 0, TextureFormat.RGBAFloat, r =>
-            {
-                if (!r.hasError)
-                {
-                    var d = r.GetData<Color>();
-                    float sum = 0f;
-                    for (int i = 0; i < d.Length; i++) sum += d[i].a;
-                    kept[l] = sum * scale * scale;
-                }
-                if (++done < DefocusLevels) return;
-                float all = kept[0] + kept[1] + kept[2] + kept[3];
-                NewCameraPlugin.Log?.LogInfo($"TEMP DIAG defocus {n}: {head}; near texels {count}, radius mean {(count > 0 ? sumR / count : 0f):F2} max {maxR:F2} (quarter px); light kept {(cover > 0f ? all / cover : 0f):F3} (by level {kept[0]:F0} {kept[1]:F0} {kept[2]:F0} {kept[3]:F0} of {cover:F0})");
-            });
-        }
     }
 }
