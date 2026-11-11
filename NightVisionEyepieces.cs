@@ -305,22 +305,16 @@ internal static partial class NightVisionEyepieces
             : cameras?.NightVision != null && cameras.NightVision.On && !cameras.NightVision.InProcessSwitching;
         bool powered = switchedOn && _flip >= 0.999f && settled;
         float power = Power(powered);
-        bool on = worn && (powered || power > 0.01f);
+        // The tubes' afterglow shown only while the game's filter is still on, the picture the lenses show: switched off
+        // while aiming the game took its filter off within five frames, the tubes' glow still a tenth, and the lenses showed
+        // the bare picture through the dead filter (a flash of the scene as the eye sees it).
+        bool filterThere = thermal || brnvg || cameras?.NightVision != null && cameras.NightVision.On;
+        bool on = worn && (powered || power > 0.01f && filterThere);
         Wake(worn && (switchedOn || on) ? renderer : null, cameras?.NightVision);
         HoldMainThermal(cameras, thermal && worn);
         KeepThermalGlow(thermalDevice);
         Active = on;
         _split = _flip;
-        // TEMP DIAG: every frame for two seconds after the switch or the flip's direction changes, the state that decides
-        // what the lenses show.
-        if (switchedOn != _diagSwitched || (_rotator != null && RotatorTarget?.GetValue(_rotator) is float tg && tg != _diagTarget))
-        {
-            _diagSwitched = switchedOn;
-            _diagTarget = _rotator != null && RotatorTarget?.GetValue(_rotator) is float t2 ? t2 : -1f;
-            _diagUntil = Time.time + 2f;
-        }
-        if (Time.time < _diagUntil)
-            NewCameraPlugin.Log?.LogInfo($"TEMP DIAG flip f{Time.frameCount}: switched {switchedOn}, flip {_flip:F2}, rot target {_diagTarget:F1}, reversed {_rotatorReversed}, settled {settled}, game NV on {cameras?.NightVision?.On}, switching {cameras?.NightVision?.InProcessSwitching}, powered {powered}, power {power:F3}, active {on}, aiming {player.HandsController?.IsAiming}");
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
         KeepGlow(device);
         UpdateMountHeight(player);
@@ -430,8 +424,7 @@ internal static partial class NightVisionEyepieces
     }
 
     private const float FlipSettleSeconds = 3f;
-    private const float FlipSwitchWait = 1f;
-    private static bool _diagSwitched; private static float _diagTarget = -2f, _diagUntil; // TEMP DIAG   // how long the switch may lag the device set going (s)
+    private const float FlipSwitchWait = 1f;   // how long the switch may lag the device set going (s)
     private static bool _flipPending, _flipPendingOn;
     private static float _flipPendingSince;
     private static readonly FieldInfo? RotatorTarget = AccessTools.Field(typeof(CurveRotator), "_targetT");
