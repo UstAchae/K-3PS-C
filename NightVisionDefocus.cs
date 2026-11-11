@@ -132,7 +132,8 @@ internal static partial class NightVisionEyepieces
         // No part is thin (above): nothing passes the thin parts' gate.
         defocus.SetFloat(ThinNearId, 1e6f);
         RenderTexture layerThick = Layer(0, width, height, defocus), masks = Layer(2, width, height, defocus);
-        RenderTexture thickBlurred = Blur(layerThick, 3f * scale, defocus), masksBlurred = Blur(masks, 3f * scale, defocus);
+        // As the A version blurred the near things (8 quarter-size pixels, the baseline at the table).
+        RenderTexture thickBlurred = Blur(layerThick, 8f * scale, defocus), masksBlurred = Blur(masks, 8f * scale, defocus);
         // the thin layers, empty
         RenderTexture thinBlurred = Temporary(1, 1), thinWash = Temporary(1, 1), masksWash = Temporary(1, 1);
         Graphics.Blit(Texture2D.blackTexture, thinBlurred);
@@ -182,7 +183,7 @@ internal static partial class NightVisionEyepieces
         if (!_defocusNoted)
         {
             _defocusNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus as chosen on the tuner page (all near parts as thick, blurred 3, gaps closed 5; {width}x{height} quarter grid, scale {scale:F2}).");
+            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus as chosen on the tuner page (A: all near parts blurred 8, shown as against a table, gaps closed 5; {width}x{height} quarter grid, scale {scale:F2}).");
         }
         return true;
     }
