@@ -314,13 +314,19 @@ Shader "Justachae/NVG/Defocus" {
    #pragma target 3.5
    float4 frag (v2f_img i) : SV_Target {
     float2 t = _MainTex_TexelSize.xy;
+    // A tent over eight by eight of the frame's pixels (twice the quarter-size pixel), not a box of four: as the gun
+    // swayed by less than a quarter-size pixel a box's mean stepped, and the blurred gun moved in steps (jitter).
     float4 sum = 0;
-    for (int y = 0; y < 4; y++)
-     for (int x = 0; x < 4; x++) {
-      float2 uv = i.uv + (float2(x, y) - 1.5) * t;
-      sum += float4(tex2D(_MainTex, uv).rgb, Nearness(Radius(uv)));
+    float total = 0;
+    for (int y = 0; y < 8; y++)
+     for (int x = 0; x < 8; x++) {
+      float2 o = float2(x, y) - 3.5;
+      float w = (4 - abs(o.x)) * (4 - abs(o.y));
+      float2 uv = i.uv + o * t;
+      sum += float4(tex2D(_MainTex, uv).rgb, Nearness(Radius(uv))) * w;
+      total += w;
      }
-    return sum / 16;
+    return sum / total;
    }
    ENDCG
   }
@@ -334,16 +340,19 @@ Shader "Justachae/NVG/Defocus" {
     // The radius of what is near under the pixel (its mean, weighted by how near), how much of the pixel is near (the
     // mean): the mean of all of it gave a pixel half gun and half far scene a middle radius, the nearest one jumped as a
     // single pixel of the gun's outline flipped.
-    float r = 0, near = 0;
-    for (int y = 0; y < 4; y++)
-     for (int x = 0; x < 4; x++) {
-      float ri = Radius(i.uv + (float2(x, y) - 1.5) * t);
-      float ni = Nearness(ri);
+    float r = 0, near = 0, total = 0;
+    for (int y = 0; y < 8; y++)
+     for (int x = 0; x < 8; x++) {
+      float2 o = float2(x, y) - 3.5;
+      float w = (4 - abs(o.x)) * (4 - abs(o.y));   // the same tent as the colour's
+      float ri = Radius(i.uv + o * t);
+      float ni = Nearness(ri) * w;
       r += ri * ni;
       near += ni;
+      total += w;
      }
     r = near > 1e-4 ? r / near : 0;   // the mean radius of what is near under the pixel: it moves on as smoothly as that does
-    near /= 16;
+    near /= total;
     return float4(r, near, near * Front(r), 0);
    }
    ENDCG

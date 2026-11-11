@@ -165,7 +165,9 @@ internal static partial class NightVisionEyepieces
             defocus.SetVector(BandHatId, new Vector3(below, middle, above));
             defocus.SetFloat(EncInId, band == DefocusEncBand ? 1f : 0f);
             RenderTexture layer = Layer(0, width, height, defocus), mask = Layer(2, width, height, defocus);
-            float sigma = DefocusBlurPerRadius * middle;
+            // at least a quarter-size pixel: less, a band was shown at a quarter of the size all but unblurred, and moved
+            // in its pixels' steps
+            float sigma = Mathf.Max(DefocusBlurPerRadius * middle, scale);
             RenderTexture layerBlurred = Blur(layer, sigma, defocus), maskBlurred = Blur(mask, sigma, defocus);
             Graphics.Blit(layerBlurred, thickBlurred, defocus, 16);
             Graphics.Blit(maskBlurred, masksBlurred, defocus, 16);
