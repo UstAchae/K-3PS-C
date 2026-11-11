@@ -580,6 +580,13 @@ internal static partial class NightVisionEyepieces
             }
         }
         else sb.Append("no reticle material");
+        if (goggle != null)
+        {
+            sb.Append(" | switched on with it: ");
+            foreach (MonoBehaviour b in goggle.SwitchComponentsOn) sb.Append(b != null ? $"{b.GetType().Name}({b.enabled}) " : "null ");
+            sb.Append("| switched off with it: ");
+            foreach (MonoBehaviour b in goggle.SwitchComponentsOff) sb.Append(b != null ? $"{b.GetType().Name}({b.enabled}) " : "null ");
+        }
         NewCameraPlugin.Log?.LogInfo(sb.ToString());
     }
 
