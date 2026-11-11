@@ -114,15 +114,17 @@ internal static partial class NightVisionEyepieces
 
         // What is not near, at a quarter of the size and each level half the last: what lies behind a near thing,
         // filled in from about it.
+        // Each a Gaussian of the quarter-size one (1.5, 4, 10 and 24 quarter-size pixels), not halvings: a halved level's
+        // pixels jumped as the gun swayed with the breath, and what was filled in behind its top swayed with them while
+        // the view was still.
+        RenderTexture farQuarter = Temporary(width, height);
+        Graphics.Blit(frame, farQuarter, defocus, 3);
         for (int level = 0; level < DefocusLevels; level++)
         {
-            _levelFar[level] = Temporary(Mathf.Max(width >> level, 1), Mathf.Max(height >> level, 1));
-            if (level == 0)
-                Graphics.Blit(frame, _levelFar[0], defocus, 3);
-            else
-                Graphics.Blit(_levelFar[level - 1], _levelFar[level], defocus, 7);
+            _levelFar[level] = BlurWide(farQuarter, DefocusFillSigmas[level] * scale, defocus);
             defocus.SetTexture(FarIds[level], _levelFar[level]);
         }
+        RenderTexture.ReleaseTemporary(farQuarter);
 
         // The frame and how near each part of it is, at a quarter of the size.
         RenderTexture qColor = Temporary(width, height), qRad = Temporary(width, height);
@@ -232,6 +234,7 @@ internal static partial class NightVisionEyepieces
     private static readonly float[] DefocusBandMiddles = { 1f, 2.5f, 4.5f, 7f, 10.5f, 15f, 20.2f };
     private const int DefocusEncBand = 4;   // what the near parts close about goes with the gun's own (10.5)
     private const float DefocusBlurPerRadius = 0.35f;
+    private static readonly float[] DefocusFillSigmas = { 1.5f, 4f, 10f, 24f };
     private static readonly int BandHatId = Shader.PropertyToID("_BandHat"), EncInId = Shader.PropertyToID("_EncIn"),
         AspectId = Shader.PropertyToID("_Aspect"), ScopeMarginId = Shader.PropertyToID("_ScopeMargin"),
         ScopeSoftId = Shader.PropertyToID("_ScopeSoft");
