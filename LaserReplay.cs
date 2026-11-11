@@ -119,10 +119,11 @@ internal static class LaserReplay
         Player? player = Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer;
         if (player == null || !player.IsYourPlayer)
             return true;
-        bool aiming = player.HandsController != null && player.HandsController.IsAiming;
-        // From the hip the gun is left where the game put it.
-        if (!aiming && AimArms.GunAtRest)
+        // The free camera places nothing; the game's own drawing stands.
+        if (player.PointOfView == EPointOfView.FreeCamera)
             return true;
+        // From the hip too, the gun at rest included: left to the game's own LateUpdate there, the beam came away from the
+        // emitter whenever the mouse stopped (and jumped between the two as it moved), though the emitter stood where it was.
 
         Transform playerRoot = ((Component)player).transform;
         Transform? weapon = player.PlayerBones?.Weapon_Root_Anim;
