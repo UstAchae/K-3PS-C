@@ -175,20 +175,11 @@ internal static partial class NightVisionEyepieces
         var buffer = new CommandBuffer { name = "Justachae NVG sight picture" };
         buffer.GetTemporaryRT(ScopeSharpId, -1, -1, 0, FilterMode.Bilinear, RenderTextureFormat.DefaultHDR);
         buffer.Blit(BuiltinRenderTextureType.CameraTarget, ScopeSharpId);
-        BlurredInto(buffer, 0, ScopeAllIds);
-        BlurredInto(buffer, 4, ScopeNearIds);
-        BlurredInto(buffer, 5, ScopeNearBlurIds);
-        for (int i = 0; i < 5; i++)
-        {
-            buffer.SetGlobalTexture(AllIds[i], ScopeAllIds[i]);
-            buffer.SetGlobalTexture(NearIds[i], ScopeNearIds[i]);
-        }
-        buffer.SetGlobalTexture(NearBlurId, ScopeNearBlurIds[2]);
+        // The sight's own blur of what is near in its picture is left off: it was drawn with a hard edge where what is
+        // near begins (the older way, levels halved), and a jagged, shimmering patch showed in the sight's picture,
+        // where one aims (2026-11-11). The picture is taken as the sight's camera made it.
         buffer.GetTemporaryRT(ScopeTempId, -1, -1, 0, FilterMode.Bilinear, RenderTextureFormat.DefaultHDR);
-        buffer.Blit(ScopeSharpId, ScopeTempId, _scopeTritium, 3);
-        foreach (int[] ids in new[] { ScopeAllIds, ScopeNearIds, ScopeNearBlurIds })
-            foreach (int id in ids)
-                buffer.ReleaseTemporaryRT(id);
+        buffer.Blit(ScopeSharpId, ScopeTempId);
         buffer.ReleaseTemporaryRT(ScopeSharpId);
         buffer.Blit(Texture2D.blackTexture, _opticOcclusion, _scopeTritium, 8);
         buffer.SetRenderTarget(ScopeTempId);

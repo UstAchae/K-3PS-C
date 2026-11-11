@@ -182,12 +182,9 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<float> monocularSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "PVS-14 另一只眼透明度", 0.5f,
             new ConfigDescription("AN/PVS-14 单筒夜视仪只挡在一只眼前（插在双燕尾转接件的哪个槽位，就在哪只眼前），另一只眼看过去时机身往画面边缘逐渐变透明。0：不变透明（两只眼都看到完整的机身）；0.5：默认；1：变透明得最快。",
                 new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
-        ConfigEntry<float> nearBlur = SettingsLayout.Bind(Config, "头戴式成像装备", "近处虚化距离", 1f,
-            new ConfigDescription("夜视仪的物镜对焦在远处，近处的手、枪和机瞄是虚的，越近越虚，远处是清楚的。原版夜视和 BRNVG 的画面都会这样，热成像不受影响。距离从夜视仪的物镜算起：在这个距离上虚化是“近处虚化上限”的一半，更近的越来越接近上限，更远的逐渐变清楚。拉长这个距离，枪的前端和更远一点的东西也会更虚。",
-                new AcceptableValueRange<float>(0.2f, 3f), new ConfigurationManagerAttributes { Order = 0 }));
-        ConfigEntry<float> nearBlurLimit = SettingsLayout.Bind(Config, "头戴式成像装备", "近处虚化上限", 0.75f,
-            new ConfigDescription("近处虚化最多糊开多大（模糊圆斑的半径，单位为度）。越近越接近这个值，但不是一刀切：整把枪从后到前仍是越近越虚。0.5 到 1 比较合适；越大，离眼睛近的部分糊得越厉害。",
-                new AcceptableValueRange<float>(0.2f, 3f), new ConfigurationManagerAttributes { Order = 0 }));
+        ConfigEntry<bool> nearBlur = SettingsLayout.Bind(Config, "头戴式成像装备", "近处虚化", true,
+            new ConfigDescription("夜视仪的物镜对焦在远处，近处的手、枪和机瞄是虚的，越近越虚，几米外是清楚的，和真实夜视仪的物镜一样。原版夜视和 Borkel's Realistic NVGs 的画面都会这样，热成像不受影响。关掉后目镜里近处也是清楚的。",
+                null, new ConfigurationManagerAttributes { Order = 0 }));
         ConfigEntry<float> eyeNear = SettingsLayout.Bind(Config, "头戴式成像装备", "双眼近裁剪面（米）", 0.00001f,
             new ConfigDescription("夜视仪翻下时镜片里成像的近裁剪面：离眼睛比这更近的不算。太大时眼睛贴近目镜，那一侧的镜片就不成像；可以调到最小。眼睛画夜视仪外壳时最小按 0.5 毫米算（更近时灯光和阴影不稳，外壳会闪）。和「镜头位置」里主镜头的近裁剪面互不影响。",
                 new AcceptableValueRange<float>(0.00001f, 0.02f), new ConfigurationManagerAttributes { Order = 0 }));
@@ -213,8 +210,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         {
             NightVisionEyepieces.Picture = picture.Value;
             NightVisionEyepieces.TritiumBrightness = tritium.Value;
-            NightVisionEyepieces.NearBlurDistance = nearBlur.Value;
-            NightVisionEyepieces.NearBlurLimit = nearBlurLimit.Value;
+            NightVisionEyepieces.NearBlurOn = nearBlur.Value;
             HeadwearTilt.Up = headwearUp.Value;
             HeadwearTilt.Down = headwearDown.Value;
             NightVisionEyepieces.EyepieceGlow = glow.Value;
@@ -233,7 +229,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         picture.SettingChanged += (_, _) => Refresh();
         nearBlur.SettingChanged += (_, _) => Refresh();
         tritium.SettingChanged += (_, _) => Refresh();
-        nearBlurLimit.SettingChanged += (_, _) => Refresh();
         headwearUp.SettingChanged += (_, _) => Refresh();
         headwearDown.SettingChanged += (_, _) => Refresh();
         glow.SettingChanged += (_, _) => Refresh();

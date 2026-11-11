@@ -305,7 +305,11 @@ internal static partial class NightVisionEyepieces
             : cameras?.NightVision != null && cameras.NightVision.On && !cameras.NightVision.InProcessSwitching;
         bool powered = switchedOn && _flip >= 0.999f && settled;
         float power = Power(powered);
-        bool on = worn && (powered || power > 0.01f);
+        // The tubes' afterglow shown only while the game's filter is still on, the picture the lenses show: switched off
+        // while aiming the game took its filter off within five frames, the tubes' glow still a tenth, and the lenses showed
+        // the bare picture through the dead filter (a flash of the scene as the eye sees it).
+        bool filterThere = thermal || brnvg || cameras?.NightVision != null && cameras.NightVision.On;
+        bool on = worn && (powered || power > 0.01f && filterThere);
         Wake(worn && (switchedOn || on) ? renderer : null, cameras?.NightVision);
         HoldMainThermal(cameras, thermal && worn);
         KeepThermalGlow(thermalDevice);
@@ -527,6 +531,8 @@ internal static partial class NightVisionEyepieces
                 _directShader = shader;
             else if (shader.name == "Justachae/NVG/Objective")
                 _objectiveShader = shader;
+            else if (shader.name == "Justachae/NVG/Defocus")
+                _defocusShader = shader;
             else if (shader.name == "Justachae/NVG/Tube")
                 _tubeShader = shader;
         }
@@ -537,6 +543,8 @@ internal static partial class NightVisionEyepieces
         _binocularMaterial = new Material(_binocularShader) { name = "Justachae NVG eyepieces", hideFlags = HideFlags.DontSave };
         if (_objectiveShader != null)
             _objective = new Material(_objectiveShader) { name = "Justachae NVG objective", hideFlags = HideFlags.DontSave };
+        if (_defocusShader != null)
+            _defocus = new Material(_defocusShader) { name = "Justachae NVG objective defocus", hideFlags = HideFlags.DontSave };
         return true;
     }
 
