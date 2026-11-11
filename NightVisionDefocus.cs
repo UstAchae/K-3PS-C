@@ -67,8 +67,11 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(ScopeSoftId, scopeSoft != null ? scopeSoft : Texture2D.blackTexture);
         BindScope(defocus);
 
-        // Its numbers are for a 1440-line frame (quarter-size pixels there), scaled by the frame's height.
-        float scale = height / 360f;
+        // Its sizes are in quarter-size pixels as they were set: at 386 of them a radian (a 1440-line frame at the game's
+        // field). Scaled by this frame's pixels a radian, not its height alone: with the fisheye on, the frame is rendered
+        // over a far wider field, the gun is fewer pixels across while each blur stayed as many, and its dark spread was
+        // the wider about it.
+        float scale = pixelsPerRadian / DefocusPixelsPerRadianSet;
 
         // The frame and how near each part of it is, at a quarter of the size.
         RenderTexture qColor = Temporary(width, height), qRad = Temporary(width, height);
@@ -192,6 +195,7 @@ internal static partial class NightVisionEyepieces
     private static readonly float[] DefocusBandMiddles = { 1f, 2.5f, 4.5f, 7f, 10.5f, 15f, 20.2f };
     private const int DefocusEncBand = 4;   // what the near parts close about goes with the gun's own (10.5)
     private const float DefocusBlurPerRadius = 0.35f;
+    private const float DefocusPixelsPerRadianSet = 386f;
     // How much wider (quarter-size pixels) the layers are blurred again for the share they show by (as against a table).
     private const float DefocusShareSigma = 5f;
     private static RenderTexture? _gatheredQRad;
