@@ -177,14 +177,13 @@ internal static partial class NightVisionEyepieces
             RenderTexture lensMap = Target(_lensMaps, side, Mathf.Max((int)(width * LensMapScale), 8), Mathf.Max((int)(height * LensMapScale), 8), 24,
                 RenderTextureFormat.ARGB32, "Justachae NVG lens map");
             RenderTexture glassMap = Target(_glassMaps, side, lensMap.width, lensMap.height, 0, RenderTextureFormat.RG16, "Justachae NVG glass map");
-            // Until the device is on, no light comes through.
-            if (Active)
-                DrawLensMap(lensMap, glassMap, position, shift, turned, projection);
-            else
-            {
+            // Until the device is on, no light comes through; but the glass is there all the same, dark, and the scene is not seen
+            // through it. With the glass's map cleared too, the lenses were holes while the device was down and off: switched off
+            // while aiming, the game left it down for a couple of seconds before flipping it up, and the room showed in both
+            // lenses as through open tubes (a flash), until the device flipped away.
+            DrawLensMap(lensMap, glassMap, position, shift, turned, projection);
+            if (!Active)
                 ClearLensMap(lensMap);
-                ClearLensMap(glassMap);
-            }
             Transform lens = _lensNodes[side == 0 ? (a <= b ? CentreLensA : CentreLensB) : (a <= b ? CentreLensB : CentreLensA)];
             float eyeBack = Mathf.InverseLerp(DistortionNear, DistortionFar, (lens.position - position - shift).magnitude / lens.lossyScale.x);
             Vector3 eye = position + shift;
