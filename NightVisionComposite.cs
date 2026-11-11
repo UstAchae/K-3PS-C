@@ -1,6 +1,7 @@
 using System;
 using EFT.CameraControl;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
 
 namespace EFTNewCamera;
@@ -178,8 +179,54 @@ internal static partial class NightVisionEyepieces
     // (BepInEx/defocus-dump/steps-N/frame-K): the frame as it came (0), after ForTube (1), after ThroughObjective (2),
     // the lenses' picture (3), and a magnified sight's lens mask (4, as it is); with the sight's state in the log.
     private static int _stepDumps, _stepFrames;
+    // TEMP DIAG: the camera's own depth texture copied the moment it is made (after the G-buffer) and again just before
+    // the image effects, to set beside the one the image effect reads (the global _CameraDepthTexture then): if another
+    // camera made its own in between, the one read is not this camera's.
+    private static CommandBuffer? _depthAfterGBuffer, _depthBeforeEffects;
+    private static RenderTexture? _depthAtGBuffer, _depthAtEffects;
+    private static Camera? _depthDiagOn;
+    private static void DepthDiagAttach(Camera camera, int width, int height)
+    {
+        if (_depthDiagOn == camera && _depthAtGBuffer != null && _depthAtGBuffer.width == width && _depthAtGBuffer.height == height)
+            return;
+        if (_depthDiagOn != null)
+        {
+            if (_depthAfterGBuffer != null) _depthDiagOn.RemoveCommandBuffer(CameraEvent.AfterGBuffer, _depthAfterGBuffer);
+            if (_depthBeforeEffects != null) _depthDiagOn.RemoveCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, _depthBeforeEffects);
+        }
+        _depthAtGBuffer?.Release();
+        _depthAtEffects?.Release();
+        _depthAtGBuffer = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat) { name = "Justachae diag depth at G-buffer" };
+        _depthAtEffects = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat) { name = "Justachae diag depth at effects" };
+        _depthAtGBuffer.Create();
+        _depthAtEffects.Create();
+        int depthId = Shader.PropertyToID("_CameraDepthTexture");
+        _depthAfterGBuffer = new CommandBuffer { name = "Justachae diag depth after G-buffer" };
+        _depthAfterGBuffer.Blit(depthId, _depthAtGBuffer);
+        _depthBeforeEffects = new CommandBuffer { name = "Justachae diag depth before effects" };
+        _depthBeforeEffects.Blit(depthId, _depthAtEffects);
+        camera.AddCommandBuffer(CameraEvent.AfterGBuffer, _depthAfterGBuffer);
+        camera.AddCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, _depthBeforeEffects);
+        _depthDiagOn = camera;
+    }
+
+    private static void SaveDepth(Texture? depth, string path, int width, int height)
+    {
+        if (depth == null)
+            return;
+        RenderTexture copy = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.RFloat);
+        Graphics.Blit(depth, copy);
+        RenderTexture asColour = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf);
+        Graphics.Blit(copy, asColour);
+        Save(asColour, path);
+        RenderTexture.ReleaseTemporary(copy);
+        RenderTexture.ReleaseTemporary(asColour);
+    }
+
     private static void DumpSteps(RenderTexture from, RenderTexture forTube, RenderTexture throughObjective, Texture picture, Component camera)
     {
+        if (camera is Camera attachTo)
+            DepthDiagAttach(attachTo, from.width, from.height);
         if (Input.GetKeyDown(KeyCode.F11))
         {
             _stepDumps++;
@@ -212,6 +259,12 @@ internal static partial class NightVisionEyepieces
             _defocus.SetFloat(Shader.PropertyToID("_DefocusShow"), 0f);
             Save(radius, System.IO.Path.Combine(folder, "5-radius.png"), true);
             RenderTexture.ReleaseTemporary(radius);
+        }
+        {
+            string f6 = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "defocus-dump", "steps-" + _stepDumps, "frame-" + (3 - _stepFrames));
+            SaveDepth(_depthAtGBuffer, System.IO.Path.Combine(f6, "6-depth-at-gbuffer.png"), from.width, from.height);
+            SaveDepth(_depthAtEffects, System.IO.Path.Combine(f6, "7-depth-before-effects.png"), from.width, from.height);
+            SaveDepth(Shader.GetGlobalTexture("_CameraDepthTexture"), System.IO.Path.Combine(f6, "8-depth-read-now.png"), from.width, from.height);
         }
         Camera? view = camera as Camera;
         NewCameraPlugin.Log?.LogInfo($"TEMP DIAG steps {_stepDumps}/{k}: through {_scope.Through}, pullback {ScopePullback:F3}, masked {masked}, lens noted {ScopeLensNoted}, light {_scope.Light:F3}, ahead {_diagAhead:F4}, fov {(view != null ? view.fieldOfView : -1f):F2}, frame {from.width}x{from.height}, defocus on {_defocus != null}");
