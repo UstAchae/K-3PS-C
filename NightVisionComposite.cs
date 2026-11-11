@@ -144,6 +144,7 @@ internal static partial class NightVisionEyepieces
         RenderTexture? lensed = lens ? RenderTexture.GetTemporary(from.width, from.height, 0, from.format) : null;
         RenderTexture into = lensed != null ? lensed : to;
         bool eyes = _eyesFrame == Time.frameCount;
+        DiagFlip(camera, eyes, composite != null, from); // TEMP DIAG
         if (composite == null || glow == null || _body == null || !eyes)
             Graphics.Blit(from, into);
         else
@@ -169,6 +170,19 @@ internal static partial class NightVisionEyepieces
         }
         if (staged)
             propagator!.ReleaseSourceDestination(from, to);
+    }
+
+    // TEMP DIAG: for two seconds after the device is switched, every frame's path through the image effect and the
+    // state that picks it, with the frame's mean brightness inside the middle of each lens's half and outside them.
+    private static bool _diagWasOn; private static float _diagUntil;
+    private static void DiagFlip(Component camera, bool eyes, bool composite, RenderTexture from)
+    {
+        BSG.CameraEffects.NightVision? nv = BodyVisibility.Cameras?.NightVision;
+        bool on = nv != null && nv.On;
+        if (on != _diagWasOn) { _diagWasOn = on; _diagUntil = Time.time + 2f; }
+        if (Time.time >= _diagUntil)
+            return;
+        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG flipimg f{Time.frameCount}: game NV on {on}, switching {nv?.InProcessSwitching}, mask {(nv?.TextureMask != null ? nv.TextureMask.enabled.ToString() : "none")}, active {Active}, binocular {BinocularOn}, hold {HoldFilter}, eyes {eyes}, composite {composite}, split {_split:F2}, image on {(_eyepieceImage != null && _eyepieceImage.enabled)}, staged {camera.GetComponent<SSAAPropagator>() != null}");
     }
 
     // What the lenses show this frame, from the frame as it stands: made into a temporary (made) when it is made here.
