@@ -335,6 +335,12 @@ internal static class AimArms
                     aimPoint += ChestStance.Offset;
                 Transform? root = bones.Weapon_Root_Anim;
                 SteadyHead(player, cameraPosition, cameraRotation, out Vector3 steadyPosition, out Quaternion steadyRotation);
+                // The stock at the chest: on the view itself, balanced already (the head is not held for it).
+                if (gunItself != null)
+                {
+                    steadyPosition = cameraPosition;
+                    steadyRotation = cameraRotation;
+                }
                 Quaternion bodyRotation = _bodyLook * Quaternion.Inverse(_smoothLook) * steadyRotation;
                 Vector3 bodyPosition = CameraPosition.Resolve(steadyPosition - CameraPosition.Resolve(Vector3.zero, steadyRotation), bodyRotation);
                 // What the recoil will still do to the sight once it is placed (the flip about the recoil pivot, and the
@@ -1568,9 +1574,9 @@ internal static class AimArms
             return;
 
         bool aiming = player.HandsController != null && player.HandsController.IsAiming;
-        // The stock at the chest too: it is the aim, the gun only placed elsewhere, and the gun is placed on this steadied head. Left
-        // free (and balanced), the view kept part of the head's own motion that the gun did not, and the gun shook on the screen.
-        float target = aiming && _smoothedHead.sqrMagnitude <= 0.01f ? 1f : 0f;
+        // The stock at the chest leaves the head free, as at the hip: the view goes with the head and the balance, and the gun is
+        // placed on that view (AlignToCameraCore), so nothing changes as the stance is let go.
+        float target = aiming && !ChestStance.Active && _smoothedHead.sqrMagnitude <= 0.01f ? 1f : 0f;
         _headLock = Mathf.MoveTowards(_headLock, target, Time.deltaTime / (target > _headLock ? HeadLockSeconds : LeaveSeconds));
     }
 
