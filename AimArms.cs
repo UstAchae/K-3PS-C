@@ -1747,6 +1747,37 @@ internal static class AimArms
         return depth + shift;
     }
 
+    // TEMPORARY (mounted guns' eye): once a second on a mounted gun, aimed, with the mod on or off, how far the camera is
+    // behind the sight and every term of the eye's depth, now and as 1.6.1 had it.
+    private static float _diagMountedAt;
+    internal static void DiagMounted()
+    {
+        Player? player = Singleton<GameWorld>.Instance?.MainPlayer;
+        ProceduralWeaponAnimation? animation = player?.ProceduralWeaponAnimation;
+        if (player == null || animation == null || player.MovementContext == null || player.HandsController == null || !player.HandsController.IsAiming
+            || !(player.MovementContext.IsInMountedState || player.MovementContext.IsStationaryWeaponInHands) || Time.time - _diagMountedAt < 1f)
+            return;
+        _diagMountedAt = Time.time;
+        Camera? camera = Camera.main;
+        Transform? bone = animation.ScopeAimTransforms != null && animation.ScopeAimTransforms.Count > 0 ? Scopes.Current(animation)?.Bone : null;
+        var hands = animation.HandsContainer;
+        if (camera == null || bone == null || hands == null || hands.Weapon == null)
+            return;
+        ResolveIronSight(animation, bone, out Vector3 sight, out Vector3 forward);
+        forward = forward.sqrMagnitude > 0.0001f ? forward.normalized : -bone.forward;
+        Vector3 toSight = sight - camera.transform.position;
+        float behind = Vector3.Dot(toSight, forward);
+        float off = Vector3.ProjectOnPlane(toSight, forward).magnitude;
+        WeaponPrefab.AimPlane? current = animation._currentAimingPlane, fallback = hands.DefaultAimPlane;
+        float shift = hands.Weapon.localPosition.y;
+        float boneDepth = -hands.Weapon.InverseTransformPoint(bone.position).y;
+        WeaponPrefab.AimPlane? old = Scopes.Current(animation) is { IsOptic: true } ? fallback : current ?? fallback;
+        NewCameraPlugin.Log?.LogInfo($"DiagMounted mod={NewCameraSwitch.Enabled} stationary={player.MovementContext.IsStationaryWeaponInHands} sight={bone.name}"
+            + $" camera behind sight {behind * 1000f:F0} mm, off its line {off * 1000f:F0} mm; currentPlane={current?.Depth:F3} defaultPlane={fallback?.Depth:F3}"
+            + $" farPlane={animation._farPlane?.Depth:F3} shift={shift:F3} boneDepth={boneDepth:F3} eyeDepth={EyeDepth(animation):F3}"
+            + $" relief now={SightRelief(animation, bone):F3} as 1.6.1={(old != null ? boneDepth - old.Depth : 0f):F3}");
+    }
+
     private static float SightRelief(ProceduralWeaponAnimation animation, Transform bone)
     {
         if (animation.HandsContainer == null || animation.HandsContainer.Weapon == null)
