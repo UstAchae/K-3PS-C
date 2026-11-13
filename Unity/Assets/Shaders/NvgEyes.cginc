@@ -8,8 +8,6 @@ float4 _EyePos0, _EyePos1;         // xyz each eye (world); w how strongly it se
 float4 _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;   // where each tube looks (world)
 float4 _TubeField;                // x cosine of the field's half angle, y of where it starts to fade
 float4 _TubeFused;                // 1 for each tube that shows _Fused (another mod's picture laid into the tube's) instead of _NightVision
-float _FuseOver;                  // 1: the right eye's lenses (the fused ones) laid over the left eye's where both reach
-float _FuseSoft;                  // how far in from the right lens's edge it fades into the left's there (uv of the frame's height)
 float4 _Power;                    // z frame
 float4 _TubePower, _TubeMottle;   // each tube's output (0 off, 1 on), and how mottled while it settles
 float _Overscan;                  // how far past the split each eye's view reaches, as a share of the frame
@@ -84,23 +82,6 @@ void eyeSide (float2 uv, bool right, out float4 eye, out float4 light, out float
  dark = saturate(glass.g - light.w);
 }
 
-// How much of the right eye's fused lenses lies about this pixel: their lens map averaged over a ring _FuseSoft
-// across (and the pixel itself), so 0.5 on the lens's edge, 1 a ring's width inside it.
-float fusedCover (float2 uv) {
- float span = _EyeSpan.y;
- float2 local = float2((uv.x - (1 - span)) / span, uv.y);
- float aspect = _MainTex_TexelSize.z / max(_MainTex_TexelSize.w, 1);
- float2 reach = float2(_FuseSoft / aspect / span, _FuseSoft);
- float4 m = tex2Dlod(_RightLens, float4(local, 0, 0)) * _TubeFused;
- float sum = max(max(m.x, m.y), max(m.z, m.w));
- for (int k = 0; k < 12; k++) {
-  float a = k * 0.5235988;
-  m = tex2Dlod(_RightLens, float4(local + float2(cos(a), sin(a)) * reach, 0, 0)) * _TubeFused;
-  sum += max(max(m.x, m.y), max(m.z, m.w));
- }
- return sum / 13;
-}
-
 // This pixel's eye: the left eye's on the left half, the right eye's on the right, eased from one to the other across
 // the strip in the middle that both views reach, so the two eyes' slightly different views leave no crease there.
 // A monocular's one eye everywhere, fading over the other eye's half: that eye sees past the device, and the two
@@ -115,25 +96,6 @@ void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover, out fl
   // Only the housing fades: the eyepiece's own picture (and its glass, which keeps the scene from showing through it) is
   // the tube's, seen whole wherever the lens is; faded with the housing, part of the eyepiece showed the bare scene.
   eye *= shown;
-  return;
- }
- // The right eye's lenses carry another mod's picture (EyepieceFusion): where the two eyes' lenses meet, the right
- // eye's is laid over the left's, so that picture runs on across the middle into the left lens's circle instead of
- // being cut where the left eye's view takes over. Both lenses show the same scene; only the fused picture tells them
- // apart. Past the right lens, the left eye's view as ever.
- if (_FuseOver > 0.5) {
-  float4 leftEye, rightEye; float4 leftLight, rightLight; float leftCover, rightCover, leftDark, rightDark;
-  eyeSide(uv, false, leftEye, leftLight, leftCover, leftDark);
-  eyeSide(uv, true, rightEye, rightLight, rightCover, rightDark);
-  eye = lerp(leftEye, rightEye, toRight);
-  float4 under = leftLight * (1 - toRight);
-  // Over the left lens's picture the right lens fades out toward its edge (a ring's width inside it), so neither its
-  // rim nor the fused picture's edge shows as a hard line across the left circle; where nothing lies beneath, as ever.
-  float soft = saturate((fusedCover(uv) - 0.5) * 2);
-  float4 over = rightLight * lerp(1, soft, saturate(under.w));
-  light = over + under * (1 - over.w);
-  cover = max(rightCover, lerp(leftCover, rightCover, toRight));
-  dark = min(lerp(leftDark, rightDark, toRight), 1 - rightLight.w);
   return;
  }
  if (toRight <= 0) { eyeSide(uv, false, eye, light, cover, dark); return; }
