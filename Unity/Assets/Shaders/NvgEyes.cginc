@@ -20,12 +20,17 @@ float4 _Lamp;                     // x the lenses' brightness, y the glow's, z t
 float _Mode;
 float _LensClear;                 // 1: the lenses' own surface (its reflections, its highlights) left out over their picture
 
+float4 _FusedRect;                // the other mod's picture (EyepieceFusion): xy its centre, zw its half width and height (uv); z 0: none
+
 float3 nightVision (float3 ray, float fused) {
  float4 c = mul(_NightVisionVP, float4(ray, 0));
  float2 uv = c.xy / c.w * 0.5 + 0.5;
  float inside = step(0, c.w) * step(0, uv.x) * step(uv.x, 1) * step(0, uv.y) * step(uv.y, 1);
  float3 tube = tex2D(_NightVision, uv).rgb;
- if (fused > 0.5) tube = tex2D(_Fused, uv).rgb;
+ // Within the fused picture's rectangle, it whatever lens is looked through: one whole rectangle, not cut where the
+ // left eye's view takes over or at the edge of the right lens.
+ float inRect = _FusedRect.z > 0 ? step(abs(uv.x - _FusedRect.x), _FusedRect.z) * step(abs(uv.y - _FusedRect.y), _FusedRect.w) : 0;
+ if (fused > 0.5 || inRect > 0.5) tube = tex2D(_Fused, uv).rgb;
  return tube * inside;
 }
 

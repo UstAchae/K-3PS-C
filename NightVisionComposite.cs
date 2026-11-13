@@ -290,6 +290,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int TubeFusedId = Shader.PropertyToID("_TubeFused");
     private static readonly int FuseOverId = Shader.PropertyToID("_FuseOver");
     private static readonly int FuseSoftId = Shader.PropertyToID("_FuseSoft");
+    private static readonly int FusedRectId = Shader.PropertyToID("_FusedRect");
     private const float FuseSoft = 0.035f;     // the right lens's fade over the left's, in from its edge (uv of the frame's height)
     private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture, Texture? fusedPicture)
     {
@@ -299,6 +300,10 @@ internal static partial class NightVisionEyepieces
         composite.SetVector(TubeFusedId, fusedPicture != null ? _fusedTubes : Vector4.zero);
         composite.SetFloat(FuseOverId, fusedPicture != null ? 1f : 0f);
         composite.SetFloat(FuseSoftId, FuseSoft);
+        Vector4 field = Interop.EyepieceFusion.FieldInMainUv;
+        Vector2 share = Interop.EyepieceFusion.FusedRect;
+        composite.SetVector(FusedRectId, fusedPicture != null && field.w > 0f
+            ? new Vector4(field.x, field.y, share.x * field.z / field.w, share.y * field.z) : Vector4.zero);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
         composite.SetTexture(GlowId, lit != null ? lit : Texture2D.blackTexture);
@@ -307,6 +312,7 @@ internal static partial class NightVisionEyepieces
         composite.SetTexture(FusedId, Texture2D.blackTexture);
         composite.SetVector(TubeFusedId, Vector4.zero);
         composite.SetFloat(FuseOverId, 0f);
+        composite.SetVector(FusedRectId, Vector4.zero);
         composite.SetTexture(GlowId, Texture2D.blackTexture);
         if (lit != null)
             RenderTexture.ReleaseTemporary(lit);

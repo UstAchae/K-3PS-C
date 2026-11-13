@@ -31,6 +31,10 @@ public static class EyepieceFusion
     // How far the device is flipped down: 0 up, 1 down (the game's own flip, as it eases).
     public static float Deployed { get; internal set; }
 
+    // The rectangle the other mod draws its picture in, as shares of the eyepiece circle's diameter (width, height),
+    // centred on FieldInMainUv.xy: shown whole in both lenses wherever they see it. The other mod may set it.
+    public static Vector2 FusedRect = new Vector2(0.68f, 0.52f);
+
     // Set by the other mod: (i2, dest) -> whether dest was written.
     public static Func<RenderTexture, RenderTexture, bool>? Fuse;
 }
