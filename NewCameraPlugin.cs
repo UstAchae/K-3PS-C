@@ -404,8 +404,8 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
                 new AcceptableValueList<string>(rework, RecoilMode.Game)));
         recoil.SettingChanged += (_, _) => RecoilMode.Set(recoil.Value == rework);
         RecoilMode.Set(recoil.Value == rework);
-        _aimDistance = SettingsLayout.Bind(Config, "瞄准", "前后距离", -0.05f,
-            new ConfigDescription("瞄准后沿镜头前方向移动枪，单位为米。负值让枪离镜头更近。",
+        _aimDistance = SettingsLayout.Bind(Config, "瞄准", "前后距离", 0f,
+            new ConfigDescription("瞄准时枪离镜头多远，在原版第一人称的位置上前后移动，单位为米。0 是原版的位置；负值让枪离镜头更近，正值更远。",
                 new AcceptableValueRange<float>(AimDistanceMin, AimDistanceMax)));
         _aimDistanceFarther = SettingsLayout.Bind(Config, "瞄准", "前后距离调远快捷键", new KeyboardShortcut(KeyCode.Equals),
             "瞄准时按住，瞄准的前后距离慢慢变大，枪离镜头更远。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
@@ -421,7 +421,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     }
 
     private const float AimDistanceMin = -0.10f;
-    private const float AimDistanceMax = 0f;
+    private const float AimDistanceMax = 0.10f;
     private const float AimDistanceSpeed = 0.05f;
     private ConfigEntry<float>? _aimDistance;
     private ConfigEntry<KeyboardShortcut>? _aimDistanceFarther;
