@@ -8,6 +8,7 @@ float4 _EyePos0, _EyePos1;         // xyz each eye (world); w how strongly it se
 float4 _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;   // where each tube looks (world)
 float4 _TubeField;                // x cosine of the field's half angle, y of where it starts to fade
 float4 _TubeFused;                // 1 for each tube that shows _Fused (another mod's picture laid into the tube's) instead of _NightVision
+float _FuseOver;                  // 1: the right eye's lenses (the fused ones) laid over the left eye's where both reach
 float4 _Power;                    // z frame
 float4 _TubePower, _TubeMottle;   // each tube's output (0 off, 1 on), and how mottled while it settles
 float _Overscan;                  // how far past the split each eye's view reaches, as a share of the frame
@@ -91,6 +92,21 @@ void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover, out fl
   // Only the housing fades: the eyepiece's own picture (and its glass, which keeps the scene from showing through it) is
   // the tube's, seen whole wherever the lens is; faded with the housing, part of the eyepiece showed the bare scene.
   eye *= shown;
+  return;
+ }
+ // The right eye's lenses carry another mod's picture (EyepieceFusion): where the two eyes' lenses meet, the right
+ // eye's is laid over the left's, so that picture runs on across the middle into the left lens's circle instead of
+ // being cut where the left eye's view takes over. Both lenses show the same scene; only the fused picture tells them
+ // apart. Past the right lens, the left eye's view as ever.
+ if (_FuseOver > 0.5) {
+  float4 leftEye, rightEye; float4 leftLight, rightLight; float leftCover, rightCover, leftDark, rightDark;
+  eyeSide(uv, false, leftEye, leftLight, leftCover, leftDark);
+  eyeSide(uv, true, rightEye, rightLight, rightCover, rightDark);
+  eye = lerp(leftEye, rightEye, toRight);
+  float4 under = leftLight * (1 - toRight);
+  light = rightLight + under * (1 - rightLight.w);
+  cover = max(rightCover, lerp(leftCover, rightCover, toRight));
+  dark = min(lerp(leftDark, rightDark, toRight), 1 - rightLight.w);
   return;
  }
  if (toRight <= 0) { eyeSide(uv, false, eye, light, cover, dark); return; }

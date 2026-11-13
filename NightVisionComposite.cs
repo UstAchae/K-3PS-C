@@ -288,12 +288,14 @@ internal static partial class NightVisionEyepieces
     // The eyepieces put together over the frame (from) into to, with picture as what the lenses show.
     private static readonly int FusedId = Shader.PropertyToID("_Fused");
     private static readonly int TubeFusedId = Shader.PropertyToID("_TubeFused");
+    private static readonly int FuseOverId = Shader.PropertyToID("_FuseOver");
     private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture, Texture? fusedPicture)
     {
         composite.SetFloat(ModeId, 1f);
         composite.SetTexture(NightVisionId, picture);
         composite.SetTexture(FusedId, fusedPicture != null ? fusedPicture : Texture2D.blackTexture);
         composite.SetVector(TubeFusedId, fusedPicture != null ? _fusedTubes : Vector4.zero);
+        composite.SetFloat(FuseOverId, fusedPicture != null ? 1f : 0f);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
         composite.SetTexture(GlowId, lit != null ? lit : Texture2D.blackTexture);
@@ -301,6 +303,7 @@ internal static partial class NightVisionEyepieces
         composite.SetTexture(NightVisionId, Texture2D.blackTexture);
         composite.SetTexture(FusedId, Texture2D.blackTexture);
         composite.SetVector(TubeFusedId, Vector4.zero);
+        composite.SetFloat(FuseOverId, 0f);
         composite.SetTexture(GlowId, Texture2D.blackTexture);
         if (lit != null)
             RenderTexture.ReleaseTemporary(lit);
