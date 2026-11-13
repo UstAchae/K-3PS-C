@@ -162,6 +162,7 @@ internal static partial class NightVisionEyepieces
     private static int _flipRingAt, _flipAfter, _flipEdges;
     private static bool _flipWasDirect;
     internal static int DiagRendersFrame = -1;
+    internal static Vector3 DiagRightShift;
     // TEMP DIAG: the screen saved every frame from late in a flip up (flip under 0.35 and falling) to 15 frames after drawing
     // it here stops, twice, to BepInEx/K3PSC-flip: frame, whether drawn here, flip.
     private static float _shotFlipLast = -1f;
@@ -220,7 +221,7 @@ internal static partial class NightVisionEyepieces
                 parts += $" [{r.name} {(r.gameObject.activeInHierarchy ? "" : "inactive ")}{(r.enabled ? "" : "disabled ")}{r.shadowCastingMode} seen {r.isVisible} layer {r.gameObject.layer}]";
             parts += $"; camera mask has layer {_body.gameObject.layer}: {(camera.cullingMask & (1 << _body.gameObject.layer)) != 0}; renders reapplied this frame {DiagRendersFrame == Time.frameCount}";
         }
-        string line = $"frame {Time.frameCount}: direct {_direct}, active {Active}, flip {_flip:F3}, rotator t {t:F3}, split {_split:F3}; body by the game at {Mm(view.InverseTransformPoint(_body.position))}, {drawn}; pieces {_pieces.Count}, hidden {_hidden.Count}, twins {_twins.Count}{twins}{parts}";
+        string line = $"frame {Time.frameCount}: direct {_direct}, active {Active}, flip {_flip:F3}, rotator t {t:F3}, split {_split:F3}, right eye from the camera (last frame) {Mm(view.InverseTransformDirection(DiagRightShift))}; body by the game at {Mm(view.InverseTransformPoint(_body.position))}, {drawn}; pieces {_pieces.Count}, hidden {_hidden.Count}, twins {_twins.Count}{twins}{parts}";
         if (_direct != _flipWasDirect)
         {
             _flipWasDirect = _direct;

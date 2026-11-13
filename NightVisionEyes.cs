@@ -200,6 +200,7 @@ internal static partial class NightVisionEyepieces
         DiagEyeSway(camera, rightLens, position + rightShift); // TEMP DIAG
         leftShift = KeptClear(leftLens, position, leftShift);
         rightShift = KeptClear(rightLens, position, rightShift);
+        DiagRightShift = rightShift; // TEMP DIAG
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
         float split = monocular >= 0 ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
@@ -272,6 +273,9 @@ internal static partial class NightVisionEyepieces
     // An eye's shift from the camera, with as much added along its eyepiece's axis as keeps it EyeClear in front of the
     // eyepiece's mouth (its Centre, as the lens node stands), or of its eyecup's lip where it has one: an eye brought
     // inside the eyecup sees only the cup's inside and the tube's (the mount slid toward the face, the head turned).
+    // Only as far as the device is down (_split), as the eyes themselves come in: flipping up, the eyepiece turns away
+    // over the eye, which then stands "behind" it; held clear in full, the eye was thrown out along the turned axis, the
+    // device drawn here seen from there, and it jumped where the game took it back, from the camera.
     private const float EyeClear = 0.002f;
     private static Vector3 KeptClear(Transform lens, Vector3 position, Vector3 shift)
     {
@@ -285,7 +289,7 @@ internal static partial class NightVisionEyepieces
             _eyeHeldNoted = true;
             NewCameraPlugin.Log?.LogInfo($"NVG: an eye held back in front of its eyepiece ({along * 1000f:F1} mm from its mouth, kept to {least * 1000f:F1} mm).");
         }
-        return shift + lens.forward * (least - along);
+        return shift + lens.forward * ((least - along) * Mathf.Clamp01(_split));
     }
     private static bool _eyeHeldNoted;
 
