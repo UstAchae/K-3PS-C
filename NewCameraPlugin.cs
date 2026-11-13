@@ -404,12 +404,56 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
                 new AcceptableValueList<string>(rework, RecoilMode.Game)));
         recoil.SettingChanged += (_, _) => RecoilMode.Set(recoil.Value == rework);
         RecoilMode.Set(recoil.Value == rework);
+        _aimDistance = SettingsLayout.Bind(Config, "瞄准", "前后距离", -0.05f,
+            new ConfigDescription("瞄准后沿镜头前方向移动枪，单位为米。负值让枪离镜头更近。",
+                new AcceptableValueRange<float>(AimDistanceMin, AimDistanceMax)));
+        _aimDistanceFarther = SettingsLayout.Bind(Config, "瞄准", "前后距离调远快捷键", new KeyboardShortcut(KeyCode.Equals),
+            "瞄准时按住，瞄准的前后距离慢慢变大，枪离镜头更远。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
+        _aimDistanceCloser = SettingsLayout.Bind(Config, "瞄准", "前后距离调近快捷键", new KeyboardShortcut(KeyCode.Minus),
+            "瞄准时按住，瞄准的前后距离慢慢变小，枪离镜头更近。不瞄准时这个键不起作用（腰射时同样的键调夜视仪挂架）。");
         ConfigEntry<float> recoilStrength = SettingsLayout.Bind(Config, "瞄准", "后坐力力度", 1f,
             new ConfigDescription("原版后坐力的力度：枪往后顶、枪口上翻、镜头跟着枪口转、镜头自己的那一下，一起按这个数放大或缩小。1 是原版第一人称，0 是都没有。子弹跟着枪口走。“后坐力”选 SPTRecoilReworkLegacy 时不起作用（那时按它自己的设置）。",
                 new AcceptableValueRange<float>(0f, 2f)));
         recoilStrength.SettingChanged += (_, _) => AimArms.RecoilStrength = recoilStrength.Value;
         AimArms.RecoilStrength = recoilStrength.Value;
+        _aimDistance.SettingChanged += (_, _) => AimArms.ForwardDistance = _aimDistance.Value;
+        AimArms.ForwardDistance = _aimDistance.Value;
     }
+
+    private const float AimDistanceMin = -0.10f;
+    private const float AimDistanceMax = 0f;
+    private const float AimDistanceSpeed = 0.05f;
+    private ConfigEntry<float>? _aimDistance;
+    private ConfigEntry<KeyboardShortcut>? _aimDistanceFarther;
+    private ConfigEntry<KeyboardShortcut>? _aimDistanceCloser;
+
+    private void AdjustAimDistance()
+    {
+        if (_aimDistance == null || _aimDistanceFarther == null || _aimDistanceCloser == null || !NewCameraSwitch.Enabled)
+            return;
+        // Only while aiming: the same keys set the helmet mount at the hip.
+        // Not in the stance at the chest (its place is set in the settings).
+        bool aiming = Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer?.ProceduralWeaponAnimation?.IsAiming == true && !ChestStance.Active;
+        float step = 0f;
+        if (aiming && _aimDistanceFarther.Value.IsPressed())
+            step += AimDistanceSpeed * Time.deltaTime;
+        if (aiming && _aimDistanceCloser.Value.IsPressed())
+            step -= AimDistanceSpeed * Time.deltaTime;
+
+        // Setting the config value saves the whole file, so it is written once when the key is let go.
+        if (step != 0f)
+        {
+            AimArms.ForwardDistance = Mathf.Clamp(AimArms.ForwardDistance + step, AimDistanceMin, AimDistanceMax);
+            _aimDistanceHeld = true;
+        }
+        else if (_aimDistanceHeld)
+        {
+            _aimDistanceHeld = false;
+            _aimDistance.Value = AimArms.ForwardDistance;
+        }
+    }
+
+    private bool _aimDistanceHeld;
 
 
     // The follow delay and the view's share of the recoil are the code's own (AimArms), with no settings.
@@ -582,6 +626,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void Update()
     {
         OpticElevation.UpdateHeld();
+        AdjustAimDistance();
         DovetailSlots.Update();
     }
 
