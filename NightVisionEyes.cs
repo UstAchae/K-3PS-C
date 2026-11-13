@@ -93,14 +93,21 @@ internal static partial class NightVisionEyepieces
         ClaimFusion(camera);
     }
 
-    // A fusion device's eyepieces shown this frame: claimed for EyepieceFusion, with where its tubes look on the screen
-    // (the objectives' axis, the mean of the two eyepieces' axes) and how far it is down.
+    // A fusion device's eyepieces shown this frame: claimed for EyepieceFusion, with where its right tube looks on the
+    // screen and how far it is down. The ENVG-B lays its thermal into the right tube only (the wearer's right, of the
+    // two eyepieces the one further along the camera's right); the left stays the tube's own.
+    private static Vector4 _fusedTubes;
     private static void ClaimFusion(Camera camera)
     {
         if (!_device.Fusion || _lensNodes.Length == 0 || !LensesOn(camera))
             return;
         Transform a = _lensNodes[CentreLensA], b = _lensNodes[Mathf.Min(CentreLensB, _lensNodes.Length - 1)];
-        Vector3 axis = (-a.forward - b.forward).normalized;
+        Vector3 right = camera.transform.right;
+        float middle = (Vector3.Dot(a.position, right) + Vector3.Dot(b.position, right)) * 0.5f;
+        Transform rightTube = Vector3.Dot(a.position, right) >= Vector3.Dot(b.position, right) ? a : b;
+        for (int i = 0; i < 4; i++)
+            _fusedTubes[i] = i < _lensNodes.Length && Vector3.Dot(_lensNodes[i].position, right) > middle ? 1f : 0f;
+        Vector3 axis = -rightTube.forward;
         Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
         Vector3 ahead = camera.worldToCameraMatrix.MultiplyPoint3x4(camera.transform.position + axis * 100f);
         Vector4 clip = projection * new Vector4(ahead.x, ahead.y, ahead.z, 1f);

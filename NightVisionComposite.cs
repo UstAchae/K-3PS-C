@@ -156,9 +156,9 @@ internal static partial class NightVisionEyepieces
             ScopeLensStep(camera, from);
             Texture picture = LensPicture(camera, ThroughObjective(camera, ForTube(from, ref tubed), ref focused), ref made);
             picture = EaseGrain(picture, ref made);
-            picture = Fused(picture, ref fused);
+            Texture? fusedPicture = Fused(picture, ref fused);
             ReleaseMask();
-            Compose(composite, glow, from, into, picture);
+            Compose(composite, glow, from, into, picture, fusedPicture);
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
             if (tubed != null)
@@ -177,13 +177,14 @@ internal static partial class NightVisionEyepieces
             propagator!.ReleaseSourceDestination(from, to);
     }
 
-    // Another mod's picture laid into the tube's (EyepieceFusion), on a frame the eyepieces claimed for it.
+    // Another mod's picture laid into the tube's (EyepieceFusion), on a frame the eyepieces claimed for it: for the
+    // tubes it goes into (_fusedTubes), the others keep the tube's own. Null when there is none this frame.
     private static bool _fuseFailed, _fuseNoted;
-    private static Texture Fused(Texture picture, ref RenderTexture? fused)
+    private static Texture? Fused(Texture picture, ref RenderTexture? fused)
     {
         Func<RenderTexture, RenderTexture, bool>? fuse = Interop.EyepieceFusion.Fuse;
         if (fuse == null || _fuseFailed || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || picture is not RenderTexture i2)
-            return picture;
+            return null;
         fused = RenderTexture.GetTemporary(i2.width, i2.height, 0, i2.format);
         bool wrote;
         try
@@ -194,14 +195,14 @@ internal static partial class NightVisionEyepieces
         {
             _fuseFailed = true;
             NewCameraPlugin.Log?.LogError($"NVG fusion: the other mod's picture failed, the eyepieces show the tube's alone from now on: {e}");
-            return picture;
+            return null;
         }
         if (wrote && !_fuseNoted)
         {
             _fuseNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the other mod's picture laid into the eyepieces ({i2.width}x{i2.height} {i2.format}).");
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the other mod's picture laid into the eyepieces ({i2.width}x{i2.height} {i2.format}; tubes {_fusedTubes}).");
         }
-        return wrote ? fused : picture;
+        return wrote ? fused : null;
     }
 
     // Once: the frame's format at the eyepieces' stage, and whether the SSAA stage has taken it to display range by then
@@ -285,15 +286,21 @@ internal static partial class NightVisionEyepieces
     }
 
     // The eyepieces put together over the frame (from) into to, with picture as what the lenses show.
-    private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture)
+    private static readonly int FusedId = Shader.PropertyToID("_Fused");
+    private static readonly int TubeFusedId = Shader.PropertyToID("_TubeFused");
+    private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture, Texture? fusedPicture)
     {
         composite.SetFloat(ModeId, 1f);
         composite.SetTexture(NightVisionId, picture);
+        composite.SetTexture(FusedId, fusedPicture != null ? fusedPicture : Texture2D.blackTexture);
+        composite.SetVector(TubeFusedId, fusedPicture != null ? _fusedTubes : Vector4.zero);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
         composite.SetTexture(GlowId, lit != null ? lit : Texture2D.blackTexture);
         Graphics.Blit(from, to, composite);
         composite.SetTexture(NightVisionId, Texture2D.blackTexture);
+        composite.SetTexture(FusedId, Texture2D.blackTexture);
+        composite.SetVector(TubeFusedId, Vector4.zero);
         composite.SetTexture(GlowId, Texture2D.blackTexture);
         if (lit != null)
             RenderTexture.ReleaseTemporary(lit);

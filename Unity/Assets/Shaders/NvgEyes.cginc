@@ -1,12 +1,13 @@
 // Shared by NvgBinocular.shader and NvgGlow.shader: one eye's view of the eyepieces at a pixel of the main frame.
 #include "UnityCG.cginc"
-sampler2D _MainTex, _NightVision, _LeftEye, _RightEye, _LeftLens, _RightLens, _LeftGlass, _RightGlass, _Glow;
+sampler2D _MainTex, _NightVision, _Fused, _LeftEye, _RightEye, _LeftLens, _RightLens, _LeftGlass, _RightGlass, _Glow;
 float4 _MainTex_TexelSize;
 float4x4 _NightVisionVP;          // the main camera's view-projection (not jittered)
 float4x4 _EyeInvVP0, _EyeInvVP1;  // each eye's half view, normalised device coordinates to world directions (its view turned, not moved)
 float4 _EyePos0, _EyePos1;         // xyz each eye (world); w how strongly it sees the eyepieces' distortion
 float4 _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;   // where each tube looks (world)
 float4 _TubeField;                // x cosine of the field's half angle, y of where it starts to fade
+float4 _TubeFused;                // 1 for each tube that shows _Fused (another mod's picture laid into the tube's) instead of _NightVision
 float4 _Power;                    // z frame
 float4 _TubePower, _TubeMottle;   // each tube's output (0 off, 1 on), and how mottled while it settles
 float _Overscan;                  // how far past the split each eye's view reaches, as a share of the frame
@@ -17,11 +18,13 @@ float4 _Lamp;                     // x the lenses' brightness, y the glow's, z t
 float _Mode;
 float _LensClear;                 // 1: the lenses' own surface (its reflections, its highlights) left out over their picture
 
-float3 nightVision (float3 ray) {
+float3 nightVision (float3 ray, float fused) {
  float4 c = mul(_NightVisionVP, float4(ray, 0));
  float2 uv = c.xy / c.w * 0.5 + 0.5;
  float inside = step(0, c.w) * step(0, uv.x) * step(uv.x, 1) * step(0, uv.y) * step(uv.y, 1);
- return tex2D(_NightVision, uv).rgb * inside;
+ float3 tube = tex2D(_NightVision, uv).rgb;
+ if (fused > 0.5) tube = tex2D(_Fused, uv).rgb;
+ return tube * inside;
 }
 
 float field (float3 ray, float4 axis) { return smoothstep(_TubeField.x, _TubeField.y, dot(ray, axis.xyz)); }
@@ -62,10 +65,10 @@ void eyeSide (float2 uv, bool right, out float4 eye, out float4 light, out float
  float4 through = open * _TubePower * lerp(1, 0.35 + 0.9 * blotches(uv), _TubeMottle);
  float strength = right ? _EyePos1.w : _EyePos0.w;
  float3 picture = 0;
- if (through.x > 0) picture += through.x * nightVision(through_eyepiece(ray, _TubeAxis0, strength));
- if (through.y > 0) picture += through.y * nightVision(through_eyepiece(ray, _TubeAxis1, strength));
- if (through.z > 0) picture += through.z * nightVision(through_eyepiece(ray, _TubeAxis2, strength));
- if (through.w > 0) picture += through.w * nightVision(through_eyepiece(ray, _TubeAxis3, strength));
+ if (through.x > 0) picture += through.x * nightVision(through_eyepiece(ray, _TubeAxis0, strength), _TubeFused.x);
+ if (through.y > 0) picture += through.y * nightVision(through_eyepiece(ray, _TubeAxis1, strength), _TubeFused.y);
+ if (through.z > 0) picture += through.z * nightVision(through_eyepiece(ray, _TubeAxis2, strength), _TubeFused.z);
+ if (through.w > 0) picture += through.w * nightVision(through_eyepiece(ray, _TubeAxis3, strength), _TubeFused.w);
  light = float4(picture / max(dot(open, 1), 1), saturate(dot(open, 1)));
  float4 glass = right ? tex2D(_RightGlass, local) : tex2D(_LeftGlass, local);
  cover = smoothstep(0, 0.02, glass.r);
