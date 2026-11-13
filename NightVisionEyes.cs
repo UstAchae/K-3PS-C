@@ -90,7 +90,32 @@ internal static partial class NightVisionEyepieces
         _direct = _directShader != null && LensesOn(camera) && PrepareRelative(camera);
         if (_direct)
             HideDevice(camera);
+        ClaimFusion(camera);
     }
+
+    // A fusion device's eyepieces shown this frame: claimed for EyepieceFusion, with where its tubes look on the screen
+    // (the objectives' axis, the mean of the two eyepieces' axes) and how far it is down.
+    private static void ClaimFusion(Camera camera)
+    {
+        if (!_device.Fusion || _lensNodes.Length == 0 || !LensesOn(camera))
+            return;
+        Transform a = _lensNodes[CentreLensA], b = _lensNodes[Mathf.Min(CentreLensB, _lensNodes.Length - 1)];
+        Vector3 axis = (-a.forward - b.forward).normalized;
+        Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
+        Vector3 ahead = camera.worldToCameraMatrix.MultiplyPoint3x4(camera.transform.position + axis * 100f);
+        Vector4 clip = projection * new Vector4(ahead.x, ahead.y, ahead.z, 1f);
+        Vector2 uv = clip.w > 1e-4f ? new Vector2(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f) : new Vector2(0.5f, 0.5f);
+        float radius = 0.5f * Mathf.Tan(_device.FieldDegrees * 0.5f * Mathf.Deg2Rad) * projection.m11;
+        Interop.EyepieceFusion.FieldInMainUv = new Vector4(uv.x, uv.y, radius, camera.aspect);
+        Interop.EyepieceFusion.Deployed = _flip;
+        Interop.EyepieceFusion.ClaimedFrame = Time.frameCount;
+        if (!_fusionClaimNoted)
+        {
+            _fusionClaimNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the eyepieces claim this device for another mod's picture (field at {uv.x:F3},{uv.y:F3}, radius {radius:F3}; its picture {(Interop.EyepieceFusion.Fuse != null ? "offered" : "not offered yet")}).");
+        }
+    }
+    private static bool _fusionClaimNoted;
 
     internal static void OnCameraPostRender(Camera camera)
     {

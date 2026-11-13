@@ -1,0 +1,35 @@
+using System;
+using UnityEngine;
+
+namespace EFTNewCamera.Interop;
+
+// For another mod that lays its own picture into a device's eyepieces (K-ENVG-B's thermal fusion), without either mod
+// needing the other: it finds this type by name ("EFTNewCamera.Interop.EyepieceFusion, JustachaeThirdPersonCamera"),
+// checks Version, and sets Fuse once. Only Unity and BCL types, so nothing of either mod is referenced by the other.
+//
+// Each frame the eyepieces show a device made for it (a Device with Fusion), by the main camera's pre-cull:
+// ClaimedFrame = Time.frameCount, FieldInMainUv and Deployed for this frame. Then, in the eyepieces' image effect (after
+// the main camera's own rendering and its command buffers, before the SSAA stage puts the frame on screen), once the
+// tube's picture is made and before the eyepieces are laid over the frame: Fuse(i2, dest), i2 the tube's picture and
+// dest a texture of its size and format, both in the main camera's screen uv (not jittered, not flipped). It returns
+// true when it wrote dest, which the eyepieces then show; false leaves them the tube's picture. A frame not claimed
+// (the mod off, its master switch off, another device, the eyepieces not shown) never has ClaimedFrame equal to
+// Time.frameCount: the other mod draws its picture its own way. If Fuse throws, it is not called again this session.
+public static class EyepieceFusion
+{
+    // Raised only for a change the other side cannot read the old way; new optional members keep it.
+    public const int Version = 1;
+
+    // Time.frameCount of the last frame the eyepieces showed a fusion device, set at the main camera's pre-cull.
+    public static int ClaimedFrame { get; internal set; } = -1;
+
+    // The tubes' field on the main camera's screen this frame: xy the uv the objectives' axis falls on (0,0 bottom
+    // left), z the field's radius in uv of the screen's height, w the screen's width over its height.
+    public static Vector4 FieldInMainUv { get; internal set; }
+
+    // How far the device is flipped down: 0 up, 1 down (the game's own flip, as it eases).
+    public static float Deployed { get; internal set; }
+
+    // Set by the other mod: (i2, dest) -> whether dest was written.
+    public static Func<RenderTexture, RenderTexture, bool>? Fuse;
+}

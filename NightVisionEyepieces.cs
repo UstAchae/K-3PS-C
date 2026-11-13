@@ -69,6 +69,8 @@ internal static partial class NightVisionEyepieces
         internal bool Sealed;                      // its eyecups close against the face (NightVisionShade)
         internal float CupHeight;                  // a sealed eyecup's flared rim above the Centre, along the axis
         internal Vector4 CupRadii0, CupRadii1;     // its inner radius at 0, 5, 10, 20 mm and at 30, 40 mm above the Centre
+        internal bool Fusion;                      // another mod may lay its picture into the eyepieces (EyepieceFusion)
+        internal float FieldDegrees = 40f;         // the tubes' whole field, for EyepieceFusion.FieldInMainUv
     }
 
     private static Tube At(float x, float y, float z) => new Tube { Centre = new Vector3(x, y, z), Normal = Vector3.up };

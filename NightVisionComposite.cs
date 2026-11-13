@@ -140,6 +140,7 @@ internal static partial class NightVisionEyepieces
             from = source;
             to = destination;
         }
+        NoteStage(propagator, staged, from);
 
         RenderTexture? lensed = lens ? RenderTexture.GetTemporary(from.width, from.height, 0, from.format) : null;
         RenderTexture into = lensed != null ? lensed : to;
@@ -148,11 +149,12 @@ internal static partial class NightVisionEyepieces
             Graphics.Blit(from, into);
         else
         {
-            RenderTexture? made = null, tubed = null, focused = null;
+            RenderTexture? made = null, tubed = null, focused = null, fused = null;
             // The steps at the head of this file, in order.
             ScopeLensStep(camera, from);
             Texture picture = LensPicture(camera, ThroughObjective(camera, ForTube(from, ref tubed), ref focused), ref made);
             picture = EaseGrain(picture, ref made);
+            picture = Fused(picture, ref fused);
             ReleaseMask();
             Compose(composite, glow, from, into, picture);
             if (made != null)
@@ -161,6 +163,8 @@ internal static partial class NightVisionEyepieces
                 RenderTexture.ReleaseTemporary(tubed);
             if (focused != null)
                 RenderTexture.ReleaseTemporary(focused);
+            if (fused != null)
+                RenderTexture.ReleaseTemporary(fused);
         }
         if (lensed != null)
         {
@@ -169,6 +173,48 @@ internal static partial class NightVisionEyepieces
         }
         if (staged)
             propagator!.ReleaseSourceDestination(from, to);
+    }
+
+    // Another mod's picture laid into the tube's (EyepieceFusion), on a frame the eyepieces claimed for it.
+    private static bool _fuseFailed, _fuseNoted;
+    private static Texture Fused(Texture picture, ref RenderTexture? fused)
+    {
+        Func<RenderTexture, RenderTexture, bool>? fuse = Interop.EyepieceFusion.Fuse;
+        if (fuse == null || _fuseFailed || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || picture is not RenderTexture i2)
+            return picture;
+        fused = RenderTexture.GetTemporary(i2.width, i2.height, 0, i2.format);
+        bool wrote;
+        try
+        {
+            wrote = fuse(i2, fused);
+        }
+        catch (Exception e)
+        {
+            _fuseFailed = true;
+            NewCameraPlugin.Log?.LogError($"NVG fusion: the other mod's picture failed, the eyepieces show the tube's alone from now on: {e}");
+            return picture;
+        }
+        if (wrote && !_fuseNoted)
+        {
+            _fuseNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the other mod's picture laid into the eyepieces ({i2.width}x{i2.height} {i2.format}).");
+        }
+        return wrote ? fused : picture;
+    }
+
+    // Once: the frame's format at the eyepieces' stage, and whether the SSAA stage has taken it to display range by then
+    // (PrismEffects' HDR to LDR), for a mod laying its picture in (EyepieceFusion).
+    private static bool _stageNoted;
+    private static readonly HarmonyLib.AccessTools.FieldRef<SSAAPropagator, bool>? StageHdr =
+        HarmonyLib.AccessTools.Field(typeof(SSAAPropagator), "_HDRSourceDestination") != null
+            ? HarmonyLib.AccessTools.FieldRefAccess<SSAAPropagator, bool>("_HDRSourceDestination") : null;
+    private static void NoteStage(SSAAPropagator? propagator, bool staged, RenderTexture from)
+    {
+        if (_stageNoted)
+            return;
+        _stageNoted = true;
+        string hdr = propagator != null && StageHdr != null ? (StageHdr(propagator) ? "still HDR (before the tone mapping)" : "display range (after the tone mapping)") : "unknown";
+        NewCameraPlugin.Log?.LogInfo($"NVG eyepieces: the frame at their stage is {from.width}x{from.height} {from.format}, {(staged ? "from the SSAA stage" : "the camera's own")}, {hdr}.");
     }
 
     // What the lenses show this frame, from the frame as it stands: made into a temporary (made) when it is made here.
