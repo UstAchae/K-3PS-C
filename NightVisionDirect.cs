@@ -156,6 +156,54 @@ internal static partial class NightVisionEyepieces
         }
     }
 
+    // TEMP DIAG: around each time the device stops (or starts) being drawn here, 10 frames before and after: where the game
+    // has the device's body and where it is drawn here (camera's frame, mm), what is hidden, the flip.
+    private static readonly string[] _flipRing = new string[10];
+    private static int _flipRingAt, _flipAfter, _flipEdges;
+    private static bool _flipWasDirect;
+    private static void DiagFlipEdge(Camera camera)
+    {
+        if (_flipEdges >= 8 || _body == null)
+            return;
+        Transform view = camera.transform;
+        string Mm(Vector3 v) => (v * 1000f).ToString("F1");
+        string drawn = "not drawn here";
+        foreach (Piece piece in _pieces)
+        {
+            if (piece.Renderer != null && piece.Renderer.transform == _body)
+            {
+                drawn = "drawn here at " + Mm(view.InverseTransformDirection(piece.FromCamera.GetColumn(3)));
+                break;
+            }
+        }
+        string twins = "";
+        foreach (Renderer r in _twins)
+            if (r != null)
+                twins += $" [{r.name} at {Mm(view.InverseTransformPoint(r.transform.position))} shadows {r.shadowCastingMode} enabled {r.enabled}]";
+        float t = RotatorProgress?.GetValue(_rotator) is float p ? p : -1f;
+        string line = $"frame {Time.frameCount}: direct {_direct}, active {Active}, flip {_flip:F3}, rotator t {t:F3}, split {_split:F3}; body by the game at {Mm(view.InverseTransformPoint(_body.position))}, {drawn}; pieces {_pieces.Count}, hidden {_hidden.Count}, twins {_twins.Count}{twins}";
+        if (_direct != _flipWasDirect)
+        {
+            _flipWasDirect = _direct;
+            _flipEdges++;
+            NewCameraPlugin.Log?.LogInfo($"TEMP DIAG flip edge {_flipEdges}: drawn here {( _direct ? "starts" : "stops")}; the 10 frames before:");
+            for (int i = 0; i < _flipRing.Length; i++)
+            {
+                string? before = _flipRing[(_flipRingAt + i) % _flipRing.Length];
+                if (before != null)
+                    NewCameraPlugin.Log?.LogInfo("TEMP DIAG flip   " + before);
+            }
+            _flipAfter = 11;
+        }
+        if (_flipAfter > 0)
+        {
+            _flipAfter--;
+            NewCameraPlugin.Log?.LogInfo("TEMP DIAG flip > " + line);
+        }
+        _flipRing[_flipRingAt] = line;
+        _flipRingAt = (_flipRingAt + 1) % _flipRing.Length;
+    }
+
     private static void ShowDeviceAgain()
     {
         foreach ((Renderer renderer, ShadowCastingMode casting) in _hidden)

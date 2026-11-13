@@ -91,6 +91,7 @@ internal static partial class NightVisionEyepieces
         if (_direct)
             HideDevice(camera);
         ClaimFusion(camera);
+        DiagFlipEdge(camera); // TEMP DIAG
     }
 
     // A fusion device's eyepieces shown this frame: claimed for EyepieceFusion, with where its right tube looks on the
