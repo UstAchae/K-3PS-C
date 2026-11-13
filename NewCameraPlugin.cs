@@ -404,6 +404,11 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
                 new AcceptableValueList<string>(rework, RecoilMode.Game)));
         recoil.SettingChanged += (_, _) => RecoilMode.Set(recoil.Value == rework);
         RecoilMode.Set(recoil.Value == rework);
+        // Saved at the old default (-0.05, as 1.7 and 1.8.2 left it untouched): the new one, at every start (exactly -0.05 cannot be
+        // kept; the keys never stop on it). Any other value a player set is kept.
+        SettingsLayout.MapSaved(Config, "瞄准", "前后距离", saved =>
+            float.TryParse(saved.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float value)
+                && Mathf.Abs(value + 0.05f) < 0.00001f ? "0" : null);
         _aimDistance = SettingsLayout.Bind(Config, "瞄准", "前后距离", 0f,
             new ConfigDescription("瞄准时枪离镜头多远，在原版第一人称的位置上前后移动，单位为米。0 是原版的位置；负值让枪离镜头更近，正值更远。",
                 new AcceptableValueRange<float>(AimDistanceMin, AimDistanceMax)));
