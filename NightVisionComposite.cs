@@ -47,7 +47,9 @@ internal static partial class NightVisionEyepieces
     internal static string Picture = PictureGame;
 
     // BRNVG's picture: chosen, and BRNVG there (chosen without it, the game's).
-    private static bool UseBrnvg => Picture == PictureBrnvg && BodyVisibility.NightRendererType != null;
+    // Never for a fusion device (EyepieceFusion): its picture is its own mod's (the item's own phosphor, as the game's
+    // filter has it), which BRNVG knows nothing of.
+    private static bool UseBrnvg => Picture == PictureBrnvg && BodyVisibility.NightRendererType != null && !_device.Fusion;
 
     private static EyepieceImage? _eyepieceImage;
 

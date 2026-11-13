@@ -23,7 +23,7 @@ internal static partial class NightVisionEyepieces
     // A tube's field, as the half angle off its axis within which a line of sight through its lens finds the
     // picture: wide enough for the whole "8" from where the camera sits behind it, so the lenses go dark only when
     // seen from well off to the side.
-    private const float TubeField = 30f, TubeFieldFade = 5f;
+    private const float TubeFieldFade = 5f;   // the field fades out over this past its edge (half the device's FieldDegrees)
 
     private static readonly int TubeFieldId = Shader.PropertyToID("_TubeField");
     private static readonly int[] TubeAxisIds =
@@ -138,7 +138,8 @@ internal static partial class NightVisionEyepieces
         binocular.SetMatrix(NightVisionVpId, camera.nonJitteredProjectionMatrix * camera.worldToCameraMatrix);
         for (int i = 0; i < TubeAxisIds.Length; i++)
             binocular.SetVector(TubeAxisIds[i], -_lensNodes[i].forward);
-        binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((TubeField + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(TubeField * Mathf.Deg2Rad), 0f, 0f));
+        float half = _device.FieldDegrees * 0.5f;
+        binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((half + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(half * Mathf.Deg2Rad), 0f, 0f));
 
         ShadeMain(camera, !_direct);
         if (!_direct)
