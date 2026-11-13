@@ -161,6 +161,7 @@ internal static partial class NightVisionEyepieces
     private static readonly string[] _flipRing = new string[10];
     private static int _flipRingAt, _flipAfter, _flipEdges;
     private static bool _flipWasDirect;
+    internal static int DiagRendersFrame = -1;
     private static void DiagFlipEdge(Camera camera)
     {
         if (_flipEdges >= 8 || _body == null)
@@ -181,7 +182,15 @@ internal static partial class NightVisionEyepieces
             if (r != null)
                 twins += $" [{r.name} at {Mm(view.InverseTransformPoint(r.transform.position))} shadows {r.shadowCastingMode} enabled {r.enabled}]";
         float t = RotatorProgress?.GetValue(_rotator) is float p ? p : -1f;
-        string line = $"frame {Time.frameCount}: direct {_direct}, active {Active}, flip {_flip:F3}, rotator t {t:F3}, split {_split:F3}; body by the game at {Mm(view.InverseTransformPoint(_body.position))}, {drawn}; pieces {_pieces.Count}, hidden {_hidden.Count}, twins {_twins.Count}{twins}";
+        string parts = "";
+        if (!_direct && _flipAfter > 0)
+        {
+            DeviceSlot().GetComponentsInChildren(true, _slotRenderers);
+            foreach (Renderer r in _slotRenderers)
+                parts += $" [{r.name} {(r.gameObject.activeInHierarchy ? "" : "inactive ")}{(r.enabled ? "" : "disabled ")}{r.shadowCastingMode} seen {r.isVisible} layer {r.gameObject.layer}]";
+            parts += $"; camera mask has layer {_body.gameObject.layer}: {(camera.cullingMask & (1 << _body.gameObject.layer)) != 0}; renders reapplied this frame {DiagRendersFrame == Time.frameCount}";
+        }
+        string line = $"frame {Time.frameCount}: direct {_direct}, active {Active}, flip {_flip:F3}, rotator t {t:F3}, split {_split:F3}; body by the game at {Mm(view.InverseTransformPoint(_body.position))}, {drawn}; pieces {_pieces.Count}, hidden {_hidden.Count}, twins {_twins.Count}{twins}{parts}";
         if (_direct != _flipWasDirect)
         {
             _flipWasDirect = _direct;
@@ -193,7 +202,7 @@ internal static partial class NightVisionEyepieces
                 if (before != null)
                     NewCameraPlugin.Log?.LogInfo("TEMP DIAG flip   " + before);
             }
-            _flipAfter = 11;
+            _flipAfter = 24;
         }
         if (_flipAfter > 0)
         {
