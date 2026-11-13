@@ -159,6 +159,18 @@ internal static partial class NightVisionEyepieces
             LensRadius = 0.01432f, FloorDepth = 0.00913f, OpeningRadius = 0.01636f, RimHeight = 0.00537f, RimRadius = 0.02433f,
             CardSize = new Vector2(0.026f, 0.026f),
         },
+        // AN/PSQ-42 ENVG-B (K-ENVG-B's): two I2 tubes, each eyepiece a glass disc 14.9 mm across its 1 mm dome deep in a
+        // rubber eyecup: the cup narrows to a 14.4 mm throat 5 mm over the glass, then flares to 28.7 mm at its lip,
+        // 33.5 mm over the glass. The Centre is at the throat, the lens the disc's edge. Its thermal picture is the
+        // other mod's, laid into the tubes' (EyepieceFusion).
+        new Device
+        {
+            Node = "nvg_envgb_psq42_LOD0", Sealed = true, Fusion = true, FieldDegrees = 40f,
+            CupHeight = 0.0285f, CupRadii0 = new Vector4(0.0144f, 0.0217f, 0.0223f, 0.0251f), CupRadii1 = new Vector4(0.0287f, 0.0287f, 0f, 0f),
+            Tubes = new[] { At(-0.03077f, 0.02204f, -0.07569f), At(-0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f) },
+            LensRadius = 0.0149f, FloorDepth = 0.0055f, OpeningRadius = 0.0144f, RimHeight = 0.0285f, RimRadius = 0.0287f,
+            CardSize = new Vector2(0.031f, 0.031f),
+        },
         // AN/PVS-14: a monocular, its eyepiece lens bulging out of stepped rings, no eyecup to hide it.
         new Device
         {
