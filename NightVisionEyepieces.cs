@@ -167,7 +167,7 @@ internal static partial class NightVisionEyepieces
         {
             Node = "nvg_envgb_psq42_LOD0", Sealed = true, Fusion = true, FieldDegrees = 40f,
             CupHeight = 0.0285f, CupRadii0 = new Vector4(0.0144f, 0.0217f, 0.0223f, 0.0251f), CupRadii1 = new Vector4(0.0287f, 0.0287f, 0f, 0f),
-            Tubes = new[] { At(-0.03077f, 0.04204f, -0.07569f), At(-0.03077f, 0.04204f, -0.07569f), At(0.03077f, 0.04204f, -0.07569f), At(0.03077f, 0.04204f, -0.07569f) },
+            Tubes = new[] { At(-0.03077f, 0.02204f, -0.07569f), At(-0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f) },
             LensRadius = 0.0149f, FloorDepth = 0.0055f, OpeningRadius = 0.0144f, RimHeight = 0.0285f, RimRadius = 0.0287f,
             CardSize = new Vector2(0.031f, 0.031f),
         },
