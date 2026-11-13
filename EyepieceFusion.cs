@@ -23,9 +23,9 @@ public static class EyepieceFusion
     // Time.frameCount of the last frame the eyepieces showed a fusion device, set at the main camera's pre-cull.
     public static int ClaimedFrame { get; internal set; } = -1;
 
-    // The field of the tube the picture goes into (the right one, the wearer's), on the main camera's screen this
-    // frame: xy the uv its axis falls on (0,0 bottom left), z the field's radius in uv of the screen's height, w the
-    // screen's width over its height. Only the right tube shows dest; the left shows i2.
+    // The eyepiece the picture goes into (the right one, the wearer's), as the eye sees it on the main camera's
+    // screen this frame: xy the uv of its centre (0,0 bottom left), z its circle's radius in uv of the screen's height,
+    // w the screen's width over its height. Only the right tube shows dest; the left shows i2.
     public static Vector4 FieldInMainUv { get; internal set; }
 
     // How far the device is flipped down: 0 up, 1 down (the game's own flip, as it eases).

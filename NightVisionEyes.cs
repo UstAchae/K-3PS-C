@@ -228,7 +228,41 @@ internal static partial class NightVisionEyepieces
         }
         if (_direct)
             DrawDirect(camera, leftShift, rightShift, split, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
+        FusionField(camera, a <= b ? CentreLensB : CentreLensA, position + rightShift);
     }
+
+    // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
+    // The eye sits where this file puts it (part of the way from the camera to its lens), not on the tube's axis, so
+    // the eyepiece's circle is centred on the line from the eye to it, not on the axis; and the circle is as wide as the
+    // narrowest of what bounds the view into it (the lens, the eyecup's throat, its lip), not the tube's field.
+    private static void FusionField(Camera camera, int rightLens, Vector3 eye)
+    {
+        if (!_device.Fusion || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || rightLens >= _lensNodes.Length)
+            return;
+        Transform lens = _lensNodes[rightLens];
+        float scale = lens.lossyScale.x;
+        Vector4 floor = _lensFloors[rightLens];
+        Vector3 toLens = lens.TransformPoint(new Vector3(floor.x, floor.y, floor.z)) - eye;
+        Vector3 toThroat = lens.position - eye;
+        Vector3 toLip = lens.position + lens.forward * (_device.RimHeight * scale) - eye;
+        float Half(Vector3 to, float radius) => Mathf.Atan2(radius * scale, Mathf.Max(to.magnitude, 1e-4f));
+        float half = Mathf.Min(Half(toLens, floor.w), Half(toThroat, _device.OpeningRadius));
+        if (_device.RimRadius > 0f)
+            half = Mathf.Min(half, Half(toLip, _device.RimRadius));
+        Vector3 view = camera.worldToCameraMatrix.MultiplyVector(toLens);
+        Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
+        Vector4 clip = projection * new Vector4(view.x, view.y, view.z, 0f);
+        if (clip.w <= 1e-6f)
+            return;
+        float radius = 0.5f * Mathf.Tan(half) * projection.m11;
+        Interop.EyepieceFusion.FieldInMainUv = new Vector4(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f, radius, camera.aspect);
+        if (!_fusionFieldNoted)
+        {
+            _fusionFieldNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the right eyepiece as the right eye sees it: {Interop.EyepieceFusion.FieldInMainUv} (half angle {half * Mathf.Rad2Deg:F1} degrees).");
+        }
+    }
+    private static bool _fusionFieldNoted;
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.
     private static float Across(Camera camera, Vector3 to)
