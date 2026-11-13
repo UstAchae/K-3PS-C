@@ -288,7 +288,8 @@ internal static partial class NightVisionEyepieces
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
     // The eye sits where this file puts it (part of the way from the camera to its lens), not on the tube's axis, so
     // the eyepiece's circle is centred on the line from the eye to it, not on the axis; and the circle is as wide as the
-    // narrowest of what bounds the view into it (the lens, the eyecup's throat, its lip), not the tube's field.
+    // narrowest of what bounds the view into it (the lens, the eyecup's throat, its lip); and where the tube's field (its
+    // cone about the axis) ends inside that, only as far as both reach.
     private static void FusionField(Camera camera, int rightLens, Vector3 eye)
     {
         if (!_device.Fusion || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || rightLens >= _lensNodes.Length)
@@ -308,15 +309,39 @@ internal static partial class NightVisionEyepieces
         Vector4 clip = projection * new Vector4(view.x, view.y, view.z, 0f);
         if (clip.w <= 1e-6f)
             return;
-        float radius = 0.5f * Mathf.Tan(half) * projection.m11;
-        Interop.EyepieceFusion.FieldInMainUv = new Vector4(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f, radius, camera.aspect);
-        if (!_fusionFieldNoted)
+        float aspect = camera.aspect;
+        // In uv of the screen's height (x stretched by the aspect): the opening's circle, and the tube's field (its cone
+        // about the tube's axis, as the eyepieces draw it) that may end inside it, the eye that near or off to a side.
+        Vector2 open = new Vector2((clip.x / clip.w * 0.5f + 0.5f) * aspect, clip.y / clip.w * 0.5f + 0.5f);
+        float openRadius = 0.5f * Mathf.Tan(half) * projection.m11;
+        Vector3 axisView = camera.worldToCameraMatrix.MultiplyVector(-lens.forward);
+        Vector4 axisClip = projection * new Vector4(axisView.x, axisView.y, axisView.z, 0f);
+        Vector2 centre = open;
+        float radius = openRadius;
+        if (axisClip.w > 1e-6f)
+        {
+            Vector2 field = new Vector2((axisClip.x / axisClip.w * 0.5f + 0.5f) * aspect, axisClip.y / axisClip.w * 0.5f + 0.5f);
+            float fieldRadius = 0.5f * Mathf.Tan(_device.FieldDegrees * 0.5f * Mathf.Deg2Rad) * projection.m11;
+            // The widest circle in what both leave: on the line between their centres, across where they overlap.
+            float apart = (field - open).magnitude;
+            Vector2 along = apart > 1e-6f ? (field - open) / apart : Vector2.zero;
+            float near = Mathf.Max(-openRadius, apart - fieldRadius), far = Mathf.Min(openRadius, apart + fieldRadius);
+            if (far > near)
+            {
+                centre = open + along * ((near + far) * 0.5f);
+                radius = (far - near) * 0.5f;
+            }
+        }
+        Interop.EyepieceFusion.FieldInMainUv = new Vector4(centre.x / aspect, centre.y, radius, aspect);
+        if (!_fusionFieldNoted || Time.frameCount >= _fusionFieldNoteFrame) // TEMP DIAG: every 10 s while shown
         {
             _fusionFieldNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the right eyepiece as the right eye sees it: {Interop.EyepieceFusion.FieldInMainUv} (half angle {half * Mathf.Rad2Deg:F1} degrees).");
+            _fusionFieldNoteFrame = Time.frameCount + 600;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the right eyepiece as the right eye sees it: {Interop.EyepieceFusion.FieldInMainUv} (opening at ({open.x / aspect:F3}, {open.y:F3}) half angle {half * Mathf.Rad2Deg:F1} degrees, radius {openRadius:F3}; within the tube's field, radius {radius:F3}).");
         }
     }
     private static bool _fusionFieldNoted;
+    private static int _fusionFieldNoteFrame;
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.
     private static float Across(Camera camera, Vector3 to)
