@@ -229,6 +229,27 @@ internal static partial class NightVisionEyepieces
         if (_direct)
             DrawDirect(camera, leftShift, rightShift, split, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
         FusionField(camera, a <= b ? CentreLensB : CentreLensA, position + rightShift);
+        DiagEyeDepth(camera, a <= b ? CentreLensB : CentreLensA, position, rightShift); // TEMP DIAG
+    }
+
+    // TEMP DIAG: where the camera and the right eye stand against the right eyepiece (its lens's frame, mm: along the
+    // tube's axis toward the eye from the eyepiece's Centre, and off the axis), once when the eyepieces first show and
+    // whenever the mount is let go after an adjustment.
+    internal static bool DiagEyeDepthWanted = true;
+    private static void DiagEyeDepth(Camera camera, int rightLens, Vector3 position, Vector3 shift)
+    {
+        if (!DiagEyeDepthWanted || rightLens >= _lensNodes.Length)
+            return;
+        DiagEyeDepthWanted = false;
+        Transform lens = _lensNodes[rightLens];
+        float scale = Mathf.Max(lens.lossyScale.x, 1e-6f);
+        string At(Vector3 p)
+        {
+            Vector3 l = lens.InverseTransformPoint(p);
+            return $"{l.z * 1000f:F1} mm along the axis, {new Vector2(l.x, l.y).magnitude * 1000f:F1} mm off it";
+        }
+        Vector4 floor = _lensFloors[rightLens];
+        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG eye depth: device {_device.Node}, scale {scale:F3}; glass {floor.z * 1000f:F1} mm, lip {_device.RimHeight * 1000f:F1} mm (from the Centre, + toward the eye); camera {At(position)}; right eye {At(position + shift)} (shift {shift.magnitude * 1000f:F1} mm); main near {camera.nearClipPlane * 1000f:F2} mm, eye near {EyeNear * 1000f:F3} mm, direct {_direct}, direct near {DirectNear * 1000f:F3} mm; active {Active}, split {_split:F2}.");
     }
 
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
