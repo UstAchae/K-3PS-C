@@ -92,45 +92,6 @@ internal static partial class NightVisionEyepieces
         return false;
     }
 
-    // TEMP DIAG: what the found device's cup slot holds, logged when it changes (and every device node of that name on the
-    // player then, with its slot's contents), so a fitted eyecup not seen as one shows where it is instead.
-    private static int _diagCupKey = int.MinValue, _diagCupLogs;
-    private static void DiagCups(Player player)
-    {
-        if (_body == null || _device.CupNode.Length == 0 || _diagCupLogs >= 30)
-            return;
-        Transform? slot = _body.Find(_device.CupSlot);
-        int key = _body.GetInstanceID() * 31 + (slot == null ? -1 : slot.childCount);
-        if (slot != null)
-            for (int i = 0; i < slot.childCount; i++)
-                key = key * 31 + slot.GetChild(i).GetInstanceID() * 2 + (slot.GetChild(i).gameObject.activeInHierarchy ? 1 : 0);
-        if (key == _diagCupKey)
-            return;
-        _diagCupKey = key;
-        _diagCupLogs++;
-        string Path(Transform t) { string r = t.name; for (Transform? u = t.parent; u != null; u = u.parent) r = u.name + "/" + r; return r; }
-        string Slot(Transform node)
-        {
-            Transform? s = node.Find(_device.CupSlot);
-            if (s == null) return "no " + _device.CupSlot;
-            string r = $"{_device.CupSlot} ({s.childCount} children)";
-            for (int i = 0; i < s.childCount; i++)
-            {
-                Transform c = s.GetChild(i);
-                r += $" [{c.name} self {c.gameObject.activeSelf} inHierarchy {c.gameObject.activeInHierarchy} children {c.childCount}]";
-            }
-            return r;
-        }
-        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG cups: frame {Time.frameCount}, entry cups {(_device.CupOff ? "off" : "on")}, HasCups {HasCups(_body, _device)}, found {Path(_body)} (id {_body.GetInstanceID()}, active {_body.gameObject.activeInHierarchy}): {Slot(_body)}");
-        foreach (Transform t in player.gameObject.transform.root.GetComponentsInChildren<Transform>(true))
-        {
-            if (t.name == _device.Node && t != _body)
-                NewCameraPlugin.Log?.LogInfo($"TEMP DIAG cups:   other {Path(t)} (id {t.GetInstanceID()}, active {t.gameObject.activeInHierarchy}): {Slot(t)}");
-            else if (t.name.StartsWith(_device.CupNode, StringComparison.Ordinal) && (t.parent == null || t.parent.name != _device.CupSlot))
-                NewCameraPlugin.Log?.LogInfo($"TEMP DIAG cups:   a cup elsewhere: {Path(t)} (active {t.gameObject.activeInHierarchy})");
-        }
-    }
-
     // The device found is the entry for the other state of its eyecups (put on or taken off since).
     // A device put away (its model swapped for one with or without the eyecups, the old one gone to the pool emptied of them)
     // is not this: it is looked for again as any device put away is.
@@ -346,14 +307,12 @@ internal static partial class NightVisionEyepieces
         // Looked for again while none is worn, or the one found has been put away (a device swapped for another stays
         // in the scene, hidden).
         bool wornAny = player.NightVisionObserver?.Component != null;
-        DiagCups(player); // TEMP DIAG
         // Its eyecups put on or taken off: the device let go of and found again, as the entry for its eyecups now.
         if (CupsChanged())
         {
             NewCameraPlugin.Log?.LogInfo($"NVG: {_device.Node}'s eyecups {(_device.CupOff ? "put on" : "taken off")}.");
             Release();
             _searchedFrame = -1000;
-            DiagEyeDepthWanted = true; // TEMP DIAG
         }
         int searchEvery = wornAny && Time.time < _holdFilterUntil ? 1 : SearchFrames;
         if ((_body == null || !_body.gameObject.activeInHierarchy || _body.root != player.gameObject.transform.root || WornElsewhere(player)) && Time.frameCount - _searchedFrame >= searchEvery)

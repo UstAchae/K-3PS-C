@@ -91,7 +91,6 @@ internal static partial class NightVisionEyepieces
         if (_direct)
             HideDevice(camera);
         ClaimFusion(camera);
-        DiagFlipEdge(camera); // TEMP DIAG
     }
 
     // A fusion device's eyepieces shown this frame: claimed for EyepieceFusion, with where its right tube looks on the
@@ -197,10 +196,8 @@ internal static partial class NightVisionEyepieces
         Transform leftLens = _lensNodes[a <= b ? CentreLensA : CentreLensB], rightLens = _lensNodes[a <= b ? CentreLensB : CentreLensA];
         if (monocular >= 0)
             leftLens = rightLens = _lensNodes[CentreLensA];
-        DiagEyeSway(camera, rightLens, position + rightShift); // TEMP DIAG
         leftShift = KeptClear(leftLens, position, leftShift);
         rightShift = KeptClear(rightLens, position, rightShift);
-        DiagRightShift = rightShift; // TEMP DIAG
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
         float split = monocular >= 0 ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
@@ -240,34 +237,6 @@ internal static partial class NightVisionEyepieces
         if (_direct)
             DrawDirect(camera, leftShift, rightShift, split, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
         FusionField(camera, a <= b ? CentreLensB : CentreLensA, position + rightShift);
-        DiagEyeDepth(camera, a <= b ? CentreLensB : CentreLensA, position, rightShift); // TEMP DIAG
-    }
-
-    // TEMP DIAG: where the camera and the right eye stand against the right eyepiece (its lens's frame, mm: along the
-    // tube's axis toward the eye from the eyepiece's Centre, and off the axis), once when the eyepieces first show and
-    // whenever the mount is let go after an adjustment.
-    internal static bool DiagEyeDepthWanted = true;
-    private static void DiagEyeDepth(Camera camera, int rightLens, Vector3 position, Vector3 shift)
-    {
-        if (!DiagEyeDepthWanted || rightLens >= _lensNodes.Length)
-            return;
-        DiagEyeDepthWanted = false;
-        Transform lens = _lensNodes[rightLens];
-        float scale = Mathf.Max(lens.lossyScale.x, 1e-6f);
-        string At(Vector3 p)
-        {
-            Vector3 l = lens.InverseTransformPoint(p);
-            return $"{l.z * 1000f:F1} mm along the axis, {new Vector2(l.x, l.y).magnitude * 1000f:F1} mm off it";
-        }
-        Vector4 floor = _lensFloors[rightLens];
-        Transform? cupSlot = _body != null && _device.CupSlot.Length > 0 ? _body.Find(_device.CupSlot) : null;
-        Transform? cupMesh = cupSlot != null && cupSlot.childCount > 0 ? cupSlot.GetChild(0).Find("envgb_eyecup_LOD0") : null;
-        if (cupMesh != null && _body != null)
-        {
-            Matrix4x4 rel = _body.worldToLocalMatrix * cupMesh.localToWorldMatrix;
-            NewCameraPlugin.Log?.LogInfo($"TEMP DIAG eyecup against the device: offset {((Vector3)rel.GetColumn(3) * 1000f).ToString("F2")} mm, rotation {rel.rotation.eulerAngles.ToString("F2")} (should be 0 and 0).");
-        }
-        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG eye depth: cups {(_device.CupNode.Length > 0 ? (_device.CupOff ? "off" : "on") : "fixed")},  device {_device.Node}, scale {scale:F3}; glass {floor.z * 1000f:F1} mm, lip {_device.RimHeight * 1000f:F1} mm (from the Centre, + toward the eye); camera {At(position)}; right eye {At(position + shift)} (shift {shift.magnitude * 1000f:F1} mm); main near {camera.nearClipPlane * 1000f:F2} mm, eye near {EyeNear * 1000f:F3} mm, direct {_direct}, direct near {DirectNear * 1000f:F3} mm; active {Active}, split {_split:F2}.");
     }
 
     // An eye's shift from the camera, with as much added along its eyepiece's axis as keeps it EyeClear in front of the
@@ -292,40 +261,6 @@ internal static partial class NightVisionEyepieces
         return shift + lens.forward * ((least - along) * Mathf.Clamp01(_split));
     }
     private static bool _eyeHeldNoted;
-
-    // TEMP DIAG: the right eye against its eyepiece every frame, before it is held clear; the worst of each 2 s logged
-    // when it came within the lip (or 2 mm of the mouth) or looked more than 5 degrees off the tube's axis.
-    private static float _swayLeast = float.MaxValue, _swayAngle, _swayOff;
-    private static int _swayWorstFrame, _swayUntil, _swayLogs;
-    private static string _swayAt = "";
-    private static void DiagEyeSway(Camera camera, Transform lens, Vector3 eye)
-    {
-        if (_swayLogs >= 40)
-            return;
-        float scale = Mathf.Max(lens.lossyScale.x, 1e-6f);
-        Vector3 local = lens.InverseTransformPoint(eye) * scale;
-        float angle = Vector3.Angle(camera.transform.forward, -lens.forward);
-        float lip = Mathf.Max(_device.RimHeight, 0f) + EyeClear;
-        bool bad = local.z < lip || angle > 5f;
-        if (bad && (local.z < _swayLeast || angle > _swayAngle))
-        {
-            _swayLeast = Mathf.Min(_swayLeast, local.z);
-            _swayAngle = Mathf.Max(_swayAngle, angle);
-            _swayOff = new Vector2(local.x, local.y).magnitude;
-            _swayWorstFrame = Time.frameCount;
-            _swayAt = $"camera {camera.transform.position.ToString("F4")} fwd {camera.transform.forward.ToString("F3")}, lens {lens.position.ToString("F4")} axis {(-lens.forward).ToString("F3")}, flip {_flip:F2}, rotator {(_rotator != null ? _rotator.transform.localRotation.eulerAngles.ToString("F1") : "none")}";
-            if (_swayUntil == 0)
-                _swayUntil = Time.frameCount + 120;
-        }
-        if (_swayUntil != 0 && Time.frameCount >= _swayUntil)
-        {
-            _swayLogs++;
-            NewCameraPlugin.Log?.LogInfo($"TEMP DIAG eye sway: worst at frame {_swayWorstFrame}: right eye {_swayLeast * 1000f:F1} mm along the axis (lip {lip * 1000f:F1} incl. clearance), {_swayOff * 1000f:F1} mm off it, view {_swayAngle:F1} degrees off the tube's axis; cups {(_device.CupOff ? "off" : "on")}; {_swayAt}.");
-            _swayLeast = float.MaxValue;
-            _swayAngle = 0f;
-            _swayUntil = 0;
-        }
-    }
 
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
     // The eye sits where this file puts it (part of the way from the camera to its lens), not on the tube's axis, so
@@ -375,15 +310,13 @@ internal static partial class NightVisionEyepieces
             }
         }
         Interop.EyepieceFusion.FieldInMainUv = new Vector4(centre.x / aspect, centre.y, radius, aspect);
-        if (!_fusionFieldNoted || Time.frameCount >= _fusionFieldNoteFrame) // TEMP DIAG: every 10 s while shown
+        if (!_fusionFieldNoted)
         {
             _fusionFieldNoted = true;
-            _fusionFieldNoteFrame = Time.frameCount + 600;
             NewCameraPlugin.Log?.LogInfo($"NVG fusion: the right eyepiece as the right eye sees it: {Interop.EyepieceFusion.FieldInMainUv} (opening at ({open.x / aspect:F3}, {open.y:F3}) half angle {half * Mathf.Rad2Deg:F1} degrees, radius {openRadius:F3}; within the tube's field, radius {radius:F3}).");
         }
     }
     private static bool _fusionFieldNoted;
-    private static int _fusionFieldNoteFrame;
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.
     private static float Across(Camera camera, Vector3 to)

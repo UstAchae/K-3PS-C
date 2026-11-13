@@ -552,8 +552,6 @@ internal static partial class NightVisionEyepieces
             {
                 _mountChanged = false;
                 SaveMountSettings(_mountId, new Vector3(MountHeight, MountTilt, MountSlide));
-                DiagEyeDepthWanted = true; // TEMP DIAG
-                NewCameraPlugin.Log?.LogInfo($"TEMP DIAG mount set: height {MountHeight * 1000f:F1} mm, tilt {MountTilt:F1}, slide {MountSlide * 1000f:F1} mm."); // TEMP DIAG
             }
         }
 

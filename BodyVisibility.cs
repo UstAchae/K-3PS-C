@@ -116,7 +116,6 @@ internal static class BodyVisibility
         if (player == null || !ReferenceEquals(player.PlayerBody, __instance))
             return;
 
-        NightVisionEyepieces.DiagRendersFrame = Time.frameCount; // TEMP DIAG
         Apply(player);
     }
 
