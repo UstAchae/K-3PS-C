@@ -162,8 +162,38 @@ internal static partial class NightVisionEyepieces
     private static int _flipRingAt, _flipAfter, _flipEdges;
     private static bool _flipWasDirect;
     internal static int DiagRendersFrame = -1;
+    // TEMP DIAG: the screen saved every frame from late in a flip up (flip under 0.35 and falling) to 15 frames after drawing
+    // it here stops, twice, to BepInEx/K3PSC-flip: frame, whether drawn here, flip.
+    private static float _shotFlipLast = -1f;
+    private static int _shotSeqs, _shotAfter = -1, _shotTaken;
+    private static void DiagFlipShots()
+    {
+        if (_shotSeqs >= 2)
+            return;
+        bool capturing = _shotAfter >= 0 || _shotTaken > 0;
+        if (!capturing && _direct && _flip < 0.35f && _shotFlipLast > _flip)
+            capturing = true;
+        _shotFlipLast = _flip;
+        if (!capturing)
+            return;
+        if (!_direct && _shotAfter < 0)
+            _shotAfter = 15;
+        string dir = System.IO.Path.Combine(BepInEx.Paths.BepInExRootPath, "K3PSC-flip");
+        System.IO.Directory.CreateDirectory(dir);
+        ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, $"seq{_shotSeqs}_{_shotTaken:D3}_frame{Time.frameCount}_{(_direct ? "here" : "game")}_flip{_flip:F3}.png"));
+        _shotTaken++;
+        if (_shotAfter >= 0 && --_shotAfter < 0 || _shotTaken > 90)
+        {
+            NewCameraPlugin.Log?.LogInfo($"TEMP DIAG flip shots: sequence {_shotSeqs} saved, {_shotTaken} frames, in {dir}.");
+            _shotSeqs++;
+            _shotTaken = 0;
+            _shotAfter = -1;
+        }
+    }
+
     private static void DiagFlipEdge(Camera camera)
     {
+        DiagFlipShots();
         if (_flipEdges >= 8 || _body == null)
             return;
         Transform view = camera.transform;
