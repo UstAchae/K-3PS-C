@@ -289,6 +289,8 @@ internal static partial class NightVisionEyepieces
     private static readonly int FusedId = Shader.PropertyToID("_Fused");
     private static readonly int TubeFusedId = Shader.PropertyToID("_TubeFused");
     private static readonly int FuseOverId = Shader.PropertyToID("_FuseOver");
+    private static readonly int FuseSoftId = Shader.PropertyToID("_FuseSoft");
+    private const float FuseSoft = 0.035f;     // the right lens's fade over the left's, in from its edge (uv of the frame's height)
     private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture, Texture? fusedPicture)
     {
         composite.SetFloat(ModeId, 1f);
@@ -296,6 +298,7 @@ internal static partial class NightVisionEyepieces
         composite.SetTexture(FusedId, fusedPicture != null ? fusedPicture : Texture2D.blackTexture);
         composite.SetVector(TubeFusedId, fusedPicture != null ? _fusedTubes : Vector4.zero);
         composite.SetFloat(FuseOverId, fusedPicture != null ? 1f : 0f);
+        composite.SetFloat(FuseSoftId, FuseSoft);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
         composite.SetTexture(GlowId, lit != null ? lit : Texture2D.blackTexture);
