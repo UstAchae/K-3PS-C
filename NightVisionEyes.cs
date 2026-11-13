@@ -196,6 +196,7 @@ internal static partial class NightVisionEyepieces
         Transform leftLens = _lensNodes[a <= b ? CentreLensA : CentreLensB], rightLens = _lensNodes[a <= b ? CentreLensB : CentreLensA];
         if (monocular >= 0)
             leftLens = rightLens = _lensNodes[CentreLensA];
+        DiagEyeSway(camera, rightLens, position + rightShift); // TEMP DIAG
         leftShift = KeptClear(leftLens, position, leftShift);
         rightShift = KeptClear(rightLens, position, rightShift);
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
@@ -268,22 +269,58 @@ internal static partial class NightVisionEyepieces
     }
 
     // An eye's shift from the camera, with as much added along its eyepiece's axis as keeps it EyeClear in front of the
-    // eyepiece's mouth (its Centre, as the lens node stands).
+    // eyepiece's mouth (its Centre, as the lens node stands), or of its eyecup's lip where it has one: an eye brought
+    // inside the eyecup sees only the cup's inside and the tube's (the mount slid toward the face, the head turned).
     private const float EyeClear = 0.002f;
     private static Vector3 KeptClear(Transform lens, Vector3 position, Vector3 shift)
     {
         float scale = Mathf.Max(lens.lossyScale.x, 1e-6f);
         float along = lens.InverseTransformPoint(position + shift).z * scale;
-        if (along >= EyeClear)
+        float least = (Mathf.Max(_device.RimHeight, 0f) + EyeClear) * scale;
+        if (along >= least)
             return shift;
         if (!_eyeHeldNoted)
         {
             _eyeHeldNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG: an eye held back in front of its eyepiece ({along * 1000f:F1} mm from its mouth, kept to {EyeClear * 1000f:F1} mm).");
+            NewCameraPlugin.Log?.LogInfo($"NVG: an eye held back in front of its eyepiece ({along * 1000f:F1} mm from its mouth, kept to {least * 1000f:F1} mm).");
         }
-        return shift + lens.forward * (EyeClear - along);
+        return shift + lens.forward * (least - along);
     }
     private static bool _eyeHeldNoted;
+
+    // TEMP DIAG: the right eye against its eyepiece every frame, before it is held clear; the worst of each 2 s logged
+    // when it came within the lip (or 2 mm of the mouth) or looked more than 5 degrees off the tube's axis.
+    private static float _swayLeast = float.MaxValue, _swayAngle, _swayOff;
+    private static int _swayWorstFrame, _swayUntil, _swayLogs;
+    private static string _swayAt = "";
+    private static void DiagEyeSway(Camera camera, Transform lens, Vector3 eye)
+    {
+        if (_swayLogs >= 40)
+            return;
+        float scale = Mathf.Max(lens.lossyScale.x, 1e-6f);
+        Vector3 local = lens.InverseTransformPoint(eye) * scale;
+        float angle = Vector3.Angle(camera.transform.forward, -lens.forward);
+        float lip = Mathf.Max(_device.RimHeight, 0f) + EyeClear;
+        bool bad = local.z < lip || angle > 5f;
+        if (bad && (local.z < _swayLeast || angle > _swayAngle))
+        {
+            _swayLeast = Mathf.Min(_swayLeast, local.z);
+            _swayAngle = Mathf.Max(_swayAngle, angle);
+            _swayOff = new Vector2(local.x, local.y).magnitude;
+            _swayWorstFrame = Time.frameCount;
+            _swayAt = $"camera {camera.transform.position.ToString("F4")} fwd {camera.transform.forward.ToString("F3")}, lens {lens.position.ToString("F4")} axis {(-lens.forward).ToString("F3")}, flip {_flip:F2}, rotator {(_rotator != null ? _rotator.transform.localRotation.eulerAngles.ToString("F1") : "none")}";
+            if (_swayUntil == 0)
+                _swayUntil = Time.frameCount + 120;
+        }
+        if (_swayUntil != 0 && Time.frameCount >= _swayUntil)
+        {
+            _swayLogs++;
+            NewCameraPlugin.Log?.LogInfo($"TEMP DIAG eye sway: worst at frame {_swayWorstFrame}: right eye {_swayLeast * 1000f:F1} mm along the axis (lip {lip * 1000f:F1} incl. clearance), {_swayOff * 1000f:F1} mm off it, view {_swayAngle:F1} degrees off the tube's axis; cups {(_device.CupOff ? "off" : "on")}; {_swayAt}.");
+            _swayLeast = float.MaxValue;
+            _swayAngle = 0f;
+            _swayUntil = 0;
+        }
+    }
 
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
     // The eye sits where this file puts it (part of the way from the camera to its lens), not on the tube's axis, so

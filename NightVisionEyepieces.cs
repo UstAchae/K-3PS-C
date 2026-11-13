@@ -132,7 +132,9 @@ internal static partial class NightVisionEyepieces
     }
 
     // The device found is the entry for the other state of its eyecups (put on or taken off since).
-    private static bool CupsChanged() => _body != null && _device.CupNode.Length > 0 && HasCups(_body, _device) == _device.CupOff;
+    // A device put away (its model swapped for one with or without the eyecups, the old one gone to the pool emptied of them)
+    // is not this: it is looked for again as any device put away is.
+    private static bool CupsChanged() => _body != null && _body.gameObject.activeInHierarchy && _device.CupNode.Length > 0 && HasCups(_body, _device) == _device.CupOff;
 
     private static Tube At(float x, float y, float z) => new Tube { Centre = new Vector3(x, y, z), Normal = Vector3.up };
 
