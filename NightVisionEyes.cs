@@ -190,6 +190,14 @@ internal static partial class NightVisionEyepieces
         Vector3 leftPlace = a <= b ? placeA : placeB, rightPlace = a <= b ? placeB : placeA;
         if (monocular >= 0)
             leftShift = rightShift = EyeShiftOf(a);
+        // An eye is never let past its eyepiece: brought so near (the mount slid toward the face, the head turned), the
+        // camera went in past the lens's mouth and the lenses had nothing to show from there (the tube's inside, the
+        // scene beyond its far end). Held back along the tube's axis to EyeClear in front of the eyepiece's mouth.
+        Transform leftLens = _lensNodes[a <= b ? CentreLensA : CentreLensB], rightLens = _lensNodes[a <= b ? CentreLensB : CentreLensA];
+        if (monocular >= 0)
+            leftLens = rightLens = _lensNodes[CentreLensA];
+        leftShift = KeptClear(leftLens, position, leftShift);
+        rightShift = KeptClear(rightLens, position, rightShift);
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
         float split = monocular >= 0 ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
@@ -258,6 +266,24 @@ internal static partial class NightVisionEyepieces
         }
         NewCameraPlugin.Log?.LogInfo($"TEMP DIAG eye depth: cups {(_device.CupNode.Length > 0 ? (_device.CupOff ? "off" : "on") : "fixed")},  device {_device.Node}, scale {scale:F3}; glass {floor.z * 1000f:F1} mm, lip {_device.RimHeight * 1000f:F1} mm (from the Centre, + toward the eye); camera {At(position)}; right eye {At(position + shift)} (shift {shift.magnitude * 1000f:F1} mm); main near {camera.nearClipPlane * 1000f:F2} mm, eye near {EyeNear * 1000f:F3} mm, direct {_direct}, direct near {DirectNear * 1000f:F3} mm; active {Active}, split {_split:F2}.");
     }
+
+    // An eye's shift from the camera, with as much added along its eyepiece's axis as keeps it EyeClear in front of the
+    // eyepiece's mouth (its Centre, as the lens node stands).
+    private const float EyeClear = 0.002f;
+    private static Vector3 KeptClear(Transform lens, Vector3 position, Vector3 shift)
+    {
+        float scale = Mathf.Max(lens.lossyScale.x, 1e-6f);
+        float along = lens.InverseTransformPoint(position + shift).z * scale;
+        if (along >= EyeClear)
+            return shift;
+        if (!_eyeHeldNoted)
+        {
+            _eyeHeldNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG: an eye held back in front of its eyepiece ({along * 1000f:F1} mm from its mouth, kept to {EyeClear * 1000f:F1} mm).");
+        }
+        return shift + lens.forward * (EyeClear - along);
+    }
+    private static bool _eyeHeldNoted;
 
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
     // The eye sits where this file puts it (part of the way from the camera to its lens), not on the tube's axis, so
