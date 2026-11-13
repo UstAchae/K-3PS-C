@@ -83,6 +83,15 @@ internal static partial class NightVisionEyepieces
         internal float CarriageLow, ShoeLow, LeverRadius, LeverFloor, LeverFace, LockTurns, LockLead, ButtonDepth;
         internal Vector3 LeverCentre, WasherPoint, LockPoint, ButtonLeftPoint, ButtonRightPoint;
         internal Vector2 LeverHandleMin, LeverHandleMax;
+
+        // A mount whose moving parts are each a node of their own (K-ENVG-B's): found by their names under the root,
+        // each set from where the prefab has it. The carriage slides along CarriageAlong (its parent's frame), the
+        // height screw turns about its own Y by Lead a turn, the tilt node turns about its own X (eyepieces up), the
+        // slide moves along its own Z (forward, away from the face). PathMatch: the item's prefab path holds it.
+        internal bool Joints;
+        internal string PathMatch = "";
+        internal string CarriageNode = "", ScrewNode = "", TiltNode = "", SlideNode = "";
+        internal Vector3 CarriageAlong;
     }
 
     private static readonly Mount[] Mounts =
@@ -129,6 +138,19 @@ internal static partial class NightVisionEyepieces
             WasherPoint = new Vector3(0.02438f, -0.01275f, 0.01525f), LockPoint = new Vector3(0.0303f, -0.01275f, 0.01525f), LockTurns = 2f, LockLead = 0.0008f,
             ButtonLeftPoint = new Vector3(-0.0243f, -0.0365f, -0.014f), ButtonRightPoint = new Vector3(0.0243f, -0.0365f, -0.014f), ButtonDepth = 0.002f,
             SlideForward = 0.009f, SlideBack = 0.013f,
+        },
+        // The ENVG-B's own mount (K-ENVG-B): a plate on the helmet with a screw that runs a carriage up or down it (1 mm
+        // a turn); the device flips on the carriage's hinge; the arm tilts on a pin into a bracket whose rails the
+        // device's shoe slides along. Travel as the mesh allows: 3 mm down to the plate's stop, 14 mm up to the screw's
+        // knob; 13 mm toward the face, 6 mm away, to the bracket's ends. No stop shows for the tilt.
+        new Mount
+        {
+            Prefix = "nvg_envgb_psq42", PathMatch = "envgb", Joints = true, Hinge = "nvg_envgb_psq42_mount_LOD0/envgb_carriage/axis",
+            CarriageNode = "nvg_envgb_psq42_mount_LOD0/envgb_carriage", ScrewNode = "nvg_envgb_psq42_mount_LOD0/envgb_height_screw",
+            TiltNode = "nvg_envgb_psq42_mount_LOD0/envgb_carriage/axis/envgb_arm/envgb_tilt",
+            SlideNode = "nvg_envgb_psq42_mount_LOD0/envgb_carriage/axis/envgb_arm/envgb_tilt/envgb_bracket/envgb_slide",
+            CarriageAlong = new Vector3(0.0003f, 0.9982f, 0.0602f), Lead = 0.001f,
+            HeightMin = -0.003f, HeightMax = 0.014f, MinTilt = -10f, MaxTilt = 20f, SlideBack = 0.013f, SlideForward = 0.006f,
         },
     };
 
@@ -270,7 +292,7 @@ internal static partial class NightVisionEyepieces
             foreach (Item item in top.GetAllItems())
             {
                 string? path = item.Prefab?.path;
-                if (path != null && path.IndexOf(mount.Prefix, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                if (path != null && path.IndexOf(mount.PathMatch.Length > 0 ? mount.PathMatch : mount.Prefix, System.StringComparison.OrdinalIgnoreCase) >= 0)
                     return item.Id.ToString();
             }
         }
@@ -353,6 +375,11 @@ internal static partial class NightVisionEyepieces
         private Quaternion _shoeRestRotation;
         private float _tiltSign = 1f;
         private bool _mountMoved, _mountChanged;
+        // A Joints mount's nodes and where the prefab has them.
+        private Transform? _jointScrew, _jointTilt, _jointSlide;
+        private Vector3 _carriageRest, _slideRest;
+        private Quaternion _screwRest, _tiltRest;
+        private bool _jointsMoved;
 
         private MountRig(Transform device, Transform? facing)
         {
@@ -372,6 +399,13 @@ internal static partial class NightVisionEyepieces
                 {
                     if (!t.name.StartsWith(mount.Prefix, System.StringComparison.Ordinal))
                         continue;
+                    if (mount.Joints)
+                    {
+                        MountRig? jointed = MakeJoints(t, device, mount, equipment, facing, worn, onlyIfSet);
+                        if (jointed != null || onlyIfSet)
+                            return jointed;
+                        continue;
+                    }
                     Transform? hinge = t.Find(mount.Hinge), shoe = mount.G24 ? hinge : t.Find(mount.Shoe);
                     if (hinge == null || shoe == null || !device.IsChildOf(shoe))
                         continue;
@@ -395,6 +429,60 @@ internal static partial class NightVisionEyepieces
                 }
             }
             return null;
+        }
+
+        // A Joints mount: its nodes found by name under the root, the device under its slide.
+        private static MountRig? MakeJoints(Transform root, Transform device, Mount mount, InventoryEquipment? equipment, Transform? facing, bool worn, bool onlyIfSet)
+        {
+            Transform? carriage = root.Find(mount.CarriageNode), hinge = root.Find(mount.Hinge), screw = root.Find(mount.ScrewNode);
+            Transform? tilt = root.Find(mount.TiltNode), slide = root.Find(mount.SlideNode);
+            if (carriage == null || hinge == null || tilt == null || slide == null || !device.IsChildOf(slide))
+                return null;
+            string? id = MountItemId(mount, equipment);
+            if (onlyIfSet && (id == null || !HasMountSettings(id)))
+                return null;
+            var rig = new MountRig(device, facing)
+            {
+                Worn = worn, _mount = mount, _mountHinge = hinge, _mountShoe = slide,
+                _carriage = carriage, _arm = tilt, _jointScrew = screw, _jointTilt = tilt, _jointSlide = slide,
+                _carriageRest = carriage.localPosition, _slideRest = slide.localPosition,
+                _screwRest = screw != null ? screw.localRotation : Quaternion.identity, _tiltRest = tilt.localRotation,
+            };
+            rig.LoadSettings(mount, id);
+            return rig;
+        }
+
+        // A Joints mount set: the carriage (and all it carries) along its track, the screw turned with it; the tilt
+        // node turned; the slide along the rails. Every frame from where the prefab has them: the game moves none of
+        // them (it turns only the hinge, between the carriage and the arm).
+        private void AdjustJoints(Mount mount)
+        {
+            if (_carriage == null || _jointTilt == null || _jointSlide == null)
+                return;
+            float height = Mathf.Clamp(MountHeight, mount.HeightMin, mount.HeightMax);
+            float tilt = Mathf.Clamp(MountTilt, mount.MinTilt, mount.MaxTilt);
+            float slide = Mathf.Clamp(MountSlide, -mount.SlideBack, mount.SlideForward);
+            _carriage.localPosition = _carriageRest + mount.CarriageAlong.normalized * height;
+            if (_jointScrew != null)
+                _jointScrew.localRotation = _screwRest * Quaternion.AngleAxis(height / mount.Lead * 360f, Vector3.up);
+            _jointTilt.localRotation = _tiltRest * Quaternion.AngleAxis(tilt, Vector3.right);
+            _jointSlide.localPosition = _slideRest + _jointSlide.localRotation * Vector3.forward * slide;
+            _jointsMoved = true;
+        }
+
+        private void RestoreJoints()
+        {
+            if (!_jointsMoved)
+                return;
+            _jointsMoved = false;
+            if (_carriage != null)
+                _carriage.localPosition = _carriageRest;
+            if (_jointScrew != null)
+                _jointScrew.localRotation = _screwRest;
+            if (_jointTilt != null)
+                _jointTilt.localRotation = _tiltRest;
+            if (_jointSlide != null)
+                _jointSlide.localPosition = _slideRest;
         }
 
         private void LoadSettings(Mount mount, string? id)
@@ -502,6 +590,11 @@ internal static partial class NightVisionEyepieces
         {
             if (_mount == null || _mountHinge == null || _mountShoe == null)
                 return;
+            if (_mount.Joints)
+            {
+                AdjustJoints(_mount);
+                return;
+            }
             TakeBackOwnSetting();
             if (_mount.G24)
                 AdjustG24(_mount, _mountHinge);
@@ -710,6 +803,11 @@ internal static partial class NightVisionEyepieces
 
         private void Restore()
         {
+            if (_mount != null && _mount.Joints)
+            {
+                RestoreJoints();
+                return;
+            }
             if (!_mountMoved)
                 return;
             _mountMoved = false;
@@ -785,6 +883,7 @@ internal static partial class NightVisionEyepieces
             MountHeight = MountTilt = MountSlide = 0f;
             _mountHinge = _mountShoe = _carriage = _knob = _arm = _slide = _screw = _lever = _tiltScrew = _goggleShoe = _button = null;
             _lockKnob = _l4Shoe = _buttonLeft = _buttonRight = null;
+            _jointScrew = _jointTilt = _jointSlide = null;
             _lockLoose = 0f;
             _modelLift = 0f;
             _modelSlide = 0f;
