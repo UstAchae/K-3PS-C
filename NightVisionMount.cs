@@ -142,7 +142,8 @@ internal static partial class NightVisionEyepieces
         // The ENVG-B's own mount (K-ENVG-B): a plate on the helmet with a screw that runs a carriage up or down it (1 mm
         // a turn); the device flips on the carriage's hinge; the arm tilts on a pin into a bracket whose rails the
         // device's shoe slides along. Travel as the mesh allows: 3 mm down to the plate's stop, 14 mm up to the screw's
-        // knob; 13 mm toward the face, 6 mm away, to the bracket's ends. No stop shows for the tilt.
+        // knob; 6 mm away from the face to the bracket's end, and 25 mm toward it (the shoe then 12 mm past the rails'
+        // end, 19 mm still in them: the rails' 13 mm was too little). No stop shows for the tilt.
         new Mount
         {
             Prefix = "nvg_envgb_psq42", PathMatch = "envgb", Joints = true, Hinge = "nvg_envgb_psq42_mount_LOD0/envgb_carriage/axis",
@@ -150,7 +151,7 @@ internal static partial class NightVisionEyepieces
             TiltNode = "nvg_envgb_psq42_mount_LOD0/envgb_carriage/axis/envgb_arm/envgb_tilt",
             SlideNode = "nvg_envgb_psq42_mount_LOD0/envgb_carriage/axis/envgb_arm/envgb_tilt/envgb_bracket/envgb_slide",
             CarriageAlong = new Vector3(0.0003f, 0.9982f, 0.0602f), Lead = 0.001f,
-            HeightMin = -0.003f, HeightMax = 0.014f, MinTilt = -10f, MaxTilt = 20f, SlideBack = 0.013f, SlideForward = 0.006f,
+            HeightMin = -0.003f, HeightMax = 0.014f, MinTilt = -10f, MaxTilt = 20f, SlideBack = 0.025f, SlideForward = 0.006f,
         },
     };
 
