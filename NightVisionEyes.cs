@@ -249,7 +249,14 @@ internal static partial class NightVisionEyepieces
             return $"{l.z * 1000f:F1} mm along the axis, {new Vector2(l.x, l.y).magnitude * 1000f:F1} mm off it";
         }
         Vector4 floor = _lensFloors[rightLens];
-        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG eye depth: device {_device.Node}, scale {scale:F3}; glass {floor.z * 1000f:F1} mm, lip {_device.RimHeight * 1000f:F1} mm (from the Centre, + toward the eye); camera {At(position)}; right eye {At(position + shift)} (shift {shift.magnitude * 1000f:F1} mm); main near {camera.nearClipPlane * 1000f:F2} mm, eye near {EyeNear * 1000f:F3} mm, direct {_direct}, direct near {DirectNear * 1000f:F3} mm; active {Active}, split {_split:F2}.");
+        Transform? cupSlot = _body != null && _device.CupSlot.Length > 0 ? _body.Find(_device.CupSlot) : null;
+        Transform? cupMesh = cupSlot != null && cupSlot.childCount > 0 ? cupSlot.GetChild(0).Find("envgb_eyecup_LOD0") : null;
+        if (cupMesh != null && _body != null)
+        {
+            Matrix4x4 rel = _body.worldToLocalMatrix * cupMesh.localToWorldMatrix;
+            NewCameraPlugin.Log?.LogInfo($"TEMP DIAG eyecup against the device: offset {((Vector3)rel.GetColumn(3) * 1000f).ToString("F2")} mm, rotation {rel.rotation.eulerAngles.ToString("F2")} (should be 0 and 0).");
+        }
+        NewCameraPlugin.Log?.LogInfo($"TEMP DIAG eye depth: cups {(_device.CupNode.Length > 0 ? (_device.CupOff ? "off" : "on") : "fixed")},  device {_device.Node}, scale {scale:F3}; glass {floor.z * 1000f:F1} mm, lip {_device.RimHeight * 1000f:F1} mm (from the Centre, + toward the eye); camera {At(position)}; right eye {At(position + shift)} (shift {shift.magnitude * 1000f:F1} mm); main near {camera.nearClipPlane * 1000f:F2} mm, eye near {EyeNear * 1000f:F3} mm, direct {_direct}, direct near {DirectNear * 1000f:F3} mm; active {Active}, split {_split:F2}.");
     }
 
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.

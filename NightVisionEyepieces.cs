@@ -71,7 +71,29 @@ internal static partial class NightVisionEyepieces
         internal Vector4 CupRadii0, CupRadii1;     // its inner radius at 0, 5, 10, 20 mm and at 30, 40 mm above the Centre
         internal bool Fusion;                      // another mod may lay its picture into the eyepieces (EyepieceFusion)
         internal float FieldDegrees = 60f;         // the tubes' whole field (each eyepiece shows this cone about its axis; EyepieceFusion.FieldInMainUv)
+        // Eyecups that come off (an item of their own in a slot under the device's node, CupSlot): their root's name starts
+        // with CupNode. A device with CupNode set is this entry only while its cups are on (CupOff false) or off (true).
+        internal string CupSlot = "", CupNode = "";
+        internal bool CupOff;
     }
+
+    // Whether a device's removable eyecups are on it (its cup slot holds an active node by their name).
+    private static bool HasCups(Transform node, Device known)
+    {
+        Transform? slot = node.Find(known.CupSlot);
+        if (slot == null)
+            return false;
+        for (int i = 0; i < slot.childCount; i++)
+        {
+            Transform cup = slot.GetChild(i);
+            if (cup.gameObject.activeInHierarchy && cup.name.StartsWith(known.CupNode, StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
+    // The device found is the entry for the other state of its eyecups (put on or taken off since).
+    private static bool CupsChanged() => _body != null && _device.CupNode.Length > 0 && HasCups(_body, _device) == _device.CupOff;
 
     private static Tube At(float x, float y, float z) => new Tube { Centre = new Vector3(x, y, z), Normal = Vector3.up };
 
@@ -165,11 +187,20 @@ internal static partial class NightVisionEyepieces
         // other mod's, laid into the tubes' (EyepieceFusion).
         new Device
         {
-            Node = "nvg_envgb_psq42_LOD0", Sealed = true, Fusion = true, FieldDegrees = 40f,
+            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", Sealed = true, Fusion = true, FieldDegrees = 40f,
             CupHeight = 0.0285f, CupRadii0 = new Vector4(0.0144f, 0.0217f, 0.0223f, 0.0251f), CupRadii1 = new Vector4(0.0287f, 0.0287f, 0f, 0f),
             Tubes = new[] { At(-0.03077f, 0.02204f, -0.07569f), At(-0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f) },
             LensRadius = 0.0149f, FloorDepth = 0.0055f, OpeningRadius = 0.0144f, RimHeight = 0.0285f, RimRadius = 0.0287f,
             CardSize = new Vector2(0.031f, 0.031f),
+        },
+        // The ENVG-B with its eyecups taken off: the glass under the tube's bare mouth, 1.2 mm over the glass's crown, its
+        // opening 13.7 mm across inside a 14.9 mm lip.
+        new Device
+        {
+            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", CupOff = true, Fusion = true, FieldDegrees = 40f,
+            Tubes = new[] { At(-0.03077f, 0.01824f, -0.07569f), At(-0.03077f, 0.01824f, -0.07569f), At(0.03077f, 0.01824f, -0.07569f), At(0.03077f, 0.01824f, -0.07569f) },
+            LensRadius = 0.0149f, FloorDepth = 0.0017f, OpeningRadius = 0.0137f, RimHeight = 0f, RimRadius = 0.0149f,
+            CardSize = new Vector2(0.018f, 0.018f),
         },
         // AN/PVS-14: a monocular, its eyepiece lens bulging out of stepped rings, no eyecup to hide it.
         new Device
@@ -274,6 +305,14 @@ internal static partial class NightVisionEyepieces
         // Looked for again while none is worn, or the one found has been put away (a device swapped for another stays
         // in the scene, hidden).
         bool wornAny = player.NightVisionObserver?.Component != null;
+        // Its eyecups put on or taken off: the device let go of and found again, as the entry for its eyecups now.
+        if (CupsChanged())
+        {
+            NewCameraPlugin.Log?.LogInfo($"NVG: {_device.Node}'s eyecups {(_device.CupOff ? "put on" : "taken off")}.");
+            Release();
+            _searchedFrame = -1000;
+            DiagEyeDepthWanted = true; // TEMP DIAG
+        }
         int searchEvery = wornAny && Time.time < _holdFilterUntil ? 1 : SearchFrames;
         if ((_body == null || !_body.gameObject.activeInHierarchy || _body.root != player.gameObject.transform.root || WornElsewhere(player)) && Time.frameCount - _searchedFrame >= searchEvery)
         {
@@ -459,6 +498,8 @@ internal static partial class NightVisionEyepieces
                     foreach (Device known in Devices)
                     {
                         if (node.name != known.Node || !node.gameObject.activeInHierarchy)
+                            continue;
+                        if (known.CupNode.Length > 0 && HasCups(node, known) == known.CupOff)
                             continue;
                         _device = known;
                         return node;
