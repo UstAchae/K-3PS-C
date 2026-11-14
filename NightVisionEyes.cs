@@ -183,12 +183,16 @@ internal static partial class NightVisionEyepieces
         // Eased: over the first stretch of the swing the two eyes' views come together into the eyepiece left (going), then
         // shown as a monocular, the bare eye's half fading in over the next (bare).
         bool downA = PodDown(CentreLensA), downB = PodDown(CentreLensB);
-        // Both swung away, the one less far is still the monocular's (its tube fading out too), so nothing jumps back.
+        // Both swung away, the one less far is the monocular's while it goes (below), so nothing jumps back.
         int lone = downA != downB ? (downA ? CentreLensA : CentreLensB)
             : !downA && !downB ? (PodAngle(CentreLensA) <= PodAngle(CentreLensB) ? CentreLensA : CentreLensB) : -1;
         int raisedTube = lone == CentreLensA ? CentreLensB : CentreLensA;
-        float going = lone >= 0 && !_device.Monocular && BinocularOn ? PodGone(raisedTube) : 0f;
-        float bare = lone >= 0 ? PodBare(raisedTube) : 0f;
+        // Both swung away, the second on its way up: over its first stretch the bare half's fade goes again (its tube
+        // fading out), over its next the eyes part back to their own (apart), each bare, neither tube working.
+        bool both = !downA && !downB;
+        float again = both ? PodGone(lone) : 0f, apart = both ? PodBare(lone) : 0f;
+        float going = lone >= 0 && !_device.Monocular && BinocularOn ? PodGone(raisedTube) * (1f - apart) : 0f;
+        float bare = lone >= 0 ? PodBare(raisedTube) * (1f - again) : 0f;
         int loneSide = lone >= 0 ? ((lone == CentreLensA) == (a <= b) ? 0 : 1) : -1;
         int monocular = !BinocularOn ? -1
             : _device.Monocular ? (a + CameraPosition.Horizontal >= 0f ? 1 : 0)
