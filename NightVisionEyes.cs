@@ -109,7 +109,8 @@ internal static partial class NightVisionEyepieces
         bool aRight = Vector3.Dot(a.position, right) >= Vector3.Dot(b.position, right);
         Transform rightTube = aRight ? a : b;
         // The right eyepiece swung away from the eye: its tube is off, and there is nothing to lay the thermal into.
-        if (!PodDown(aRight ? CentreLensA : indexB))
+        // Until then, as it fades out (and K-ENVG-B's thermal with it), still laid in.
+        if (PodGone(aRight ? CentreLensA : indexB) >= 1f)
             return;
         for (int i = 0; i < 4; i++)
             _fusedTubes[i] = i < _lensRest.Length && Vector3.Dot(_lensRest[i].position, right) > middle ? 1f : 0f;
@@ -179,11 +180,19 @@ internal static partial class NightVisionEyepieces
         // is from the head's middle, not from the camera: gone over to the aiming eye, the camera is right behind a lens before that eye.
         // So too a binocular with one eyepiece swung away on its pod (the ENVG-B's): the other, still before its eye, shown
         // whole as a monocular's, over the bare eye's half faded as the PVS-14's (the same see-through).
+        // Eased: over the first stretch of the swing the two eyes' views come together into the eyepiece left (going), then
+        // shown as a monocular, the bare eye's half fading in over the next (bare).
         bool downA = PodDown(CentreLensA), downB = PodDown(CentreLensB);
-        int lone = downA != downB ? (downA ? CentreLensA : CentreLensB) : -1;
+        // Both swung away, the one less far is still the monocular's (its tube fading out too), so nothing jumps back.
+        int lone = downA != downB ? (downA ? CentreLensA : CentreLensB)
+            : !downA && !downB ? (PodAngle(CentreLensA) <= PodAngle(CentreLensB) ? CentreLensA : CentreLensB) : -1;
+        int raisedTube = lone == CentreLensA ? CentreLensB : CentreLensA;
+        float going = lone >= 0 && !_device.Monocular && BinocularOn ? PodGone(raisedTube) : 0f;
+        float bare = lone >= 0 ? PodBare(raisedTube) : 0f;
+        int loneSide = lone >= 0 ? ((lone == CentreLensA) == (a <= b) ? 0 : 1) : -1;
         int monocular = !BinocularOn ? -1
             : _device.Monocular ? (a + CameraPosition.Horizontal >= 0f ? 1 : 0)
-            : lone >= 0 ? ((lone == CentreLensA) == (a <= b) ? 0 : 1) : -1;
+            : going >= 1f ? loneSide : -1;
         if (lone < 0)
             lone = CentreLensA;
         float loneAcross = lone == CentreLensA ? a : b;
@@ -198,6 +207,8 @@ internal static partial class NightVisionEyepieces
         }
         float seeThrough = Mathf.Clamp01(MonocularSeeThrough);
         float fade = seeThrough <= 0.5f ? seeThrough * 2f : 1f + (seeThrough - 0.5f) * 6f;
+        if (monocular >= 0 && !_device.Monocular)
+            fade *= bare;
         binocular.SetVector(MonocularId, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
         binocular.SetFloat(LensClearId, LensReflections ? 0f : 1f);
         binocular.SetVector(EyeSpanId, new Vector4(1f, 1f, 0f, 0f));
@@ -209,7 +220,8 @@ internal static partial class NightVisionEyepieces
         // camera when it has come forward to a sight (NightVisionScope.cs). Where the game draws the device, from the camera.
         // A monocular comes in none of the way once aimed: as the camera goes over to the aiming eye, and back as it returns.
         Vector3 back = view.forward * ScopePullback;
-        float comesIn = EyeShift * _split * (monocular >= 0 ? 1f - CameraPosition.ViewAimed : 1f);
+        float bothIn = EyeShift * _split, oneIn = bothIn * (1f - CameraPosition.ViewAimed);
+        float comesIn = monocular >= 0 ? oneIn : bothIn;
         Vector3 EyeShiftOf(float lens) => _direct ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
         Vector3 leftPlace = a <= b ? placeA : placeB, rightPlace = a <= b ? placeB : placeA;
@@ -223,9 +235,19 @@ internal static partial class NightVisionEyepieces
             leftLens = rightLens = _lensRest[lone];
         leftShift = KeptClear(leftLens, position, leftShift);
         rightShift = KeptClear(rightLens, position, rightShift);
+        // On the way to a monocular: both eyes toward the one it will be.
+        if (monocular < 0 && going > 0f)
+        {
+            Vector3 one = KeptClear(_lensRest[lone], position, _direct ? right * (loneAcross * oneIn) - back : Vector3.zero);
+            leftShift = Vector3.Lerp(leftShift, one, going);
+            rightShift = Vector3.Lerp(rightShift, one, going);
+        }
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
         float split = monocular >= 0 ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
+        // ...and the eye left taking the frame over, its half widening past the far edge.
+        if (monocular < 0 && going > 0f)
+            split = Mathf.Lerp(split, loneSide == 0 ? 1f + Overscan : -Overscan, going);
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);

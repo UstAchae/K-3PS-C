@@ -278,12 +278,25 @@ internal static partial class NightVisionEyepieces
     private static Transform?[] _lensPods = Array.Empty<Transform?>();
     private const float PodDownWithin = 1.5f;   // degrees a pod may stand off its down pose and still be before the eye
 
-    // Whether this tube's eyepiece is down before the eye (always, on a device without pods). Swung away, its tube is off.
-    private static bool PodDown(int tube)
+    // Over the first stretch of a pod's swing (35% of its 90 degrees, as K-ENVG-B fades its thermal) its tube fades out and the
+    // two eyes' views ease into the other eyepiece's alone; over the next, the bare eye's half fades in as a monocular's. Back down,
+    // the same the other way. Done at once, the picture jumped.
+    private const float PodFadeDegrees = 31.5f;
+
+    private static float PodAngle(int tube)
     {
         Transform? pod = tube < _lensPods.Length ? _lensPods[tube] : null;
-        return pod == null || Quaternion.Angle(pod.localRotation, Quaternion.identity) <= PodDownWithin;
+        return pod == null ? 0f : Quaternion.Angle(pod.localRotation, Quaternion.identity);
     }
+
+    // Whether this tube's eyepiece is down before the eye (always, on a device without pods).
+    private static bool PodDown(int tube) => PodAngle(tube) <= PodDownWithin;
+
+    // How far this tube's eyepiece is on its way off the eye: 0 down, 1 from PodFadeDegrees on.
+    private static float PodGone(int tube) => Mathf.SmoothStep(0f, 1f, PodAngle(tube) / PodFadeDegrees);
+
+    // Past that, how far the bare eye's half has faded in as a monocular's: 0 at PodFadeDegrees, 1 at twice it.
+    private static float PodBare(int tube) => Mathf.SmoothStep(0f, 1f, PodAngle(tube) / PodFadeDegrees - 1f);
     private static Vector4[] _lensFloors = Array.Empty<Vector4>();   // each lens's centre on the floor in its node's frame, w its radius
     private static int _searchedFrame = -100;
     private static Behaviour? _hiddenMask;
@@ -811,8 +824,9 @@ internal static partial class NightVisionEyepieces
         for (int i = 0; i < 4; i++)
         {
             bool reached = _sinceSwitch >= _lag[i];   // this tube has followed the switch
-            // A tube whose eyepiece has swung away from the eye goes off, and strikes again when it comes back down.
-            if (switchedOn && reached && PodDown(i))
+            // A tube whose eyepiece has swung away from the eye goes off, faded out over the first stretch of the swing
+            // (below), and strikes again as it comes back.
+            if (switchedOn && reached && PodGone(i) < 1f)
             {
                 _warm[i] = Mathf.Min(_warm[i] + Time.deltaTime / WarmUp, 1f);
                 _power[i] = _warm[i] < 1f ? (Strike + (1f - Strike) * _warm[i]) * (0.7f + 0.3f * UnityEngine.Random.value) : 1f;
@@ -823,8 +837,8 @@ internal static partial class NightVisionEyepieces
                 _warm[i] = 0f;
                 _power[i] *= Mathf.Exp(-Time.deltaTime / Afterglow);
             }
-            power[i] = _power[i];
-            brightest = Mathf.Max(brightest, _power[i]);
+            power[i] = _power[i] * (1f - PodGone(i));
+            brightest = Mathf.Max(brightest, power[i]);
         }
         for (int i = 1; i < 4 && i < _device.Tubes.Length; i++)
         {
