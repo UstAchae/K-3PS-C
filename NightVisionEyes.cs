@@ -177,7 +177,16 @@ internal static partial class NightVisionEyepieces
         float a = Vector3.Dot(placeA, right), b = Vector3.Dot(placeB, right);
         // A monocular is before one eye only: over the other eye's half the device fades out toward the edge. Which eye, by where its lens
         // is from the head's middle, not from the camera: gone over to the aiming eye, the camera is right behind a lens before that eye.
-        int monocular = _device.Monocular && BinocularOn ? (a + CameraPosition.Horizontal >= 0f ? 1 : 0) : -1;
+        // So too a binocular with one eyepiece swung away on its pod (the ENVG-B's): the other, still before its eye, shown
+        // whole as a monocular's, over the bare eye's half faded as the PVS-14's (the same see-through).
+        bool downA = PodDown(CentreLensA), downB = PodDown(CentreLensB);
+        int lone = downA != downB ? (downA ? CentreLensA : CentreLensB) : -1;
+        int monocular = !BinocularOn ? -1
+            : _device.Monocular ? (a + CameraPosition.Horizontal >= 0f ? 1 : 0)
+            : lone >= 0 ? ((lone == CentreLensA) == (a <= b) ? 0 : 1) : -1;
+        if (lone < 0)
+            lone = CentreLensA;
+        float loneAcross = lone == CentreLensA ? a : b;
         float seeThrough = Mathf.Clamp01(MonocularSeeThrough);
         float fade = seeThrough <= 0.5f ? seeThrough * 2f : 1f + (seeThrough - 0.5f) * 6f;
         binocular.SetVector(MonocularId, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
@@ -196,13 +205,13 @@ internal static partial class NightVisionEyepieces
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
         Vector3 leftPlace = a <= b ? placeA : placeB, rightPlace = a <= b ? placeB : placeA;
         if (monocular >= 0)
-            leftShift = rightShift = EyeShiftOf(a);
+            leftShift = rightShift = EyeShiftOf(loneAcross);
         // An eye is never let past its eyepiece: brought so near (the mount slid toward the face, the head turned), the
         // camera went in past the lens's mouth and the lenses had nothing to show from there (the tube's inside, the
         // scene beyond its far end). Held back along the tube's axis to EyeClear in front of the eyepiece's mouth.
         Transform leftLens = _lensRest[a <= b ? CentreLensA : CentreLensB], rightLens = _lensRest[a <= b ? CentreLensB : CentreLensA];
         if (monocular >= 0)
-            leftLens = rightLens = _lensRest[CentreLensA];
+            leftLens = rightLens = _lensRest[lone];
         leftShift = KeptClear(leftLens, position, leftShift);
         rightShift = KeptClear(rightLens, position, rightShift);
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
