@@ -75,6 +75,9 @@ internal static partial class NightVisionEyepieces
         // with CupNode. A device with CupNode set is this entry only while its cups are on (CupOff false) or off (true).
         internal string CupSlot = "", CupNode = "";
         internal bool CupOff;
+        // Eyepieces that swing away on hinges of their own (the ENVG-B's pods, K-ENVG-B): each a node under the device's,
+        // its turn identity while the eyepiece is down before the eye. Each tube goes with the pod nearest it across.
+        internal string[] Pods = Array.Empty<string>();
     }
 
     // Whether a device's removable eyecups are on it (its cup slot holds an active node by their name).
@@ -106,6 +109,8 @@ internal static partial class NightVisionEyepieces
         Centre = new Vector3(0.01596f, 0.05146f, -0.02294f), Normal = new Vector3(0.0027f, 1f, 0.0046f),
         Lens = new Vector3(0.01595f, 0.04687f, -0.02296f), LensRadius = 0.01511f,
     };
+
+    private static readonly string[] EnvgbPods = { "envgb_pod_L", "envgb_pod_R" };
 
     private static readonly Device[] Devices =
     {
@@ -189,7 +194,7 @@ internal static partial class NightVisionEyepieces
         // other mod's, laid into the tubes' (EyepieceFusion).
         new Device
         {
-            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", Sealed = true, Fusion = true, FieldDegrees = 40f,
+            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", Sealed = true, Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods,
             CupHeight = 0.0285f, CupRadii0 = new Vector4(0.0144f, 0.0217f, 0.0223f, 0.0251f), CupRadii1 = new Vector4(0.0287f, 0.0287f, 0f, 0f),
             Tubes = new[] { At(-0.03077f, 0.02204f, -0.07569f), At(-0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f) },
             LensRadius = 0.0149f, FloorDepth = 0.0055f, OpeningRadius = 0.0144f, RimHeight = 0.0285f, RimRadius = 0.0287f,
@@ -199,7 +204,7 @@ internal static partial class NightVisionEyepieces
         // opening 13.7 mm across inside a 14.9 mm lip.
         new Device
         {
-            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", CupOff = true, Fusion = true, FieldDegrees = 40f,
+            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", CupOff = true, Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods,
             Tubes = new[] { At(-0.03077f, 0.01824f, -0.07569f), At(-0.03077f, 0.01824f, -0.07569f), At(0.03077f, 0.01824f, -0.07569f), At(0.03077f, 0.01824f, -0.07569f) },
             LensRadius = 0.0149f, FloorDepth = 0.0017f, OpeningRadius = 0.0137f, RimHeight = 0f, RimRadius = 0.0149f,
             CardSize = new Vector2(0.018f, 0.018f),
@@ -263,6 +268,18 @@ internal static partial class NightVisionEyepieces
     private static Device _device = Devices[0];
     private static GameObject? _lenses;
     private static Transform[] _lensNodes = Array.Empty<Transform>();
+    // Each lens where it stands with its eyepiece down before the eye: the same nodes as _lensNodes, but for a device whose
+    // eyepieces swing away (Device.Pods), where those go with their pods and these stay. The eyes are placed by these.
+    private static Transform[] _lensRest = Array.Empty<Transform>();
+    private static Transform?[] _lensPods = Array.Empty<Transform?>();
+    private const float PodDownWithin = 1.5f;   // degrees a pod may stand off its down pose and still be before the eye
+
+    // Whether this tube's eyepiece is down before the eye (always, on a device without pods). Swung away, its tube is off.
+    private static bool PodDown(int tube)
+    {
+        Transform? pod = tube < _lensPods.Length ? _lensPods[tube] : null;
+        return pod == null || Quaternion.Angle(pod.localRotation, Quaternion.identity) <= PodDownWithin;
+    }
     private static Vector4[] _lensFloors = Array.Empty<Vector4>();   // each lens's centre on the floor in its node's frame, w its radius
     private static int _searchedFrame = -100;
     private static Behaviour? _hiddenMask;
@@ -414,7 +431,15 @@ internal static partial class NightVisionEyepieces
         if (_lenses != null)
             UnityEngine.Object.Destroy(_lenses);
         _lenses = null;
+        foreach (Transform node in _lensNodes)
+        {
+            // The ones on pods hang in the device's own model, not under _lenses.
+            if (node != null && (_lenses == null || !node.IsChildOf(_lenses.transform)))
+                UnityEngine.Object.Destroy(node.gameObject);
+        }
         _lensNodes = Array.Empty<Transform>();
+        _lensRest = Array.Empty<Transform>();
+        _lensPods = Array.Empty<Transform?>();
         _lensFloors = Array.Empty<Vector4>();
         _faceLights = Array.Empty<Light?>();
         _body = null;
@@ -550,8 +575,59 @@ internal static partial class NightVisionEyepieces
             Vector3 local = Quaternion.Inverse(lens.transform.localRotation) * (floor - tube.Centre);
             _lensFloors[i] = new Vector4(local.x, local.y, local.z, tube.LensRadius > 0f ? tube.LensRadius : _device.LensRadius);
         }
+        HangOnPods(body);
         MeasureObjective(body);
         MakeFaceLights();
+    }
+
+    // A device whose eyepieces swing away: each lens also hung on its pod, where it stands with the pod down (its turn
+    // identity), so it goes with it; the one under _lenses stays, to place the eyes by.
+    private static void HangOnPods(Transform body)
+    {
+        _lensRest = _lensNodes;
+        _lensPods = new Transform?[_lensNodes.Length];
+        if (_device.Pods.Length == 0)
+            return;
+        var pods = new System.Collections.Generic.List<Transform>();
+        foreach (Transform node in body.GetComponentsInChildren<Transform>(true))
+        {
+            if (Array.IndexOf(_device.Pods, node.name) >= 0)
+                pods.Add(node);
+        }
+        if (pods.Count == 0)
+        {
+            NewCameraPlugin.Log?.LogInfo("NVG: this device's eyepieces have no pods in its model; they stay where they are.");
+            return;
+        }
+        _lensRest = (Transform[])_lensNodes.Clone();
+        var moving = new Transform[_lensNodes.Length];
+        for (int i = 0; i < _lensNodes.Length; i++)
+        {
+            Matrix4x4 lens = Chain(body, _lensRest[i]);
+            Transform nearest = pods[0];
+            Matrix4x4 nearestDown = Matrix4x4.identity;
+            float best = float.MaxValue;
+            foreach (Transform pod in pods)
+            {
+                Matrix4x4 down = Chain(body, pod.parent) * Matrix4x4.TRS(pod.localPosition, Quaternion.identity, pod.localScale);
+                float across = Mathf.Abs(down.GetColumn(3).x - lens.GetColumn(3).x);
+                if (across < best)
+                {
+                    best = across;
+                    nearest = pod;
+                    nearestDown = down;
+                }
+            }
+            Matrix4x4 onPod = nearestDown.inverse * lens;
+            var node = new GameObject("Justachae NVG lens " + i + " on pod") { layer = body.gameObject.layer };
+            node.transform.SetParent(nearest, false);
+            node.transform.localPosition = onPod.GetColumn(3);
+            node.transform.localRotation = onPod.rotation;
+            moving[i] = node.transform;
+            _lensPods[i] = nearest;
+        }
+        _lensNodes = moving;
+        NewCameraPlugin.Log?.LogInfo("NVG: the eyepieces hung on their pods (" + string.Join(", ", Array.ConvertAll(_lensPods, p => p != null ? p!.name : "none")) + ").");
     }
 
     private static bool LoadShaders()
@@ -731,7 +807,8 @@ internal static partial class NightVisionEyepieces
         for (int i = 0; i < 4; i++)
         {
             bool reached = _sinceSwitch >= _lag[i];   // this tube has followed the switch
-            if (switchedOn && reached)
+            // A tube whose eyepiece has swung away from the eye goes off, and strikes again when it comes back down.
+            if (switchedOn && reached && PodDown(i))
             {
                 _warm[i] = Mathf.Min(_warm[i] + Time.deltaTime / WarmUp, 1f);
                 _power[i] = _warm[i] < 1f ? (Strike + (1f - Strike) * _warm[i]) * (0.7f + 0.3f * UnityEngine.Random.value) : 1f;

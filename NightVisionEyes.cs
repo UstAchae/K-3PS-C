@@ -101,12 +101,18 @@ internal static partial class NightVisionEyepieces
     {
         if (!_device.Fusion || _lensNodes.Length == 0 || !LensesOn(camera))
             return;
-        Transform a = _lensNodes[CentreLensA], b = _lensNodes[Mathf.Min(CentreLensB, _lensNodes.Length - 1)];
+        // Which is which by where the eyepieces stand down before the eyes (not where a pod has swung one).
+        int indexB = Mathf.Min(CentreLensB, _lensNodes.Length - 1);
+        Transform a = _lensRest[CentreLensA], b = _lensRest[indexB];
         Vector3 right = camera.transform.right;
         float middle = (Vector3.Dot(a.position, right) + Vector3.Dot(b.position, right)) * 0.5f;
-        Transform rightTube = Vector3.Dot(a.position, right) >= Vector3.Dot(b.position, right) ? a : b;
+        bool aRight = Vector3.Dot(a.position, right) >= Vector3.Dot(b.position, right);
+        Transform rightTube = aRight ? a : b;
+        // The right eyepiece swung away from the eye: its tube is off, and there is nothing to lay the thermal into.
+        if (!PodDown(aRight ? CentreLensA : indexB))
+            return;
         for (int i = 0; i < 4; i++)
-            _fusedTubes[i] = i < _lensNodes.Length && Vector3.Dot(_lensNodes[i].position, right) > middle ? 1f : 0f;
+            _fusedTubes[i] = i < _lensRest.Length && Vector3.Dot(_lensRest[i].position, right) > middle ? 1f : 0f;
         Vector3 axis = -rightTube.forward;
         Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
         Vector3 ahead = camera.worldToCameraMatrix.MultiplyPoint3x4(camera.transform.position + axis * 100f);
@@ -166,7 +172,8 @@ internal static partial class NightVisionEyepieces
     private static void RenderLenses(Camera camera, Material binocular, Transform view, Vector3 position)
     {
         Vector3 right = view.right;
-        Vector3 placeA = FromCamera(_lensNodes[CentreLensA], position).GetColumn(3), placeB = FromCamera(_lensNodes[CentreLensB], position).GetColumn(3);
+        // The eyes by where the eyepieces stand down before them, whether or not a pod has swung one away.
+        Vector3 placeA = FromCamera(_lensRest[CentreLensA], position).GetColumn(3), placeB = FromCamera(_lensRest[CentreLensB], position).GetColumn(3);
         float a = Vector3.Dot(placeA, right), b = Vector3.Dot(placeB, right);
         // A monocular is before one eye only: over the other eye's half the device fades out toward the edge. Which eye, by where its lens
         // is from the head's middle, not from the camera: gone over to the aiming eye, the camera is right behind a lens before that eye.
@@ -193,9 +200,9 @@ internal static partial class NightVisionEyepieces
         // An eye is never let past its eyepiece: brought so near (the mount slid toward the face, the head turned), the
         // camera went in past the lens's mouth and the lenses had nothing to show from there (the tube's inside, the
         // scene beyond its far end). Held back along the tube's axis to EyeClear in front of the eyepiece's mouth.
-        Transform leftLens = _lensNodes[a <= b ? CentreLensA : CentreLensB], rightLens = _lensNodes[a <= b ? CentreLensB : CentreLensA];
+        Transform leftLens = _lensRest[a <= b ? CentreLensA : CentreLensB], rightLens = _lensRest[a <= b ? CentreLensB : CentreLensA];
         if (monocular >= 0)
-            leftLens = rightLens = _lensNodes[CentreLensA];
+            leftLens = rightLens = _lensRest[CentreLensA];
         leftShift = KeptClear(leftLens, position, leftShift);
         rightShift = KeptClear(rightLens, position, rightShift);
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
