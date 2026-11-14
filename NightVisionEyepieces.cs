@@ -116,6 +116,32 @@ internal static partial class NightVisionEyepieces
     // This frame's eyepiece swung up while the other is down (null otherwise), by its pod's name and its eyecup's.
     private static string? RaisedPod, RaisedCupPod;
 
+    // The ENVG-B's two entries, its eyecups on and off: all they share is set here, once, each giving only what its
+    // eyecups make different (where the opening narrowest is, the rim over it, the card over that).
+    private static Device Envgb(bool cupOff, float centreY, float floorDepth, float openingRadius, float rimHeight, float rimRadius, float card)
+    {
+        const float x = 0.03077f, z = -0.07569f;
+        return new Device
+        {
+            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", CupOff = cupOff,
+            Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods, CupPods = EnvgbCupPods,
+            Tubes = new[] { At(-x, centreY, z), At(-x, centreY, z), At(x, centreY, z), At(x, centreY, z) },
+            LensRadius = 0.0149f, FloorDepth = floorDepth, OpeningRadius = openingRadius, RimHeight = rimHeight, RimRadius = rimRadius,
+            CardSize = new Vector2(card, card),
+        };
+    }
+
+    // With its eyecups on, they close against the face.
+    private static Device EnvgbCupsOn()
+    {
+        Device device = Envgb(cupOff: false, centreY: 0.02204f, floorDepth: 0.0055f, openingRadius: 0.0144f, rimHeight: 0.0285f, rimRadius: 0.0287f, card: 0.031f);
+        device.Sealed = true;
+        device.CupHeight = 0.0285f;
+        device.CupRadii0 = new Vector4(0.0144f, 0.0217f, 0.0223f, 0.0251f);
+        device.CupRadii1 = new Vector4(0.0287f, 0.0287f, 0f, 0f);
+        return device;
+    }
+
     private static readonly Device[] Devices =
     {
         // GPNVG-18: the tubes look along -Y, the mount is toward +Z. Each eyecup holds two lenses side by side, painted
@@ -196,23 +222,10 @@ internal static partial class NightVisionEyepieces
         // rubber eyecup: the cup narrows to a 14.4 mm throat 5 mm over the glass, then flares to 28.7 mm at its lip,
         // 33.5 mm over the glass. The Centre is at the throat, the lens the disc's edge. Its thermal picture is the
         // other mod's, laid into the tubes' (EyepieceFusion).
-        new Device
-        {
-            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", Sealed = true, Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods, CupPods = EnvgbCupPods,
-            CupHeight = 0.0285f, CupRadii0 = new Vector4(0.0144f, 0.0217f, 0.0223f, 0.0251f), CupRadii1 = new Vector4(0.0287f, 0.0287f, 0f, 0f),
-            Tubes = new[] { At(-0.03077f, 0.02204f, -0.07569f), At(-0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f) },
-            LensRadius = 0.0149f, FloorDepth = 0.0055f, OpeningRadius = 0.0144f, RimHeight = 0.0285f, RimRadius = 0.0287f,
-            CardSize = new Vector2(0.031f, 0.031f),
-        },
+        EnvgbCupsOn(),
         // The ENVG-B with its eyecups taken off: the glass under the tube's bare mouth, 1.2 mm over the glass's crown, its
         // opening 13.7 mm across inside a 14.9 mm lip.
-        new Device
-        {
-            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", CupOff = true, Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods, CupPods = EnvgbCupPods,
-            Tubes = new[] { At(-0.03077f, 0.01824f, -0.07569f), At(-0.03077f, 0.01824f, -0.07569f), At(0.03077f, 0.01824f, -0.07569f), At(0.03077f, 0.01824f, -0.07569f) },
-            LensRadius = 0.0149f, FloorDepth = 0.0017f, OpeningRadius = 0.0137f, RimHeight = 0f, RimRadius = 0.0149f,
-            CardSize = new Vector2(0.018f, 0.018f),
-        },
+        Envgb(cupOff: true, centreY: 0.01824f, floorDepth: 0.0017f, openingRadius: 0.0137f, rimHeight: 0f, rimRadius: 0.0149f, card: 0.018f),
         // AN/PVS-14: a monocular, its eyepiece lens bulging out of stepped rings, no eyecup to hide it.
         new Device
         {
