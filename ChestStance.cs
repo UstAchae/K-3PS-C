@@ -26,13 +26,24 @@ internal static class ChestStance
     internal static float HoldSeconds = 0.25f;
     internal static float Drop = 0.17f, Ahead = 0f, Side = -0.05f;  // the gun's own origin from the eye's line (m)
     internal static float Cant = 30f;                                   // the gun's turn about its line of sight (degrees, top to the left)
+    // Leaning out (Q, E) in the stance, the gun goes further that way, as much as the lean is taken: turned about its line of
+    // sight toward that side (degrees) and moved across toward it (m), at a full lean.
+    internal static float LeanCant = 15f, LeanShift = 0.05f;
+    private const float FullLean = 5f;                                  // the game's lean (MovementContext.Tilt) at its fullest
+
+    // How far the player leans: -1 full to the left, 1 full to the right.
+    private static float LeanShare()
+    {
+        float tilt = Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer?.MovementContext?.SmoothedTilt ?? 0f;
+        return Mathf.Clamp(tilt / FullLean, -1f, 1f);
+    }
 
     internal static bool Active { get; private set; }
     // How far into the stance the gun is (0 or 1): kept as it was once the aim ends, so the gun leaves from where it was,
     // and set as the next aim is taken.
     internal static float Weight { get; private set; }
     // The gun's own origin from the eye's line, ahead by the usual aiming distance: lower and to the right.
-    internal static Vector3 Offset => new Vector3(Side, -Drop, Ahead);
+    internal static Vector3 Offset => new Vector3(Side + LeanShift * LeanShare(), -Drop, Ahead);
 
     private static bool _pending;        // a press of the aim key held back, not yet known to be a click or a hold
     private static bool _held;           // in the stance, the key still down
@@ -285,12 +296,14 @@ internal static class ChestStance
     internal static Quaternion Canted(EFT.Animations.ProceduralWeaponAnimation animation, Quaternion turn, Quaternion view, float weight)
     {
         Vector3 forward = view * Vector3.forward;
+        // Leaning right, the top goes right (the cant is top to the left); leaning left, further left.
+        float cant = Cant - LeanCant * LeanShare();
         Transform? weapon = animation.HandsContainer?.Weapon;
         if (weapon == null)
-            return Quaternion.AngleAxis(Cant * weight, forward) * turn;
+            return Quaternion.AngleAxis(cant * weight, forward) * turn;
         // The gun's own up: forward in its frame, as the game's guns have it, whatever sights it carries.
         Vector3 have = Vector3.ProjectOnPlane(turn * weapon.forward, forward);
-        Vector3 want = Quaternion.AngleAxis(Cant, forward) * Vector3.ProjectOnPlane(view * Vector3.up, forward);
+        Vector3 want = Quaternion.AngleAxis(cant, forward) * Vector3.ProjectOnPlane(view * Vector3.up, forward);
         if (have.sqrMagnitude < 1e-8f)
             return turn;
         return Quaternion.AngleAxis(Vector3.SignedAngle(have, want, forward) * weight, forward) * turn;

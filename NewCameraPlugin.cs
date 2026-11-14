@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.2";
+    public const string PluginVersion = "1.8.3";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -488,6 +488,10 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             new ConfigDescription("胸口抵肩时，枪身原点在开镜时的前后位置上再往前多少（负数是往后）。0 是和开镜时一样远：前后位置和开镜一样，按原版对这把枪、这个瞄具的算法算出来。", new AcceptableValueRange<float>(-0.2f, 0.3f)));
         ConfigEntry<float> cant = SettingsLayout.Bind(Config, section, "倾斜（度）", 20f,
             new ConfigDescription("胸口抵肩时，枪绕着瞄准线转多少度，正数是枪的上面往左倒（向内），负数往右。", new AcceptableValueRange<float>(-60f, 60f)));
+        ConfigEntry<float> leanCant = SettingsLayout.Bind(Config, section, "探头时额外倾斜（度）", 15f,
+            new ConfigDescription("胸口抵肩时按 Q／E 探头，枪再往探头的那一侧绕瞄准线多转多少度（往右探头时枪的上面往右倒，往左探头时往左倒）。这是完全探头时的值，探一半就转一半。0 是不额外转。", new AcceptableValueRange<float>(0f, 45f)));
+        ConfigEntry<float> leanShift = SettingsLayout.Bind(Config, section, "探头时水平移动（米）", 0.05f,
+            new ConfigDescription("胸口抵肩时按 Q／E 探头，枪再往探头的那一侧水平移动多少。这是完全探头时的值，探一半就移一半。0 是不额外移动。", new AcceptableValueRange<float>(0f, 0.2f)));
         // Two decimals: the slider's value rounded to hundredths of a second.
         float rounded = Mathf.Round(hold.Value * 100f) / 100f;
         if (rounded != hold.Value)
@@ -507,6 +511,8 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             ChestStance.Ahead = ahead.Value;
             ChestStance.Side = side.Value;
             ChestStance.Cant = cant.Value;
+            ChestStance.LeanCant = leanCant.Value;
+            ChestStance.LeanShift = leanShift.Value;
         }
         enabled.SettingChanged += (_, _) => Refresh();
         key.SettingChanged += (_, _) => Refresh();
@@ -515,6 +521,8 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ahead.SettingChanged += (_, _) => Refresh();
         side.SettingChanged += (_, _) => Refresh();
         cant.SettingChanged += (_, _) => Refresh();
+        leanCant.SettingChanged += (_, _) => Refresh();
+        leanShift.SettingChanged += (_, _) => Refresh();
         Refresh();
     }
 
