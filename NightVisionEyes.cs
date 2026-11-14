@@ -74,6 +74,10 @@ internal static partial class NightVisionEyepieces
             return false;
         if ((!BinocularOn && !Active) || _eyepieceImage == null || !_eyepieceImage.enabled)
             return false;
+        // Both eyepieces swung all the way away on their pods: the eyes are bare, the device the game's to draw again,
+        // as with it flipped up (the eyes eased back to the camera on the way, below).
+        if (_lensPods.Length > 0 && PodBare(CentreLensA) >= 1f && PodBare(CentreLensB) >= 1f)
+            return false;
         Vector3 mount = _rotator != null ? _rotator.transform.position : _body.position;
         return (mount - camera.transform.position).sqrMagnitude <= MaxEyeDistance * MaxEyeDistance;
     }
@@ -188,10 +192,11 @@ internal static partial class NightVisionEyepieces
             : !downA && !downB ? (PodAngle(CentreLensA) <= PodAngle(CentreLensB) ? CentreLensA : CentreLensB) : -1;
         int raisedTube = lone == CentreLensA ? CentreLensB : CentreLensA;
         // Both swung away, the second on its way up: over its first stretch the bare half's fade goes again (its tube
-        // fading out), over its next the eyes part back to their own (apart), each bare, neither tube working.
+        // fading out), over its next the eye comes back to the camera (home), from where the game draws the device once
+        // both are all the way away (LensesOn), neither tube working.
         bool both = !downA && !downB;
-        float again = both ? PodGone(lone) : 0f, apart = both ? PodBare(lone) : 0f;
-        float going = lone >= 0 && !_device.Monocular && BinocularOn ? PodGone(raisedTube) * (1f - apart) : 0f;
+        float again = both ? PodGone(lone) : 0f, home = both ? PodBare(lone) : 0f;
+        float going = lone >= 0 && !_device.Monocular && BinocularOn ? PodGone(raisedTube) : 0f;
         float bare = lone >= 0 ? PodBare(raisedTube) * (1f - again) : 0f;
         int loneSide = lone >= 0 ? ((lone == CentreLensA) == (a <= b) ? 0 : 1) : -1;
         int monocular = !BinocularOn ? -1
@@ -245,6 +250,13 @@ internal static partial class NightVisionEyepieces
             Vector3 one = KeptClear(_lensRest[lone], position, _direct ? right * (loneAcross * oneIn) - back : Vector3.zero);
             leftShift = Vector3.Lerp(leftShift, one, going);
             rightShift = Vector3.Lerp(rightShift, one, going);
+        }
+        // Both on their way away: back to the camera, where the game takes the device over.
+        if (home > 0f)
+        {
+            Vector3 camera0 = _direct ? -back : Vector3.zero;
+            leftShift = Vector3.Lerp(leftShift, camera0, home);
+            rightShift = Vector3.Lerp(rightShift, camera0, home);
         }
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
