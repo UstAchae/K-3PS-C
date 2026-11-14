@@ -501,6 +501,10 @@ internal static partial class NightVisionEyepieces
         }
         for (int centre = CentreLensA; centre <= CentreLensB; centre += CentreLensB - CentreLensA)
         {
+            // An eyepiece swung away on its pod, its tube off: no lens to look into there, only the device. With its card
+            // still drawn, the composite and the device drawn into the main camera left a lens-shaped hole in it.
+            if (PodGone(centre) >= 1f)
+                continue;
             Transform a = _lensNodes[centre], b = _lensNodes[centre + 1];
             Vector3 normal = (a.forward + b.forward).normalized;
             Vector3 pa = (fromEye * FromCamera(a, cameraPlace)).GetColumn(3), pb = (fromEye * FromCamera(b, cameraPlace)).GetColumn(3);
