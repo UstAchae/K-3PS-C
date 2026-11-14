@@ -279,11 +279,10 @@ internal static partial class NightVisionEyepieces
     private static bool _eyeHeldNoted;
 
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
-    // The eyepiece's own glass (its rim, as the lens node stands), projected from where this file puts the eye: the
-    // fused rectangle is sized and placed by it, and so stays still against the eyepiece, as if fixed to it. Not the
-    // narrowest of what the eye looks through (lens, eyecup throat, lip) nor cut by the tube's field: which of those
-    // was narrowest changed with the eye (aimed or not, eyecups on or off), and the rectangle grew and shrank against
-    // the eyepiece. Where the cup's lip or throat hides some of it, it is hidden there like the rest of the picture.
+    // The eye sits where this file puts it (part of the way from the camera to its lens), not on the tube's axis, so
+    // the eyepiece's circle is centred on the line from the eye to it, not on the axis; and the circle is as wide as the
+    // narrowest of what bounds the view into it (the lens, the eyecup's throat, its lip); and where the tube's field (its
+    // cone about the axis) ends inside that, only as far as both reach.
     private static void FusionField(Camera camera, int rightLens, Vector3 eye)
     {
         if (!_device.Fusion || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || rightLens >= _lensNodes.Length)
@@ -291,29 +290,46 @@ internal static partial class NightVisionEyepieces
         Transform lens = _lensNodes[rightLens];
         float scale = lens.lossyScale.x;
         Vector4 floor = _lensFloors[rightLens];
-        Vector3 glass = lens.TransformPoint(new Vector3(floor.x, floor.y, floor.z));
-        float rim = floor.w * scale;
-        Matrix4x4 toView = camera.worldToCameraMatrix, projection = camera.nonJitteredProjectionMatrix;
-        float aspect = camera.aspect;
-        // A place, as seen from the eye with the camera's turn, in uv of the screen's height (x stretched by the aspect).
-        bool Seen(Vector3 place, out Vector2 uv)
-        {
-            Vector3 view = toView.MultiplyVector(place - eye);
-            Vector4 clip = projection * new Vector4(view.x, view.y, view.z, 0f);
-            uv = clip.w > 1e-6f ? new Vector2((clip.x / clip.w * 0.5f + 0.5f) * aspect, clip.y / clip.w * 0.5f + 0.5f) : Vector2.zero;
-            return clip.w > 1e-6f;
-        }
-        if (!Seen(glass, out Vector2 centre) || !Seen(glass + lens.right * rim, out Vector2 across) || !Seen(glass + lens.up * rim, out Vector2 up))
+        Vector3 toLens = lens.TransformPoint(new Vector3(floor.x, floor.y, floor.z)) - eye;
+        Vector3 toThroat = lens.position - eye;
+        Vector3 toLip = lens.position + lens.forward * (_device.RimHeight * scale) - eye;
+        float Half(Vector3 to, float radius) => Mathf.Atan2(radius * scale, Mathf.Max(to.magnitude, 1e-4f));
+        float half = Mathf.Min(Half(toLens, floor.w), Half(toThroat, _device.OpeningRadius));
+        if (_device.RimRadius > 0f)
+            half = Mathf.Min(half, Half(toLip, _device.RimRadius));
+        Vector3 view = camera.worldToCameraMatrix.MultiplyVector(toLens);
+        Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
+        Vector4 clip = projection * new Vector4(view.x, view.y, view.z, 0f);
+        if (clip.w <= 1e-6f)
             return;
-        // The rim seen at a slant is an ellipse; its two radii from the centre, along the glass's own axes, span it: the
-        // circle of the same area.
-        Vector2 u = across - centre, v = up - centre;
-        float radius = Mathf.Sqrt(Mathf.Abs(u.x * v.y - u.y * v.x));
+        float aspect = camera.aspect;
+        // In uv of the screen's height (x stretched by the aspect): the opening's circle, and the tube's field (its cone
+        // about the tube's axis, as the eyepieces draw it) that may end inside it, the eye that near or off to a side.
+        Vector2 open = new Vector2((clip.x / clip.w * 0.5f + 0.5f) * aspect, clip.y / clip.w * 0.5f + 0.5f);
+        float openRadius = 0.5f * Mathf.Tan(half) * projection.m11;
+        Vector3 axisView = camera.worldToCameraMatrix.MultiplyVector(-lens.forward);
+        Vector4 axisClip = projection * new Vector4(axisView.x, axisView.y, axisView.z, 0f);
+        Vector2 centre = open;
+        float radius = openRadius;
+        if (axisClip.w > 1e-6f)
+        {
+            Vector2 field = new Vector2((axisClip.x / axisClip.w * 0.5f + 0.5f) * aspect, axisClip.y / axisClip.w * 0.5f + 0.5f);
+            float fieldRadius = 0.5f * Mathf.Tan(_device.FieldDegrees * 0.5f * Mathf.Deg2Rad) * projection.m11;
+            // The widest circle in what both leave: on the line between their centres, across where they overlap.
+            float apart = (field - open).magnitude;
+            Vector2 along = apart > 1e-6f ? (field - open) / apart : Vector2.zero;
+            float near = Mathf.Max(-openRadius, apart - fieldRadius), far = Mathf.Min(openRadius, apart + fieldRadius);
+            if (far > near)
+            {
+                centre = open + along * ((near + far) * 0.5f);
+                radius = (far - near) * 0.5f;
+            }
+        }
         Interop.EyepieceFusion.FieldInMainUv = new Vector4(centre.x / aspect, centre.y, radius, aspect);
         if (!_fusionFieldNoted)
         {
             _fusionFieldNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the right eyepiece's glass as the right eye sees it: {Interop.EyepieceFusion.FieldInMainUv} (rim {rim * 1000f:F1} mm, {(glass - eye).magnitude * 1000f:F0} mm from the eye).");
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the right eyepiece as the right eye sees it: {Interop.EyepieceFusion.FieldInMainUv} (opening at ({open.x / aspect:F3}, {open.y:F3}) half angle {half * Mathf.Rad2Deg:F1} degrees, radius {openRadius:F3}; within the tube's field, radius {radius:F3}).");
         }
     }
     private static bool _fusionFieldNoted;
