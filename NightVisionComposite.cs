@@ -151,11 +151,12 @@ internal static partial class NightVisionEyepieces
             Graphics.Blit(from, into);
         else
         {
-            RenderTexture? made = null, tubed = null, focused = null, fused = null;
+            RenderTexture? made = null, tubed = null, focused = null, fused = null, dimmed = null;
             // The steps at the head of this file, in order.
             ScopeLensStep(camera, from);
             Texture picture = LensPicture(camera, ThroughObjective(camera, ForTube(from, ref tubed), ref focused), ref made);
             picture = EaseGrain(picture, ref made);
+            picture = TubesGain(picture, ref dimmed);
             Texture? fusedPicture = Fused(picture, ref fused);
             ReleaseMask();
             Compose(composite, glow, from, into, picture, fusedPicture);
@@ -167,6 +168,8 @@ internal static partial class NightVisionEyepieces
                 RenderTexture.ReleaseTemporary(focused);
             if (fused != null)
                 RenderTexture.ReleaseTemporary(fused);
+            if (dimmed != null)
+                RenderTexture.ReleaseTemporary(dimmed);
         }
         if (lensed != null)
         {
@@ -276,6 +279,27 @@ internal static partial class NightVisionEyepieces
     private static Material? _tubeMaterial;
     private static readonly int TubeGainId = Shader.PropertyToID("_TubeGain");
     private static readonly int TubeCompressId = Shader.PropertyToID("_TubeCompress");
+
+    // A fusion device's tubes turned down by the other mod (EyepieceFusion.I2Gain): the picture both eyes' tubes show,
+    // and the one handed to it, times the gain (NvgTube.shader, straight). Only on a frame claimed for it.
+    private static bool _tubesGainNoted;
+    private static Texture TubesGain(Texture picture, ref RenderTexture? dimmed)
+    {
+        float gain = Mathf.Clamp01(Interop.EyepieceFusion.I2Gain);
+        if (gain >= 0.999f || _tubeShader == null || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount)
+            return picture;
+        Material tube = _tubeMaterial ??= new Material(_tubeShader) { name = "Justachae NVG tube", hideFlags = HideFlags.DontSave };
+        tube.SetFloat(TubeGainId, gain);
+        tube.SetFloat(TubeCompressId, 0f);
+        dimmed = RenderTexture.GetTemporary(picture.width, picture.height, 0, picture is RenderTexture rt ? rt.format : RenderTextureFormat.ARGB32);
+        Graphics.Blit(picture, dimmed, tube);
+        if (!_tubesGainNoted)
+        {
+            _tubesGainNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the other mod's tube gain laid on both eyes ({gain:F2}).");
+        }
+        return dimmed;
+    }
 
     // Null while there is nothing to change (gain 1, no compression), or without the shader.
     private static Material? TubeMaterial()

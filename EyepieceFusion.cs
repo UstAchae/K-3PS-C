@@ -35,6 +35,10 @@ public static class EyepieceFusion
     // centred on FieldInMainUv.xy: shown whole in both lenses wherever they see it. The other mod may set it.
     public static Vector2 FusedRect = new Vector2(0.68f, 0.52f);
 
+    // The tubes' gain the other mod has set (0 dark, 1 as they are): both eyes' tube picture times this on a claimed
+    // frame, i2 handed to Fuse included, so the other mod does not dim it again. Optional; 1 leaves the tubes as they are.
+    public static float I2Gain = 1f;
+
     // Set by the other mod: (i2, dest) -> whether dest was written.
     public static Func<RenderTexture, RenderTexture, bool>? Fuse;
 }
