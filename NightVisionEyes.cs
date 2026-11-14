@@ -187,6 +187,15 @@ internal static partial class NightVisionEyepieces
         if (lone < 0)
             lone = CentreLensA;
         float loneAcross = lone == CentreLensA ? a : b;
+        // The one swung up, for the device drawn into the main camera (NightVisionDirect.OnRaisedPod).
+        RaisedPod = RaisedCupPod = null;
+        if (monocular >= 0 && !_device.Monocular)
+        {
+            Transform? raised = _lensPods[lone == CentreLensA ? CentreLensB : CentreLensA];
+            int which = raised != null ? System.Array.IndexOf(_device.Pods, raised.name) : -1;
+            RaisedPod = raised != null ? raised.name : null;
+            RaisedCupPod = which >= 0 && which < _device.CupPods.Length ? _device.CupPods[which] : null;
+        }
         float seeThrough = Mathf.Clamp01(MonocularSeeThrough);
         float fade = seeThrough <= 0.5f ? seeThrough * 2f : 1f + (seeThrough - 0.5f) * 6f;
         binocular.SetVector(MonocularId, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));

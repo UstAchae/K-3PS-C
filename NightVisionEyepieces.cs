@@ -78,6 +78,7 @@ internal static partial class NightVisionEyepieces
         // Eyepieces that swing away on hinges of their own (the ENVG-B's pods, K-ENVG-B): each a node under the device's,
         // its turn identity while the eyepiece is down before the eye. Each tube goes with the pod nearest it across.
         internal string[] Pods = Array.Empty<string>();
+        internal string[] CupPods = Array.Empty<string>();   // the eyecups' own node on each pod, in the same order
     }
 
     // Whether a device's removable eyecups are on it (its cup slot holds an active node by their name).
@@ -111,6 +112,9 @@ internal static partial class NightVisionEyepieces
     };
 
     private static readonly string[] EnvgbPods = { "envgb_pod_L", "envgb_pod_R" };
+    private static readonly string[] EnvgbCupPods = { "envgb_eyecup_pod_L", "envgb_eyecup_pod_R" };
+    // This frame's eyepiece swung up while the other is down (null otherwise), by its pod's name and its eyecup's.
+    private static string? RaisedPod, RaisedCupPod;
 
     private static readonly Device[] Devices =
     {
@@ -194,7 +198,7 @@ internal static partial class NightVisionEyepieces
         // other mod's, laid into the tubes' (EyepieceFusion).
         new Device
         {
-            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", Sealed = true, Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods,
+            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", Sealed = true, Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods, CupPods = EnvgbCupPods,
             CupHeight = 0.0285f, CupRadii0 = new Vector4(0.0144f, 0.0217f, 0.0223f, 0.0251f), CupRadii1 = new Vector4(0.0287f, 0.0287f, 0f, 0f),
             Tubes = new[] { At(-0.03077f, 0.02204f, -0.07569f), At(-0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f), At(0.03077f, 0.02204f, -0.07569f) },
             LensRadius = 0.0149f, FloorDepth = 0.0055f, OpeningRadius = 0.0144f, RimHeight = 0.0285f, RimRadius = 0.0287f,
@@ -204,7 +208,7 @@ internal static partial class NightVisionEyepieces
         // opening 13.7 mm across inside a 14.9 mm lip.
         new Device
         {
-            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", CupOff = true, Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods,
+            Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", CupOff = true, Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods, CupPods = EnvgbCupPods,
             Tubes = new[] { At(-0.03077f, 0.01824f, -0.07569f), At(-0.03077f, 0.01824f, -0.07569f), At(0.03077f, 0.01824f, -0.07569f), At(0.03077f, 0.01824f, -0.07569f) },
             LensRadius = 0.0149f, FloorDepth = 0.0017f, OpeningRadius = 0.0137f, RimHeight = 0f, RimRadius = 0.0149f,
             CardSize = new Vector2(0.018f, 0.018f),

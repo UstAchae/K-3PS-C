@@ -111,8 +111,12 @@ Shader "Justachae/NVG/Direct" {
  // A monocular is before one eye only: toward the other eye's edge of the frame it fades out, as the composite once faded it (x 1 for
  // a monocular, y its eye: 0 left, 1 right, z the fade's power, 0 not at all).
  float4 _DirectMonocular;
+ // Where an eyepiece swung up on its pod is what is seen (pass 13): before no eye, seen by the bare one too, it never fades.
+ sampler2D _DirectRaised;
  float monocularShown (float2 uv) {
   if (_DirectMonocular.x < 0.5 || _DirectMonocular.z <= 0)
+   return 1;
+  if (tex2Dlod(_DirectRaised, float4(uv, 0, 0)).r > 0.5)
    return 1;
   float s = smoothstep(0, 0.5 + _DirectStrip * 0.5, _DirectMonocular.y > 0.5 ? uv.x : 1 - uv.x);
   return pow(max(s, 1e-5), _DirectMonocular.z);
@@ -432,6 +436,16 @@ Shader "Justachae/NVG/Direct" {
     o.n = float4(normalize(i.n), 0);
     return o;
    }
+   ENDCG
+  }
+  // 13: an eyepiece swung up on its pod, where it is what the eye sees (on the eye's own depth of the device): kept whole there.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual
+   CGPROGRAM
+   #pragma vertex raisedVert
+   #pragma fragment frag
+   float4 raisedVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 1; }
    ENDCG
   }
  }

@@ -286,7 +286,9 @@ internal static partial class NightVisionEyepieces
     private static Texture TubesGain(Texture picture, ref RenderTexture? dimmed)
     {
         float gain = Mathf.Clamp01(Interop.EyepieceFusion.I2Gain);
-        if (gain >= 0.999f || _tubeShader == null || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount)
+        // On every frame of a fusion device, claimed or not: with its right eyepiece swung up the left's tube kept the gain
+        // the two had together, and did not jump back to full.
+        if (gain >= 0.999f || _tubeShader == null || !_device.Fusion)
             return picture;
         Material tube = _tubeMaterial ??= new Material(_tubeShader) { name = "Justachae NVG tube", hideFlags = HideFlags.DontSave };
         tube.SetFloat(TubeGainId, gain);

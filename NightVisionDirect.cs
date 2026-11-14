@@ -46,6 +46,7 @@ internal static partial class NightVisionEyepieces
     // and the device glinted in colours where no colour was. Held while the device is in use (DropDirectTextures).
     private static readonly RenderTexture?[][] _directTextures = { new RenderTexture?[4], new RenderTexture?[4] };
     private static readonly RenderTexture?[] _directDepths = new RenderTexture?[2];
+    private static readonly RenderTexture?[] _directRaisedHolder = new RenderTexture?[1];
 
     private static RenderTexture DirectTexture(RenderTexture?[] kept, int which, int width, int height, int depth, RenderTextureFormat format, RenderTextureReadWrite readWrite, string name)
     {
@@ -366,6 +367,20 @@ internal static partial class NightVisionEyepieces
     }
 
     private static readonly int DirectMonocularId = Shader.PropertyToID("_DirectMonocular");
+    private static readonly int DirectRaisedId = Shader.PropertyToID("_DirectRaised");
+    private const int DirectRaisedPass = 13;
+    private static RenderTexture? _directRaised;
+
+    // A piece of the eyepiece swung up on its pod (RaisedPod, and its eyecup's own pod node).
+    private static bool OnRaisedPod(Transform t)
+    {
+        for (Transform? at = t; at != null && at != _body; at = at.parent)
+        {
+            if (at.name == RaisedPod || RaisedCupPod != null && at.name == RaisedCupPod)
+                return true;
+        }
+        return false;
+    }
 
     private static void DrawDirect(Camera main, Vector3 leftShift, Vector3 rightShift, float split, Vector4 monocular)
     {
@@ -464,6 +479,26 @@ internal static partial class NightVisionEyepieces
                 buffer.SetGlobalTexture(ids[t], _directTextures[half][t]!);
             buffer.SetGlobalTexture(depth, depthTexture);
         }
+
+        // One eyepiece swung up, the other shown as a monocular: where the raised one is what the eye sees, it is kept out of
+        // the fade over the bare eye's half (it is before no eye; the bare eye sees it as it is).
+        if (RaisedPod != null && monocular.x > 0.5f)
+        {
+            _directRaised = DirectTexture(_directRaisedHolder, 0, width, height, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear, "Justachae NVG raised eyepiece");
+            buffer.SetRenderTarget(_directRaised, _directDepths[0]!);
+            buffer.ClearRenderTarget(false, true, Color.clear);
+            Matrix4x4 fromEye = Matrix4x4.Translate(-leftShift);
+            foreach (Piece piece in _pieces)
+            {
+                if (piece.Renderer == null || !OnRaisedPod(piece.Renderer.transform))
+                    continue;
+                for (int s = 0; s < piece.Mesh.subMeshCount; s++)
+                    buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, _directMaterial, s, DirectRaisedPass);
+            }
+            buffer.SetGlobalTexture(DirectRaisedId, _directRaised);
+        }
+        else
+            buffer.SetGlobalTexture(DirectRaisedId, Texture2D.blackTexture);
 
         // The camera's place given back before anything else is drawn.
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
