@@ -29,7 +29,8 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
-  // 1: the frame and another (_Other: the left eye's, TwoRenders.cs), mixed by _OtherShare.
+  // 1: the frame and another (_Other: the bare eye's near things, TwoRenders.cs), mixed by _OtherShare where the other
+  // has something (its alpha).
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM
@@ -40,7 +41,8 @@ Shader "Justachae/NVG/Tube" {
    float _OtherShare;
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
-    c.rgb = lerp(c.rgb, tex2D(_Other, i.uv).rgb, _OtherShare);
+    float4 o = tex2D(_Other, i.uv);
+    c.rgb = lerp(c.rgb, o.rgb, _OtherShare * saturate(o.a));
     return c;
    }
    ENDCG
@@ -54,6 +56,29 @@ Shader "Justachae/NVG/Tube" {
    #include "UnityCG.cginc"
    sampler2D _MainTex;
    float4 frag (v2f_img i) : SV_Target { return float4(tex2D(_MainTex, i.uv).rgb, 1); }
+   ENDCG
+  }
+  // 3: a render of what is near (TwoRenders.cs): its picture, and in alpha whether something is there (its depth short of
+  // _NearReach; the sky and what lies past the reach, nothing).
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   sampler2D _MainTex;
+   float _NearReach;
+   float4 frag (v2f_img i) : SV_Target {
+    float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
+    #if defined(UNITY_REVERSED_Z)
+    bool none = raw <= 0;
+    #else
+    bool none = raw >= 1;
+    #endif
+    bool near = !none && LinearEyeDepth(raw) < _NearReach * 0.95;
+    return float4(tex2D(_MainTex, i.uv).rgb, near ? 1 : 0);
+   }
    ENDCG
   }
  }

@@ -15,7 +15,9 @@ internal static class TwoRenders
 {
     internal static bool On = true;
     internal static bool Probes = true;
-    private const int HalvesPass = 1, OpaquePass = 2;   // NvgTube.shader
+    private const int HalvesPass = 1, OpaquePass = 2, NearPass = 3;   // NvgTube.shader
+    private const float NearReach = 2f;   // m: the bare eye's render goes no further
+    private static readonly int NearReachId = Shader.PropertyToID("_NearReach");
 
     private static bool _pass, _hooked, _failed;
     private static int _leftDone = -100;
@@ -60,6 +62,10 @@ internal static class TwoRenders
         if (main == null || !main.isActiveAndEnabled)
             return;
         _pass = true;
+        // Only what is near: the bare eye differs from the goggle's eye only there (its gun, its sight and what the
+        // sight shows, its hands, the goggle seen from aside); past it the two see alike.
+        float far = main.farClipPlane;
+        main.farClipPlane = NearReach;
         try
         {
             main.Render();
@@ -71,6 +77,7 @@ internal static class TwoRenders
         }
         finally
         {
+            main.farClipPlane = far;
             _pass = false;
         }
     }
@@ -83,17 +90,19 @@ internal static class TwoRenders
         Material material = _material ??= new Material(tubeShader) { name = "Justachae two eyes", hideFlags = HideFlags.DontSave };
         if (_pass)
         {
-            if (_left == null || _left.width != into.width || _left.height != into.height || _left.format != into.format)
+            if (_left == null || _left.width != into.width || _left.height != into.height)
             {
                 if (_left != null)
                 {
                     _left.Release();
                     Object.Destroy(_left);
                 }
-                _left = new RenderTexture(into.width, into.height, 0, into.format) { name = "Justachae left eye frame", hideFlags = HideFlags.DontSave };
+                _left = new RenderTexture(into.width, into.height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae bare eye's near", hideFlags = HideFlags.DontSave };
                 _left.Create();
             }
-            Graphics.Blit(into, _left);
+            // Its picture, and where it has something (its depth short of its reach) in alpha.
+            material.SetFloat(NearReachId, NearReach);
+            Graphics.Blit(into, _left, material, NearPass);
             _leftDone = Time.frameCount;
             return;
         }
