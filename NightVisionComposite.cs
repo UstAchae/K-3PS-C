@@ -143,6 +143,8 @@ internal static partial class NightVisionEyepieces
             to = destination;
         }
         NoteStage(propagator, staged, from);
+        // TEMP TEST (TwoRenderTest.cs): the first eye's scene kept; the second's far part filled from it.
+        TwoRenderTest.BeforeEyepieces(from, _tubeShader);
 
         RenderTexture? lensed = lens ? RenderTexture.GetTemporary(from.width, from.height, 0, from.format) : null;
         RenderTexture into = lensed != null ? lensed : to;

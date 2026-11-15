@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.95";
+    public const string PluginVersion = "1.9.96";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -625,6 +625,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         {
             yield return end;
             Fisheye.GiveBack();
+            TwoRenderTest.EndOfFrame();
         }
     }
 

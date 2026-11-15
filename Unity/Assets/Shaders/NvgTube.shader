@@ -29,7 +29,7 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
-  // 1: the frame and another (_Other: the left eye's, TwoRenderTest.cs), mixed by _OtherShare.
+  // 1: the frame and another (_Other: the other eye's, TwoRenderTest.cs), mixed by _OtherShare.
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM
@@ -41,6 +41,50 @@ Shader "Justachae/NVG/Tube" {
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
     c.rgb = lerp(c.rgb, tex2D(_Other, i.uv).rgb, _OtherShare);
+    return c;
+   }
+   ENDCG
+  }
+  // 2: the camera's depth as distance (m) along its view, the sky far off (TwoRenderTest.cs).
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   float4 frag (v2f_img i) : SV_Target {
+    float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
+    #if defined(UNITY_REVERSED_Z)
+    bool sky = raw <= 0;
+    #else
+    bool sky = raw >= 1;
+    #endif
+    return sky ? 1e6 : LinearEyeDepth(raw);
+   }
+   ENDCG
+  }
+  // 3: the second eye's scene (_MainTex), rendered no further than _FarFill: past it (its depth there or beyond), the
+  // first eye's (_Other), where that one too is that far (_OtherDepth, pass 2); two eyes see so far alike.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   sampler2D _MainTex, _Other, _OtherDepth;
+   float _FarFill;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2D(_MainTex, i.uv);
+    float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
+    #if defined(UNITY_REVERSED_Z)
+    bool past = raw <= 0 || LinearEyeDepth(raw) >= _FarFill * 0.96;
+    #else
+    bool past = raw >= 1 || LinearEyeDepth(raw) >= _FarFill * 0.96;
+    #endif
+    if (past && tex2D(_OtherDepth, i.uv).r >= _FarFill * 0.9)
+     c.rgb = tex2D(_Other, i.uv).rgb;
     return c;
    }
    ENDCG
