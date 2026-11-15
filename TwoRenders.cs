@@ -2,12 +2,14 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// The user's experiment (2026-11-15): with the goggle down or flipping, the frame seen from each eye, half each. Each eye
-// stands across where its eyepiece's centre lens is (NightVisionEyes.cs: the lenses across from the head's middle, as
-// last seen from the right eye's render). The main camera renders first, before anything else renders
-// (Application.onBeforeRender), from the left eye, its finished frame kept at the eyepieces' image effect; then as ever,
-// from the right eye, its frame mixed half and half with the kept one there (NightVisionComposite.cs, before the
-// interface). Each render is one eye, the camera itself: the device drawn into it and its lenses mapped from there.
+// The user's experiment (2026-11-15): a monocular (the PVS-14) down or flipping, seen with both eyes, half each. The
+// goggle's eye stands behind its lens (NightVisionEyes.cs: the lens across from the head's middle, as last seen from
+// that eye's render), the bare eye as far the other side of the head's middle. The main camera renders first, before
+// anything else renders (Application.onBeforeRender), from the bare eye, its finished frame kept at the eyepieces'
+// image effect; then as ever, from the goggle's eye, its frame mixed half and half with the kept one there
+// (NightVisionComposite.cs, before the interface): the goggle and its picture seen whole, the bare eye's view (its gun
+// among it) through it at half. Each render is one eye, the camera itself: the device drawn into it and its lens mapped
+// from there. A binocular is drawn as ever, its two halves in one frame.
 // TEMP PROBES: each eye's own frame, before the two are mixed, in the lower corners (the left eye's on the left).
 internal static class TwoRenders
 {
@@ -21,25 +23,25 @@ internal static class TwoRenders
     private static Material? _material;
     private static readonly int OtherId = Shader.PropertyToID("_Other"), OtherShareId = Shader.PropertyToID("_OtherShare");
 
-    // Each eye across from the head's middle (m), from where the eyepieces' centre lenses are; until they are seen, the
-    // aiming eye's distance either side.
-    private static float _leftEye = -0.03f, _rightEye = 0.03f;
+    // The goggle's eye across from the head's middle (m), from where its lens is; the bare eye the other side. Until the
+    // lens is seen, the aiming eye's distance.
+    private static float _goggleEye = 0.03f;
+    private static float BareEye => -_goggleEye;
 
-    internal static bool Now => On && !_failed && NightVisionEyepieces.DownOrFlipping;
+    internal static bool Now => On && !_failed && NightVisionEyepieces.DownOrFlipping && NightVisionEyepieces.MonocularWorn;
 
-    // The camera across from the head's middle while on: at the right eye (the left eye's render placed from there).
-    internal static float? EyeOverride => Now ? _rightEye : (float?)null;
+    // The camera across from the head's middle while on: at the goggle's eye (the bare eye's render placed from there).
+    internal static float? EyeOverride => Now ? _goggleEye : (float?)null;
 
-    // Where the camera is placed from its place this frame: over at the left eye during the left eye's render.
-    internal static Vector3 OtherEyeOffset(Quaternion turn) => _pass ? turn * new Vector3(_leftEye - _rightEye, 0f, 0f) : Vector3.zero;
+    // Where the camera is placed from its place this frame: over at the bare eye during the bare eye's render.
+    internal static Vector3 OtherEyeOffset(Quaternion turn) => _pass ? turn * new Vector3(BareEye - _goggleEye, 0f, 0f) : Vector3.zero;
 
-    // From NightVisionEyes.RenderLenses in the right eye's render: the centre lenses across from the head's middle.
-    internal static void SeeLenses(float leftAcross, float rightAcross)
+    // From NightVisionEyes.RenderLenses in the goggle eye's render: its lens across from the head's middle.
+    internal static void SeeLens(float across)
     {
-        if (_pass || !Now || rightAcross - leftAcross < 0.02f)
+        if (_pass || !Now || Mathf.Abs(across) < 0.01f)
             return;
-        _leftEye = leftAcross;
-        _rightEye = rightAcross;
+        _goggleEye = across;
     }
 
     internal static void Hook()
@@ -65,7 +67,7 @@ internal static class TwoRenders
         catch (System.Exception e)
         {
             _failed = true;
-            NewCameraPlugin.Log?.LogError("Two renders: the left eye's render failed, not tried again: " + e);
+            NewCameraPlugin.Log?.LogError("Two renders: the bare eye's render failed, not tried again: " + e);
         }
         finally
         {
@@ -73,7 +75,7 @@ internal static class TwoRenders
         }
     }
 
-    // In the eyepieces' image effect, the frame done: the left eye's kept; the right eye's mixed half and half with it.
+    // In the eyepieces' image effect, the frame done: the bare eye's kept; the goggle eye's mixed half and half with it.
     internal static void TakeEye(RenderTexture into, Shader? tubeShader)
     {
         if (tubeShader == null)
@@ -103,7 +105,10 @@ internal static class TwoRenders
         material.SetFloat(OtherShareId, 0.5f);
         Graphics.Blit(right, into, material, HalvesPass);
         if (Probes)
-            DrawProbes(into, _left, right, material);
+        {
+            bool goggleLeft = _goggleEye < 0f;
+            DrawProbes(into, goggleLeft ? right : _left, goggleLeft ? _left : right, material);
+        }
         RenderTexture.ReleaseTemporary(right);
     }
 

@@ -82,7 +82,10 @@ internal static partial class NightVisionEyepieces
     {
         if (!_device.Monocular || _lensNodes.Length == 0)
             return true;
-        return Mathf.Abs(Vector3.Dot(_lensNodes[CentreLensA].position - cameraPlace, cameraTurn * Vector3.right)) <= BeforeEyeWithin;
+        // By where the lens and the aiming eye are from the head's middle: the camera may stand at the goggle's eye
+        // (TwoRenders.cs) whichever eye aims.
+        float lensAcross = Vector3.Dot(_lensNodes[CentreLensA].position - cameraPlace, cameraTurn * Vector3.right) + CameraPosition.Horizontal;
+        return Mathf.Abs(lensAcross - CameraPosition.AimingEyeAcross) <= BeforeEyeWithin;
     }
 
     // As the main camera begins to render: the lens's place noted, and the light of the sight that reaches the objective
