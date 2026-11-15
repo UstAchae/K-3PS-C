@@ -102,6 +102,7 @@ internal static partial class NightVisionEyepieces
     internal static int _eyesLitFrame = -100;
     private static readonly int OtherTexId = Shader.PropertyToID("_Other");
     private static readonly int DirectOpenBothId = Shader.PropertyToID("_DirectOpenBoth");
+    private static readonly int DirectEyeLId = Shader.PropertyToID("_DirectEyeL"), DirectEyeRId = Shader.PropertyToID("_DirectEyeR");
     private static readonly int ShadeLeftCupId = Shader.PropertyToID("_ShadeLeftCup");
     private static readonly List<Renderer> _slotRenderers = new List<Renderer>();
     private static readonly List<(Renderer renderer, ShadowCastingMode casting)> _hidden = new List<(Renderer, ShadowCastingMode)>();
@@ -652,14 +653,20 @@ internal static partial class NightVisionEyepieces
         buffer.Blit(BuiltinRenderTextureType.CameraTarget, DirectLitNow);
         if (DirectMix >= 0f)
         {
+            // Drawn with the frame's quad (the passes' vertex shader takes its corners as they are; a blit's quad covered a
+            // quarter of the frame).
+            buffer.SetGlobalTexture(DirectLitNow, DirectLitNow);
             for (int half = 0; half < 2; half++)
             {
                 RenderTexture eye = DirectTexture(_eyesLit, half, width, height, 0, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Linear, "Justachae NVG eye lit " + half);
+                buffer.SetRenderTarget(eye);
                 buffer.SetGlobalFloat(DirectHalf, half);
-                buffer.Blit(DirectLitNow, eye, _directMaterial, SplitPass);
+                buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, SplitPass);
             }
-            buffer.SetGlobalTexture(OtherTexId, _eyesLit[1]!);
-            buffer.Blit(_eyesLit[0]!, BuiltinRenderTextureType.CameraTarget, _directMaterial, HalvesPass);
+            buffer.SetGlobalTexture(DirectEyeLId, _eyesLit[0]!);
+            buffer.SetGlobalTexture(DirectEyeRId, _eyesLit[1]!);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, HalvesPass);
             _eyesLitFrame = Time.frameCount;
         }
         else

@@ -519,7 +519,7 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 15: the experiment's lit frame (_MainTex), its chessboard split: one eye's (_DirectHalf: 0 the left, on the white
+  // 15: the experiment's lit frame (_DirectLitNow), its chessboard split: one eye's (_DirectHalf: 0 the left, on the white
   // squares) whole, its pixels as they are, the other eye's filled from the four next to each (all of this eye's).
   Pass {
    Cull Off ZWrite Off ZTest Always
@@ -527,32 +527,33 @@ Shader "Justachae/NVG/Direct" {
    #pragma vertex vert
    #pragma fragment frag
    #pragma target 3.5
-   sampler2D _MainTex;
-   float4 _MainTex_TexelSize;
+   // Drawn as the frame's quad (_directQuad), not blitted: this file's vertex shader takes the quad's corners as they are.
+   sampler2D _DirectLitNow;
+   float4 _DirectTexel;
    float _DirectHalf;
    float4 frag (v2f i) : SV_Target {
     float2 uv = i.screen.xy / i.screen.w;
     bool mine = checker(i.pos.xy) == (_DirectHalf < 0.5);
     if (mine)
-     return float4(tex2D(_MainTex, uv).rgb, 1);
-    float2 d = _MainTex_TexelSize.xy;
-    float3 around = tex2D(_MainTex, uv + float2(d.x, 0)).rgb + tex2D(_MainTex, uv - float2(d.x, 0)).rgb
-        + tex2D(_MainTex, uv + float2(0, d.y)).rgb + tex2D(_MainTex, uv - float2(0, d.y)).rgb;
+     return float4(tex2D(_DirectLitNow, uv).rgb, 1);
+    float2 d = _DirectTexel.xy;
+    float3 around = tex2D(_DirectLitNow, uv + float2(d.x, 0)).rgb + tex2D(_DirectLitNow, uv - float2(d.x, 0)).rgb
+        + tex2D(_DirectLitNow, uv + float2(0, d.y)).rgb + tex2D(_DirectLitNow, uv - float2(0, d.y)).rgb;
     return float4(around * 0.25, 1);
    }
    ENDCG
   }
-  // 16: two pictures (_MainTex, _Other), half each.
+  // 16: the two eyes' lit frames (_DirectEyeL, _DirectEyeR), half each.
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM
    #pragma vertex vert
    #pragma fragment frag
    #pragma target 3.5
-   sampler2D _MainTex, _Other;
+   sampler2D _DirectEyeL, _DirectEyeR;
    float4 frag (v2f i) : SV_Target {
     float2 uv = i.screen.xy / i.screen.w;
-    return float4(0.5 * (tex2D(_MainTex, uv).rgb + tex2D(_Other, uv).rgb), 1);
+    return float4(0.5 * (tex2D(_DirectEyeL, uv).rgb + tex2D(_DirectEyeR, uv).rgb), 1);
    }
    ENDCG
   }
