@@ -498,6 +498,7 @@ internal static partial class NightVisionEyepieces
     // Which tube each pixel looks into: the device's own opaque meshes drawn black, then a card over each eyecup's
     // opening, just above its rim, on which each line of sight is followed to the lenses (NvgLensMask.shader).
     // Everything as it stands from the eye (the eye at zero, its view turned but not moved; see NightVisionPrecise).
+    private static int _diagLensAt;
     private static void DrawLensMap(RenderTexture target, RenderTexture glass, Vector3 cameraPlace, Vector3 shift, Matrix4x4 view, Matrix4x4 projection)
     {
         _lensMapMaterial ??= new Material(_lensMaskShader) { name = "Justachae NVG lens map", hideFlags = HideFlags.DontSave };
@@ -509,10 +510,19 @@ internal static partial class NightVisionEyepieces
         {
             Matrix4x4 node = fromEye * FromCamera(_lensNodes[i], cameraPlace);
             Vector3 point = node.GetColumn(3), floor = node.MultiplyPoint3x4(_lensFloors[i]);
-            _lensMapMaterial.SetVector(LensIds4[i], new Vector4(point.x, point.y, point.z, _lensFloors[i].w * scale));
+            // An eyepiece swung away on its pod: its lens no picture region any more (no size: nothing is inside it).
+            bool gone = PodGone(i - i % 2) >= 1f;
+            _lensMapMaterial.SetVector(LensIds4[i], new Vector4(point.x, point.y, point.z, gone ? -1f : _lensFloors[i].w * scale));
+            // TEMP DIAG: where each lens is from this eye, and its pod's angle, as a pod comes up.
+            if (i % 2 == 0 && TwoEyesNow && Time.frameCount >= _diagLensAt)
+            {
+                NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG lens {i} from eye {shift.x * 1000f:F0}mm: at {point.x * 1000f:F0},{point.y * 1000f:F0},{point.z * 1000f:F0} mm, pod {PodAngle(i):F0} deg, gone {gone}");
+            }
             _lensMapMaterial.SetVector(LensFloorIds[i], floor);
             _lensMapMaterial.SetVector(AxisIds[i], _lensNodes[i].forward);
         }
+        if (Time.frameCount >= _diagLensAt && shift.x > 0f)
+            _diagLensAt = Time.frameCount + 300;
         _lensMapMaterial.SetVector(OpeningId, new Vector4(_device.OpeningRadius, _device.RimRadius, _device.RimHeight, 0f) * scale);
         _lensMapMaterial.SetVector(EyeId, eye);
         // A thermal goggles' display lit evenly to its edge (the game's T-7 has no falloff); an image tube's dims at its rim.

@@ -73,15 +73,28 @@ internal static partial class NightVisionEyepieces
         ScopePullback = 0f;
         _scope.Through = Active && !_device.Thermal && _body != null && player.HandsController != null && player.HandsController.IsAiming
             && Scopes.Current(player.ProceduralWeaponAnimation) is { IsOptic: true } && ChestStance.Weight <= 0f && GoggleBeforeAimingEye(cameraPlace, cameraTurn);
+        // TEMP DIAG: the sight through the goggle or bare, as it changes.
+        if (TwoEyesNow && (_scope.Through != _diagThrough || AimEyeBare != _diagBare))
+        {
+            _diagThrough = _scope.Through;
+            _diagBare = AimEyeBare;
+            NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG sight: through the goggle {_scope.Through}, aiming eye bare {AimEyeBare}, aim side {(CameraPosition.AimSide >= 0f ? "right" : "left")}");
+        }
         return 0f;
     }
 
     // A monocular before the other eye: the aiming eye looks through the sight bare, as without the goggle. Taken for the goggle's, the
     // sight's beam missed its objective altogether and the sight was black.
+    private static bool _diagThrough, _diagBare;
     private const float BeforeEyeWithin = 0.03f;   // m across, half the way to the other eye
 
     private static bool GoggleBeforeAimingEye(Vector3 cameraPlace, Quaternion cameraTurn)
     {
+        // The two-eye experiment: the aiming eye's own eyepiece swung away (or a monocular before the other eye), the
+        // aiming eye is bare: the sight's picture is its own, not the tube's (worked out for that eye, before the two
+        // eyes are mixed; NightVisionEyes.cs, AimEyeBare).
+        if (TwoEyesNow && AimEyeBare)
+            return false;
         if (!_device.Monocular || _lensNodes.Length == 0)
             return true;
         return Mathf.Abs(Vector3.Dot(_lensNodes[CentreLensA].position - cameraPlace, cameraTurn * Vector3.right)) <= BeforeEyeWithin;
