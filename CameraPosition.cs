@@ -25,6 +25,7 @@ internal static class CameraPosition
     // EXPERIMENT: the two eyes across from the head's middle (left, right), behind their eyepieces: the aiming eye is the
     // one of them on the shouldered side, in place of ± AimEye.
     internal static Vector2? EyesOverride;
+    internal static float AimSide => _side;   // the shouldered side now: 1 right, -1 left
 
     private const float AimInSeconds = 0.2f;
     private const float AimOutSeconds = 0.35f;       // as long as the gun takes back to the hip (AimArms.LeaveSeconds)

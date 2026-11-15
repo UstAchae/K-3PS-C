@@ -18,7 +18,11 @@ internal static partial class NightVisionEyepieces
     // Each frame, before the camera is placed: kept where it is set while the experiment is on (not over to the aiming eye).
     private static void PlaceExperimentEye()
     {
-        CameraPosition.EyeOverride = ExperimentOn ? CameraPosition.Across : (float?)null;
+        // The camera at the aiming eye (the shouldered side's, behind its eyepiece), aimed or not: what the game draws
+        // from the camera alone (a sight's picture, a red dot's reticle, laid in at its upscaler) is that eye's. Until
+        // the eyes are known, where it is set.
+        float? aimingEye = CameraPosition.EyesOverride is Vector2 eyes ? (CameraPosition.AimSide >= 0f ? eyes.y : eyes.x) : (float?)null;
+        CameraPosition.EyeOverride = ExperimentOn ? aimingEye ?? CameraPosition.Across : (float?)null;
         if (!ExperimentOn)
             CameraPosition.EyesOverride = null;
         if (ExperimentOn && !_experimentNoted)
