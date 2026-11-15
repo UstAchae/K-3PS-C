@@ -524,14 +524,20 @@ internal static partial class NightVisionEyepieces
         }
 
         _directMaterial.SetFloat(DirectStencilRefId, _stencilRef);
+        // The bare eye's gun (TwoRenders.cs), drawn from that eye into G-buffers of its own like the device.
+        bool gun = DrawGun(buffer, main, place, turned, projection, width, height);
         buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
         buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, InsertPass);
+        if (gun)
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, GunInsertPass);
 
         // After the decals, which are thrown on whatever the depth holds.
         buffer = _directAgain;
         buffer.SetRenderTarget(_mainSurface, BuiltinRenderTextureType.CameraTarget);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, SurfacePass);
+        if (gun)
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, GunSurfacePass);
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         // The device's own motion on the screen: it goes with the head, and left to itself it had what lay behind it, so what is
         // carried from frame to frame by the motion (the reflections, the upscaler) drifted over it like mist.
@@ -545,6 +551,91 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalTexture(DirectLitNow, DirectLitNow);
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, EvenPass);
+        if (gun)
+        {
+            buffer.Blit(BuiltinRenderTextureType.CameraTarget, DirectLitNow);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, GunEvenPass);
+        }
         buffer.ReleaseTemporaryRT(DirectLitNow);
+    }
+
+    // The bare eye's gun (and its hands and arms), drawn from that eye into G-buffers of its own, as the device is; put into
+    // the main camera's after the device (passes 13-15). Skinned ones baked each frame into meshes of their own, kept.
+    private const int GunInsertPass = 13, GunSurfacePass = 14, GunEvenPass = 15;
+    private static readonly int[] DirectGun = { Shader.PropertyToID("_DirectG0"), Shader.PropertyToID("_DirectG1"), Shader.PropertyToID("_DirectG2"), Shader.PropertyToID("_DirectG3") };
+    private static readonly int DirectGunDepth = Shader.PropertyToID("_DirectGD"), DirectGunShownId = Shader.PropertyToID("_DirectGunShown");
+    private static readonly RenderTexture?[] _gunTextures = new RenderTexture?[4];
+    private static readonly RenderTexture?[] _gunDepths = new RenderTexture?[1];
+    private static readonly RenderTargetIdentifier[] _gunTargets = new RenderTargetIdentifier[4];
+    private static readonly Dictionary<SkinnedMeshRenderer, Mesh> _bakedGun = new Dictionary<SkinnedMeshRenderer, Mesh>();
+    private static readonly Dictionary<Renderer, (Material[] materials, int[] passes)> _gunSources = new Dictionary<Renderer, (Material[], int[])>();
+    private static readonly List<Material> _gunMaterialsNow = new List<Material>();
+
+    private static bool DrawGun(CommandBuffer buffer, Camera main, Vector3 place, Matrix4x4 turned, Matrix4x4 projection, int width, int height)
+    {
+        List<Renderer>? renderers = TwoRenders.GunHere(main.transform.rotation, out Vector3 shift, out float shown);
+        buffer.SetGlobalFloat(DirectGunShownId, 0f);
+        if (renderers == null || shown <= 0f || _directMaterial == null)
+            return false;
+        for (int t = 0; t < 4; t++)
+            _gunTargets[t] = DirectTexture(_gunTextures, t, width, height, 0, DirectFormats[t], t < 2 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear, "Justachae NVG gun " + t);
+        RenderTexture depthTexture = DirectTexture(_gunDepths, 0, width, height, 32, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG gun depth");
+        buffer.SetRenderTarget(_gunTargets, depthTexture);
+        buffer.ClearRenderTarget(true, true, Color.clear);
+        buffer.SetViewProjectionMatrices(turned, projection);
+        buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
+        Matrix4x4 fromEye = Matrix4x4.Translate(-shift);
+        int drawn = 0;
+        foreach (Renderer r in renderers)
+        {
+            if (r == null || !r.gameObject.activeInHierarchy || !FinestLevel(r))
+                continue;
+            Mesh? mesh = null;
+            if (r is SkinnedMeshRenderer skin)
+            {
+                if (skin.sharedMesh == null)
+                    continue;
+                if (!_bakedGun.TryGetValue(skin, out mesh) || mesh == null)
+                {
+                    mesh = new Mesh { name = "Justachae gun " + skin.name, hideFlags = HideFlags.DontSave };
+                    mesh.MarkDynamic();
+                    _bakedGun[skin] = mesh;
+                }
+                skin.BakeMesh(mesh);
+            }
+            else if (r.TryGetComponent(out MeshFilter filter) && filter.sharedMesh != null)
+                mesh = filter.sharedMesh;
+            if (mesh == null)
+                continue;
+            r.GetSharedMaterials(_gunMaterialsNow);
+            if (!_gunSources.TryGetValue(r, out (Material[] materials, int[] passes) source) || !SameMaterials(source.materials, _gunMaterialsNow))
+            {
+                Material[] materials = _gunMaterialsNow.ToArray();
+                int[] passes = new int[materials.Length];
+                for (int i = 0; i < materials.Length; i++)
+                    passes[i] = GBufferPass(materials[i]);
+                source = (materials, passes);
+                if (_gunSources.Count > 512)
+                    _gunSources.Clear();
+                _gunSources[r] = source;
+            }
+            r.GetPropertyBlock(_pieceBlock);
+            Matrix4x4 matrix = fromEye * FromCamera(r.transform, place);
+            int count = Mathf.Min(source.materials.Length, mesh.subMeshCount);
+            for (int s = 0; s < count; s++)
+            {
+                if (source.passes[s] < 0)
+                    continue;
+                buffer.DrawMesh(mesh, matrix, source.materials[s], s, source.passes[s], _pieceBlock);
+                drawn++;
+            }
+        }
+        for (int t = 0; t < 4; t++)
+            buffer.SetGlobalTexture(DirectGun[t], _gunTextures[t]!);
+        buffer.SetGlobalTexture(DirectGunDepth, depthTexture);
+        buffer.SetGlobalFloat(DirectGunShownId, shown);
+        buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
+        return drawn > 0;
     }
 }

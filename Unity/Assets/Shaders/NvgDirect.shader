@@ -122,6 +122,15 @@ Shader "Justachae/NVG/Direct" {
  bool fadingAt (float2 uv) { return monocularShown(uv) < 0.999; }
  // Every other pixel, as on a chessboard: across a monocular's fade those have the device, the others what lies behind.
  bool checker (float2 pixel) { return fmod(floor(pixel.x) + floor(pixel.y), 2) < 0.5; }
+ // The gun drawn here (passes 13-15): its own G-buffers and depth, how much of it is seen (1 solid).
+ sampler2D _DirectG0, _DirectG1, _DirectG2, _DirectG3;
+ UNITY_DECLARE_DEPTH_TEXTURE(_DirectGD);
+ float _DirectGunShown;
+ bool gunPicked (float2 pixel, float raw) {
+  if (!shown(raw) || _DirectGunShown <= 0)
+   return false;
+  return _DirectGunShown >= 0.999 || checker(pixel);
+ }
 
  bool pick (float2 pixel, float2 uv, float rawL, float rawR, out float toRight) {
   float c = coverage(uv, rawL, rawR, toRight);
@@ -433,6 +442,96 @@ Shader "Justachae/NVG/Direct" {
     o.place = float4(i.place, _DirectHalf + 1);
     o.n = float4(normalize(i.n), 0);
     return o;
+   }
+   ENDCG
+  }
+  // 13: the gun (TwoRenders.cs: the bare eye's, drawn from that eye into G-buffers of its own, _DirectG0..3, _DirectGD) put
+  // into the main camera's where it is nearest; seen through (_DirectGunShown below 1), on every other pixel only, what lies
+  // behind kept on the others and the two evened once lit (pass 15).
+  Pass {
+   Cull Off ZWrite On ZTest LEqual
+   Stencil { Ref [_DirectStencilRef] WriteMask 255 Comp Always Pass Replace }
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   struct output { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; float4 g3 : SV_Target3; float depth : SV_Depth; };
+   output frag (v2f i) {
+    float2 uv = i.screen.xy / i.screen.w;
+    float raw = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
+    if (!gunPicked(i.pos.xy, raw))
+     discard;
+    output o;
+    o.g0 = tex2D(_DirectG0, uv);
+    o.g1 = tex2D(_DirectG1, uv);
+    o.g2 = tex2D(_DirectG2, uv);
+    o.g3 = tex2D(_DirectG3, uv);
+    o.depth = mainDepth(inverseDepth(raw));
+    return o;
+   }
+   ENDCG
+  }
+  // 14: the gun's surface again once the game's decals are done (as pass 1 for the device).
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   struct surface { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; float depth : SV_Depth; };
+   surface frag (v2f i) {
+    float2 uv = i.screen.xy / i.screen.w;
+    float raw = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
+    if (!gunPicked(i.pos.xy, raw))
+     discard;
+    surface o;
+    o.depth = mainDepth(inverseDepth(raw));
+    o.g0 = tex2D(_DirectG0, uv);
+    o.g1 = tex2D(_DirectG1, uv);
+    o.g2 = tex2D(_DirectG2, uv);
+    return o;
+   }
+   ENDCG
+  }
+  // 15: the gun seen through, once all is lit: its pixels and what lies behind on the others evened, by _DirectGunShown.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   sampler2D _DirectLitNow;
+   float4 _DirectTexel;
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    float raw = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
+    if (!shown(raw) || _DirectGunShown >= 0.999 || _DirectGunShown <= 0)
+     discard;
+    // Not behind what the camera has there (the device before it).
+    float scene = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv), gun = mainDepth(inverseDepth(raw));
+    #if defined(UNITY_REVERSED_Z)
+    if (gun < scene - 0.001)
+     discard;
+    #else
+    if (gun > scene + 0.001)
+     discard;
+    #endif
+    float3 own = tex2Dlod(_DirectLitNow, float4(uv, 0, 0)).rgb;
+    bool isGun = checker(i.pos.xy);
+    float3 other = 0;
+    float count = 0;
+    static const float2 steps[4] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1) };
+    [unroll] for (int k = 0; k < 4; k++) {
+     float2 at = uv + steps[k] * _DirectTexel.xy;
+     bool has = shown(SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(at, 0, 0)));
+     float w = isGun || has ? 1 : 0;
+     other += tex2Dlod(_DirectLitNow, float4(at, 0, 0)).rgb * w;
+     count += w;
+    }
+    if (count <= 0)
+     return float4(own, 1);
+    other /= count;
+    return float4(lerp(isGun ? other : own, isGun ? own : other, _DirectGunShown), 1);
    }
    ENDCG
   }

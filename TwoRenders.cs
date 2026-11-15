@@ -120,6 +120,22 @@ internal static class TwoRenders
     internal static Vector3 OtherEyeOffset(Quaternion turn) => _gun == GunPass.Bare ? turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f) : Vector3.zero;
 
     // From NightVisionEyes.RenderLenses in the goggle eye's own render: its lens across from the head's middle.
+    // The bare eye's gun drawn into the frame (the user's, 2026-11-15) rather than rendered by the camera again.
+    internal static bool DrawnIntoFrame = true;
+
+    // For NightVisionDirect.DrawDirect: the bare eye's gun to draw this frame, from where that eye is (along the world's
+    // axes, from the camera), and how much of it is seen.
+    internal static System.Collections.Generic.List<Renderer>? GunHere(Quaternion turn, out Vector3 shift, out float shown)
+    {
+        shift = Vector3.zero;
+        shown = 0f;
+        if (!DrawnIntoFrame || !Now || _gunsFrame != Time.frameCount || _shareBare <= 0.001f || _gunRenderers.Count == 0)
+            return null;
+        shift = turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
+        shown = Mathf.Clamp01(GunOpacity * _shareBare);
+        return _gunRenderers;
+    }
+
     internal static void SeeLens(float across)
     {
         if (_pass || !Now || Mathf.Abs(across) < 0.01f)
@@ -197,6 +213,14 @@ internal static class TwoRenders
         // Aimed with the goggle's eye: its gun solid, as the frame's own render draws it (the user's, 2026-11-15).
         if (_shareBare <= 0.001f)
             return;
+        // The bare eye's gun drawn into the frame's own G-buffer from that eye (NightVisionDirect.cs, GunHere), the
+        // goggle eye's kept out once the bare eye's is the more seen: no render of the camera of its own.
+        if (DrawnIntoFrame)
+        {
+            if (_shareBare > 0.5f)
+                HideGun(true);
+            return;
+        }
         RenderGun(main, GunPass.Bare, gunLayers);
         if (_shareGoggle > 0.001f)
             RenderGun(main, GunPass.Goggle, gunLayers);
