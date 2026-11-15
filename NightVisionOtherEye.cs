@@ -280,7 +280,7 @@ internal static partial class NightVisionEyepieces
     // The experiment at the eyepieces' stage: each eye's own frame (the frame of the two half each, as the game finished
     // it, scaled at each pixel by how that eye's lit frame stands to the two's mean, NvgTube pass 3), its own picture made
     // from it, its own eyepieces (only the right tube with the other mod's), and the two eyes' results half each.
-    private const int EyeFromBlendPass = 3, TubeHalves = 1;
+    private const int EyeFromBlendPass = 3, TubeHalves = 1, ProbePass = 4;
     private static readonly int EyePreId = Shader.PropertyToID("_EyePre"), OtherPreId = Shader.PropertyToID("_OtherPre");
     private static readonly int OtherId = Shader.PropertyToID("_Other"), OtherShareId = Shader.PropertyToID("_OtherShare");
     private static Material? _eyesMaterial;
@@ -358,8 +358,16 @@ internal static partial class NightVisionEyepieces
             // Top-left origin (as Graphics.DrawTexture's rects go): the lower corners.
             GL.LoadPixelMatrix(0, into.width, into.height, 0);
             float x = side == 0 ? margin : into.width - width - margin, y = into.height - margin - height;
-            Graphics.DrawTexture(new Rect(x - 2, y - 2, width + 4, height + 4), Texture2D.whiteTexture);
-            Graphics.DrawTexture(new Rect(x, y, width, height), small);
+            // A white frame round it (four strips), the picture inside opaque (its alpha is not coverage: drawn blended,
+            // the frame's white showed through it).
+            Graphics.DrawTexture(new Rect(x - 2, y - 2, width + 4, 2), Texture2D.whiteTexture);
+            Graphics.DrawTexture(new Rect(x - 2, y + height, width + 4, 2), Texture2D.whiteTexture);
+            Graphics.DrawTexture(new Rect(x - 2, y, 2, height), Texture2D.whiteTexture);
+            Graphics.DrawTexture(new Rect(x + width, y, 2, height), Texture2D.whiteTexture);
+            if (_eyesMaterial != null)
+                Graphics.DrawTexture(new Rect(x, y, width, height), small, new Rect(0f, 0f, 1f, 1f), 0, 0, 0, 0, Color.white, _eyesMaterial, ProbePass);
+            else
+                Graphics.DrawTexture(new Rect(x, y, width, height), small);
             GL.PopMatrix();
             RenderTexture.active = active;
             RenderTexture.ReleaseTemporary(small);
