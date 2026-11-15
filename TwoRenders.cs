@@ -240,6 +240,12 @@ internal static class TwoRenders
                 _blurOff.Add(b);
             }
         }
+        // The post-processing's volumes left out of the gun render (its auto exposure and other history carried from
+        // frame to frame took the near-empty frame in, and the picture pulsed).
+        var post = main.GetComponent<UnityEngine.Rendering.PostProcessing.PostProcessLayer>();
+        LayerMask volumes = post != null ? post.volumeLayer : (LayerMask)0;
+        if (post != null)
+            post.volumeLayer = 0;
         _gun = which;
         // The gun's own meshes into a mask as it renders (pass 7), so that only the gun is laid in.
         RenderTexture gunMask = Kept(ref _gunMask, Mathf.Max(main.pixelWidth, 8), Mathf.Max(main.pixelHeight, 8));
@@ -287,6 +293,8 @@ internal static class TwoRenders
         {
             main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _maskBuffer);
             _gun = GunPass.None;
+            if (post != null)
+                post.volumeLayer = volumes;
             main.cullingMask = mask;
             if (dofOn)
                 dof!.enabled = true;
