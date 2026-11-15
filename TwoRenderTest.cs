@@ -2,15 +2,14 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// TEMP TEST (the user's, 2026-11-15): what rendering the whole frame twice costs. While in a raid, the FPS camera is
-// rendered a second time each frame, whole (all its own effects and command buffers), from the other eye (EyeApart to
-// the left of where it stands), into a texture laid over the screen at half once the frame is done (the interface
-// included). Switched on and off by itself every PhaseSeconds; the mean frame time of each stretch is logged, the
-// first frames after each switch left out.
+// TEMP TEST (the user's, 2026-11-15): the whole frame rendered twice, once from each eye (HalfApart either side of
+// where the camera is placed), the left eye's into a texture laid over the screen at half once the frame is done (the
+// interface included), the right eye's the camera's own. The goggle's two-eyes-in-one-frame split is off meanwhile
+// (NightVisionEyes.cs): each render is one eye. The mean frame time is logged every PhaseSeconds.
 internal static class TwoRenderTest
 {
     internal static bool On = true;
-    private const float EyeApart = 0.064f;       // m, the second render this far to the left
+    private const float HalfApart = 0.032f;      // m, each eye this far from where the camera is placed
     private const float PhaseSeconds = 20f;
     private const int SettleFrames = 60;
 
@@ -69,7 +68,9 @@ internal static class TwoRenderTest
     internal static void Offset(Camera camera)
     {
         if (_rendering)
-            camera.transform.position += camera.transform.rotation * new Vector3(-EyeApart, 0f, 0f);
+            camera.transform.position += camera.transform.rotation * new Vector3(-HalfApart, 0f, 0f);
+        else if (On)
+            camera.transform.position += camera.transform.rotation * new Vector3(HalfApart, 0f, 0f);
     }
 
     // From NewCameraPlugin.EndOfFrame: the second render laid over the screen at half.
@@ -80,7 +81,8 @@ internal static class TwoRenderTest
         RenderTexture? active = RenderTexture.active;
         RenderTexture.active = null;
         GL.PushMatrix();
-        GL.LoadPixelMatrix(0, Screen.width, Screen.height, 0);
+        // Bottom-left origin (the top-left one showed it upside down).
+        GL.LoadPixelMatrix(0, Screen.width, 0, Screen.height);
         // Graphics.DrawTexture's colour: 0.5 is neutral, its alpha doubled; 0.25 is half.
         Graphics.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _eye, new Rect(0f, 0f, 1f, 1f), 0, 0, 0, 0, new Color(0.5f, 0.5f, 0.5f, 0.25f));
         GL.PopMatrix();
@@ -93,7 +95,7 @@ internal static class TwoRenderTest
         if (_phaseStart < 0f)
         {
             _phaseStart = now;
-            _phaseOn = false;
+            _phaseOn = true;
             _phaseFrame = Time.frameCount;
             _frames = 0;
             _seconds = 0;
@@ -111,7 +113,7 @@ internal static class TwoRenderTest
             double ms = 1000.0 * _seconds / _frames;
             NewCameraPlugin.Log?.LogInfo($"Two render test: {(_phaseOn ? "TWO renders" : "one render")}: mean frame {ms:F2} ms ({1000.0 / ms:F1} FPS) over {_frames} frames");
         }
-        _phaseOn = !_phaseOn;
+        _phaseOn = true;
         _phaseStart = now;
         _phaseFrame = Time.frameCount;
         _frames = 0;

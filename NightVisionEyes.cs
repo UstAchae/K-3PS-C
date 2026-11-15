@@ -258,6 +258,12 @@ internal static partial class NightVisionEyepieces
             leftShift = Vector3.Lerp(leftShift, camera0, home);
             rightShift = Vector3.Lerp(rightShift, camera0, home);
         }
+        // TEMP TEST (TwoRenderTest.cs): each render is one eye, the camera itself: no two eyes' views split in one frame.
+        if (TwoRenderTest.On)
+        {
+            leftShift = Vector3.zero;
+            rightShift = Vector3.zero;
+        }
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
         float split = monocular >= 0 ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
