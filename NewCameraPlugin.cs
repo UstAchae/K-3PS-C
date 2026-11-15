@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.38";
+    public const string PluginVersion = "1.9.39";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -663,7 +663,7 @@ internal static class NewCameraSwitch
 
     // The camera is where this mod put it this frame, at the player's eyes, and has not been moved off since (a free
     // camera places itself after this mod does).
-    internal static bool AtEyes(Camera camera) => _poseFrame == Time.frameCount && (camera.transform.position - _posePosition).sqrMagnitude < 1e-6f;
+    internal static bool AtEyes(Camera camera) => _poseFrame == Time.frameCount && (camera.transform.position - _posePosition - NightVisionEyepieces.OtherEyeOffset(_poseRotation)).sqrMagnitude < 1e-6f;
     private static Quaternion _poseRotation;
 
     // Where this mod has the camera for this player (last placed: this frame, or the one before if not yet this one).
