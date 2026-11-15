@@ -469,6 +469,16 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
+  // 13: an eyepiece swung up on its pod, where it is what the eye sees (on the eye's own depth of the device): kept whole there.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual
+   CGPROGRAM
+   #pragma vertex raisedVert
+   #pragma fragment frag
+   float4 raisedVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 1; }
+   ENDCG
+  }
   // 14: the experiment, in an eye's own drawing: its device taken out where that eye looks into its own lens, for what
   // lies past it (the gun, the arms) to be drawn there, and so be in the frame the lens's picture is made from.
   Pass {
@@ -493,16 +503,6 @@ Shader "Justachae/NVG/Direct" {
     #endif
     return o;
    }
-   ENDCG
-  }
-  // 13: an eyepiece swung up on its pod, where it is what the eye sees (on the eye's own depth of the device): kept whole there.
-  Pass {
-   Cull Off ZWrite Off ZTest LEqual
-   CGPROGRAM
-   #pragma vertex raisedVert
-   #pragma fragment frag
-   float4 raisedVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
-   float4 frag () : SV_Target { return 1; }
    ENDCG
   }
  }
