@@ -313,6 +313,13 @@ internal static partial class NightVisionEyepieces
         Wake(worn && (switchedOn || on) ? renderer : null, cameras?.NightVision);
         Active = on;
         _split = _flip;
+        // TEMP DIAG: why the eyepieces do or do not show, every few seconds.
+        if (Time.frameCount >= _diagStateAt)
+        {
+            _diagStateAt = Time.frameCount + 300;
+            Camera? main = Camera.main;
+            NewCameraPlugin.Log?.LogInfo($"NVG DIAG: device {(_body != null ? _body.name : "none")} ({_device.Node}, monocular {_device.Monocular}, lenses {_lensNodes.Length}), present {present}, image ready {EyepieceImageReady(cameras)}, brnvg {brnvg} (renderer {renderer != null}), worn {worn}, switched on {switchedOn}, flip {_flip:F2}, filter on {cameras?.NightVision != null && cameras.NightVision.On} switching {cameras?.NightVision != null && cameras.NightVision.InProcessSwitching}, powered {powered}, power {power:F2}, active {on}, image effect {_eyepieceImage != null && _eyepieceImage.enabled}, lenses on {(main != null && LensesOn(main))}, eyes this frame {_eyesFrame == Time.frameCount}");
+        }
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
         KeepGlow(device);
         UpdateMountHeight(player);
@@ -353,6 +360,7 @@ internal static partial class NightVisionEyepieces
         return brightest > 1e-4f ? color / brightest : Color.white;
     }
 
+    private static int _diagStateAt;
     private static bool HoldFilter => Time.time < _holdFilterUntil && (_body == null || !_body.gameObject.activeInHierarchy);
 
     private static void KeepFilterHeld(Player player, CameraManager? cameras, bool wornAny)
