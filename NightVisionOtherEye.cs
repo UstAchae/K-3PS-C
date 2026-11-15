@@ -49,7 +49,7 @@ internal static partial class NightVisionEyepieces
     private static readonly System.Collections.Generic.List<Material> _nearMaterials = new System.Collections.Generic.List<Material>();
     private static int _nearFrame = -1000, _nearCount;
     internal static EFT.Player? NearPlayer;   // whose gun is in the hands (its model is not under the body's)
-    private static bool _nearNoted;
+    private static bool _nearNoted, _nearWhyNoted;
 
     private static void AddNearPieces(Camera camera)
     {
@@ -78,6 +78,19 @@ internal static partial class NightVisionEyepieces
             }
         }
         int meshes = 0, skinned = 0;
+        // TEMP DIAG: once, why each of the gun's renderers is or is not drawn from each eye.
+        if (!_nearWhyNoted && NearPlayer?.HandsController?.ControllerGameObject is GameObject gunObject)
+        {
+            _nearWhyNoted = true;
+            var why = new System.Collections.Generic.List<string>();
+            foreach (Renderer r in gunObject.GetComponentsInChildren<Renderer>(true))
+            {
+                if (why.Count >= 30)
+                    break;
+                why.Add($"{r.name} ({r.GetType().Name}) on {r.enabled}/{r.gameObject.activeInHierarchy} off {r.forceRenderingOff} shadows {r.shadowCastingMode} layer {LayerMask.LayerToName(r.gameObject.layer)} in mask {(camera.cullingMask & (1 << r.gameObject.layer)) != 0} finest {FinestLevel(r)} listed {_nearRenderers.Contains(r)} under body {r.transform.IsChildOf(slot.root)}");
+            }
+            NewCameraPlugin.Log?.LogInfo("NVG experiment DIAG gun renderers: " + string.Join("; ", why));
+        }
         foreach (Renderer r in _nearRenderers)
         {
             // Only what the main camera would draw: on, in its layers, not left to shadows (the head the body hides).
