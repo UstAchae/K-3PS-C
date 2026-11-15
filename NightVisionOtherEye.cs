@@ -294,10 +294,11 @@ internal static partial class NightVisionEyepieces
             RenderTexture? active = RenderTexture.active;
             RenderTexture.active = into;
             GL.PushMatrix();
-            GL.LoadPixelMatrix(0, into.width, 0, into.height);
-            float x = side == 0 ? margin : into.width - width - margin;
-            Graphics.DrawTexture(new Rect(x - 2, margin - 2, width + 4, height + 4), Texture2D.whiteTexture);
-            Graphics.DrawTexture(new Rect(x, margin, width, height), small);
+            // Top-left origin (as Graphics.DrawTexture's rects go): the lower corners.
+            GL.LoadPixelMatrix(0, into.width, into.height, 0);
+            float x = side == 0 ? margin : into.width - width - margin, y = into.height - margin - height;
+            Graphics.DrawTexture(new Rect(x - 2, y - 2, width + 4, height + 4), Texture2D.whiteTexture);
+            Graphics.DrawTexture(new Rect(x, y, width, height), small);
             GL.PopMatrix();
             RenderTexture.active = active;
             RenderTexture.ReleaseTemporary(whole);

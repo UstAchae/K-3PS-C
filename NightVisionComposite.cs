@@ -327,7 +327,9 @@ internal static partial class NightVisionEyepieces
         composite.SetVector(TubeFusedId, fusedPicture != null ? _fusedTubes : Vector4.zero);
         Vector4 field = Interop.EyepieceFusion.FieldInMainUv;
         Vector2 share = Interop.EyepieceFusion.FusedRect;
-        composite.SetVector(FusedRectId, fusedPicture != null && field.w > 0f
+        // The rectangle shown whole in both lenses (not cut at the eyes' seam) — but not in the two-eye experiment, where
+        // each eye looks through its own eyepiece and only the right tube has the other mod's picture.
+        composite.SetVector(FusedRectId, fusedPicture != null && field.w > 0f && !TwoEyesNow
             ? new Vector4(field.x, field.y, share.x * field.z / field.w, share.y * field.z) : Vector4.zero);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
