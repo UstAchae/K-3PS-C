@@ -58,6 +58,11 @@ internal static class TwoRenders
     }
     private static readonly int NearReachId = Shader.PropertyToID("_NearReach");
     private static readonly int GunGId = Shader.PropertyToID("_GunG"), GunBId = Shader.PropertyToID("_GunB");
+    // Each eye's gun, how much of it is seen: the aiming eye's far more than the other's (the user's, 2026-11-15).
+    private const float AimShare = 0.8f, OtherShare = 0.2f;
+    // The goggle is never seen through: nothing laid over what the camera has nearer than this (m; the gun is further).
+    private const float DeviceReach = 0.12f;
+    private static readonly int ShareGId = Shader.PropertyToID("_ShareG"), ShareBId = Shader.PropertyToID("_ShareB"), DeviceReachId = Shader.PropertyToID("_DeviceReach");
     private const int GunsInPass = 4;   // NvgTube.shader: the goggle eye's gun laid into its scene, ahead of the bare eye's
 
     // The renders of a frame: the gun alone from the bare eye, then from the goggle's eye; then the frame's own, from the
@@ -266,6 +271,9 @@ internal static class TwoRenders
             return;
         RenderTexture laid = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
         material.SetTexture(GunGId, _goggleGun);
+        material.SetFloat(ShareGId, GoggleEyeAims ? AimShare : OtherShare);
+        material.SetFloat(ShareBId, GoggleEyeAims ? OtherShare : AimShare);
+        material.SetFloat(DeviceReachId, DeviceReach);
         material.SetTexture(GunBId, _bareGun);
         Graphics.Blit(scene, laid, material, GunsInPass);
         Graphics.Blit(laid, scene);
@@ -281,7 +289,8 @@ internal static class TwoRenders
         RenderTexture goggle = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
         Graphics.Blit(into, goggle);
         material.SetTexture(OtherId, _bareGun);
-        material.SetFloat(OtherShareId, 0.5f);
+        material.SetFloat(OtherShareId, GoggleEyeAims ? OtherShare : AimShare);
+        material.SetFloat(DeviceReachId, DeviceReach);
         Graphics.Blit(goggle, into, material, HalvesPass);
         if (Probes)
         {

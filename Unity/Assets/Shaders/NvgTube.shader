@@ -30,7 +30,7 @@ Shader "Justachae/NVG/Tube" {
    ENDCG
   }
   // 1: the frame and another (_Other: the bare eye's near things, TwoRenders.cs), mixed by _OtherShare where the other
-  // has something (its alpha).
+  // has something (its alpha); never over the goggle (the camera's own depth nearer than _DeviceReach).
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM
@@ -38,9 +38,13 @@ Shader "Justachae/NVG/Tube" {
    #pragma fragment frag
    #include "UnityCG.cginc"
    sampler2D _MainTex, _Other;
-   float _OtherShare;
+   float _OtherShare, _DeviceReach;
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
+    float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
+    if (_DeviceReach > 0 && LinearEyeDepth(raw) < _DeviceReach)
+     return c;
     float4 o = tex2D(_Other, i.uv);
     c.rgb = lerp(c.rgb, o.rgb, _OtherShare * saturate(o.a));
     return c;
@@ -81,9 +85,9 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
-  // 4: the scene without the gun (_MainTex), the goggle eye's gun (_GunG) laid in at half where it is, weighted so
-  // that once the bare eye's (_GunB) is laid over at half after (pass 1), each is half where both are and the scene
-  // keeps what neither covers.
+  // 4: the scene without the gun (_MainTex), the goggle eye's gun (_GunG) laid in by _ShareG where it is, weighted so
+  // that once the bare eye's (_GunB) is laid over by _ShareB after (pass 1), each has its share where both are and
+  // the scene keeps the rest; never over the goggle (the camera's own depth nearer than _DeviceReach).
   Pass {
    Cull Off ZWrite Off ZTest Always Blend Off
    CGPROGRAM
@@ -91,9 +95,14 @@ Shader "Justachae/NVG/Tube" {
    #pragma fragment frag
    #include "UnityCG.cginc"
    sampler2D _MainTex, _GunG, _GunB;
+   float _ShareG, _ShareB, _DeviceReach;
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
    float4 frag (v2f_img i) : SV_Target {
     float4 s = tex2D(_MainTex, i.uv), g = tex2D(_GunG, i.uv);
-    float wG = 0.5 * saturate(g.a), wB = 0.5 * saturate(tex2D(_GunB, i.uv).a);
+    float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
+    if (_DeviceReach > 0 && LinearEyeDepth(raw) < _DeviceReach)
+     return s;
+    float wG = _ShareG * saturate(g.a), wB = _ShareB * saturate(tex2D(_GunB, i.uv).a);
     float k = max(1 - wB, 1e-3);
     return float4((s.rgb * (1 - wG - wB) + g.rgb * wG) / k, s.a);
    }
