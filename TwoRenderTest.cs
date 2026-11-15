@@ -9,6 +9,8 @@ namespace EFTNewCamera;
 internal static class TwoRenderTest
 {
     internal static bool On = true;
+    // Only with the goggle down (and on): otherwise the game's one render, as ever.
+    internal static bool Now => On && NightVisionEyepieces.Active;
     private const float HalfApart = 0.032f;      // m, each eye this far from where the camera is placed
     private const float PhaseSeconds = 20f;
     private const int SettleFrames = 60;
@@ -26,7 +28,7 @@ internal static class TwoRenderTest
     {
         _renderedThisFrame = false;
         Camera? camera = Camera.main;
-        if (!On || camera == null || !NewCameraSwitch.Enabled || Comfort.Common.Singleton<EFT.GameWorld>.Instance?.MainPlayer == null)
+        if (!Now || camera == null || !NewCameraSwitch.Enabled || Comfort.Common.Singleton<EFT.GameWorld>.Instance?.MainPlayer == null)
         {
             _phaseStart = -1f;
             return;
@@ -69,7 +71,7 @@ internal static class TwoRenderTest
     {
         if (_rendering)
             camera.transform.position += camera.transform.rotation * new Vector3(-HalfApart, 0f, 0f);
-        else if (On)
+        else if (Now)
             camera.transform.position += camera.transform.rotation * new Vector3(HalfApart, 0f, 0f);
     }
 

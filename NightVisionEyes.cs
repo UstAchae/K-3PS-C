@@ -259,7 +259,7 @@ internal static partial class NightVisionEyepieces
             rightShift = Vector3.Lerp(rightShift, camera0, home);
         }
         // TEMP TEST (TwoRenderTest.cs): each render is one eye, the camera itself: no two eyes' views split in one frame.
-        if (TwoRenderTest.On)
+        if (TwoRenderTest.Now)
         {
             leftShift = Vector3.zero;
             rightShift = Vector3.zero;
