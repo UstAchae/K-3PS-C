@@ -67,13 +67,13 @@ internal static partial class NightVisionEyepieces
     internal static float ScopePull(Player player, Vector3 cameraPlace, Quaternion cameraTurn)
     {
         // The gun is no longer brought forward to the goggle's objective (the user's wish, 2026-11-15): it stays where the
-        // aim puts it, and the goggle's picture is never the sight's own (Through stays off).
-        const float target = 0f;
-        ScopePullback = Mathf.Lerp(target, ScopePullback, Mathf.Exp(-Time.deltaTime / ScopePullbackSeconds));
-        if (ScopePullback < 1e-4f)
-            ScopePullback = 0f;
-        _scope.Through = ScopePullback > ThroughScopeFrom;
-        return ScopePullback;
+        // aim puts it. The goggle's picture is still the sight's own while a magnified sight is aimed through with the
+        // goggle before the aiming eye: the sight's picture is at infinity, as the objective is focused, so it is sharp
+        // (not blurred as what is near).
+        ScopePullback = 0f;
+        _scope.Through = Active && !_device.Thermal && _body != null && player.HandsController != null && player.HandsController.IsAiming
+            && Scopes.Current(player.ProceduralWeaponAnimation) is { IsOptic: true } && ChestStance.Weight <= 0f && GoggleBeforeAimingEye(cameraPlace, cameraTurn);
+        return 0f;
     }
 
     // A monocular before the other eye: the aiming eye looks through the sight bare, as without the goggle. Taken for the goggle's, the
@@ -120,8 +120,8 @@ internal static partial class NightVisionEyepieces
                 Transform view = optic.transform;
                 Vector3 lensCentre = _scope.LensMatrix.MultiplyPoint3x4(mesh.bounds.center);
                 Vector3 axis = view.forward;
-                // The goggle's objective, ahead of the eye (the camera) by as far as the gun was brought forward.
-                Vector3 objectiveAt = _renderedFrom + _renderedForward * ScopePullback;
+                // The goggle's objective, where it is (ahead of the eye).
+                Vector3 objectiveAt = _body != null ? _body.TransformPoint(_objectiveFront) : _renderedFrom;
                 float relief = Vector3.Dot(lensCentre - objectiveAt, axis);
                 Vector3 off = objectiveAt - (lensCentre - axis * relief);
                 float magnification = MagnificationOf(scope.Mod, sight!, optic);
