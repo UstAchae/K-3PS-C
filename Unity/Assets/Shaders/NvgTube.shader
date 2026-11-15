@@ -104,7 +104,6 @@ Shader "Justachae/NVG/Tube" {
      return s;
     float wG = _ShareG * saturate(g.a), wB = _ShareB * saturate(tex2D(_GunB, i.uv).a);
     float k = max(1 - wB, 1e-3);
-    // _ShareB 0: the goggle eye's gun laid in plainly, the bare eye's laid over it after (pass 1).
     return float4((s.rgb * (1 - wG - wB) + g.rgb * wG) / k, s.a);
    }
    ENDCG

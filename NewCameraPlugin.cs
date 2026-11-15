@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.27";
+    public const string PluginVersion = "1.8.28";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -175,11 +175,8 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<bool> reflections = SettingsLayout.Bind(Config, "头戴式成像装备", "镜片反光", false,
             new ConfigDescription("夜视仪翻下时，目镜镜片表面映出的周围环境和高光，叠在镜片里的夜视画面上。关掉后镜片里只剩夜视画面，设备上的玻璃部件也不画。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
-        ConfigEntry<float> bareGunSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "单筒：裸眼的枪的透明度", 0.3f,
-            new ConfigDescription("戴单筒夜视仪（PVS-14）时，没戴夜视仪的那只眼看到的枪有多透明：0 是实心，1 是看不见，默认 0.3。叠在戴夜视仪那只眼的枪上面。",
-                new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
-        ConfigEntry<float> goggleGunSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "单筒：戴夜视仪那只眼的枪的透明度", 0.7f,
-            new ConfigDescription("戴单筒夜视仪（PVS-14）时，戴夜视仪的那只眼看到的枪有多透明：0 是实心，1 是看不见，默认 0.7。这把枪在目镜里也照夜视管成像。只有瞄准眼那把枪的倍镜里有画面。",
+        ConfigEntry<float> bareGunSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "单筒：裸眼瞄准时枪的透明度", 0.5f,
+            new ConfigDescription("戴单筒夜视仪（PVS-14）、用没戴夜视仪的那只眼瞄准时，那只眼看到的枪有多透明：0 是实心，1 是看不见，默认 0.5。用戴夜视仪的那只眼瞄准时枪始终是实心的。",
                 new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
         ConfigEntry<bool> nearBlur = SettingsLayout.Bind(Config, "头戴式成像装备", "近处虚化", true,
             new ConfigDescription("夜视仪的物镜对焦在远处，近处的手、枪和机瞄是虚的，越近越虚，几米外是清楚的，和真实夜视仪的物镜一样。原版夜视和 Borkel's Realistic NVGs 的画面都会这样，热成像不受影响。关掉后目镜里近处也是清楚的。",
@@ -216,7 +213,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             NightVisionEyepieces.LensReflections = reflections.Value;
             NightVisionEyepieces.EyeShift = eyeShift.Value;
             TwoRenders.BareGunSeeThrough = bareGunSeeThrough.Value;
-            TwoRenders.GoggleGunSeeThrough = goggleGunSeeThrough.Value;
             NightVisionEyepieces.RaiseMount = raiseMount.Value;
             NightVisionEyepieces.LowerMount = lowerMount.Value;
             NightVisionEyepieces.TiltUp = tiltUp.Value;
@@ -227,7 +223,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 
         eyeShift.SettingChanged += (_, _) => Refresh();
         bareGunSeeThrough.SettingChanged += (_, _) => Refresh();
-        goggleGunSeeThrough.SettingChanged += (_, _) => Refresh();
         picture.SettingChanged += (_, _) => Refresh();
         raiseMount.SettingChanged += (_, _) => Refresh();
         lowerMount.SettingChanged += (_, _) => Refresh();
