@@ -61,7 +61,7 @@ internal static class TwoRenders
     // Only the aiming eye's gun is seen (the user's, 2026-11-15); as the gun goes over to the other shoulder, the one
     // fades out as the other fades in: how much of each this frame (they add up to one).
     private static float _shareGoggle = 1f, _shareBare;
-    private const float GunOpacity = 0.5f;   // the gun seen through at half, as the two eyes' frames laid together did
+    private const float GunOpacity = 0.5f;   // the bare eye's gun seen through at half, as the two eyes' frames laid together did
     // The goggle is never seen through: nothing laid over what the camera has nearer than this (m; the gun is further).
     private const float DeviceReach = 0.12f;
     private static readonly int ShareGId = Shader.PropertyToID("_ShareG"), ShareBId = Shader.PropertyToID("_ShareB"), DeviceReachId = Shader.PropertyToID("_DeviceReach");
@@ -174,8 +174,10 @@ internal static class TwoRenders
         float toward = CameraPosition.AimingEyeAcross / Mathf.Max(CameraPosition.AimEye, 1e-4f) * Mathf.Sign(BareEye);
         _shareBare = Mathf.Clamp01(0.5f + 0.5f * toward);
         _shareGoggle = 1f - _shareBare;
-        if (_shareBare > 0.001f)
-            RenderGun(main, GunPass.Bare, gunLayers);
+        // Aimed with the goggle's eye: its gun solid, as the frame's own render draws it (the user's, 2026-11-15).
+        if (_shareBare <= 0.001f)
+            return;
+        RenderGun(main, GunPass.Bare, gunLayers);
         if (_shareGoggle > 0.001f)
             RenderGun(main, GunPass.Goggle, gunLayers);
         if (_bareDone == Time.frameCount || _goggleDone == Time.frameCount)
@@ -354,7 +356,7 @@ internal static class TwoRenders
         bool bareGun = _bareDone == Time.frameCount && _bareGun != null;
         RenderTexture laid = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
         material.SetTexture(GunGId, goggleGun ? _goggleGun : Texture2D.blackTexture);
-        material.SetFloat(ShareGId, goggleGun ? GunOpacity * _shareGoggle : 0f);
+        material.SetFloat(ShareGId, goggleGun ? _shareGoggle : 0f);   // the goggle eye's gun solid
         material.SetFloat(ShareBId, bareGun ? GunOpacity * _shareBare : 0f);
         material.SetFloat(DeviceReachId, DeviceReach);
         material.SetTexture(GunBId, bareGun ? _bareGun : Texture2D.blackTexture);
