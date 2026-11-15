@@ -6,8 +6,9 @@ namespace EFTNewCamera;
 
 // EXPERIMENT (the user's, 2026-11-15; every device since 1.9.26): a device seen with both eyes, half each. The two eyes stand half
 // the eyes' distance either side of the head's middle. The main camera is the eye behind the eyepiece, put there
-// (CameraPosition.EyeOverride), the eyepiece's picture as ever, but nothing of the two-eye drawing: the device the game's to
-// draw, the eyes not moved from the camera, no monocular fade. The other, bare eye's whole view is rendered by a camera
+// (CameraPosition.EyeOverride), the eyepiece's picture as ever, but nothing of the two-eye drawing: the device drawn into
+// the main camera from that eye alone, the eyes not moved from the camera, no monocular fade. The other eye sees the
+// device as the game draws it (shown to its camera while it renders). The other, bare eye's whole view is rendered by a camera
 // of its own (the game's scope camera prefab, as the thermal goggles' is, with only the main camera's own effects), and
 // laid over the frame at half. To be kept or taken out once seen.
 internal static partial class NightVisionEyepieces
@@ -128,6 +129,12 @@ internal static partial class NightVisionEyepieces
         camera.rect = new Rect(0f, 0f, 1f, 1f);
         camera.projectionMatrix = main.nonJitteredProjectionMatrix;
         camera.targetTexture = picture;
+        // The device, kept from the main camera (drawn into it from its eye), seen by this one as the game draws it.
+        foreach ((Renderer renderer, UnityEngine.Rendering.ShadowCastingMode casting) in _hidden)
+        {
+            if (renderer != null)
+                renderer.shadowCastingMode = casting;
+        }
         try
         {
             camera.Render();
@@ -141,9 +148,15 @@ internal static partial class NightVisionEyepieces
         {
             camera.ResetProjectionMatrix();
             camera.targetTexture = null;
+            foreach ((Renderer renderer, UnityEngine.Rendering.ShadowCastingMode _) in _hidden)
+            {
+                if (renderer != null)
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
+            }
         }
         _bareEyesFrame = Time.frameCount;
-        if (!_bareEyesNoted)
+        // Noted once the camera has come to the eye (the frame the experiment starts, it is still where it was).
+        if (!_bareEyesNoted && Mathf.Abs(CameraPosition.Horizontal - CameraPosition.EyeOverride.Value) < 1e-4f)
         {
             _bareEyesNoted = true;
             NewCameraPlugin.Log?.LogInfo($"NVG experiment: the main camera at the eyepiece's eye ({CameraPosition.Horizontal * 1000f:F0} mm across), the bare eye {EyesApart * 1000f:F0} mm from it ({width}x{height}), half each.");

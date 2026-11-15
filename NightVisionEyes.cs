@@ -91,8 +91,7 @@ internal static partial class NightVisionEyepieces
         if (_body != null)
             AdjustMount(camera);
         // Once the device's mount is set for this frame: the camera has been placed by now.
-        // The experiment draws nothing of the two eyes: the device the game's (NightVisionOtherEye.cs).
-        _direct = _directShader != null && !BothEyesBare && LensesOn(camera) && PrepareRelative(camera);
+        _direct = _directShader != null && LensesOn(camera) && PrepareRelative(camera);
         if (_direct)
             HideDevice(camera);
         ClaimFusion(camera);
@@ -274,11 +273,14 @@ internal static partial class NightVisionEyepieces
             split = Mathf.Lerp(split, loneSide == 0 ? 1f + Overscan : -Overscan, going);
         // The experiment (NightVisionOtherEye.cs): the camera is one eye, the other the eyes' distance from it; each
         // eye's lens map from where it is (the composite then made once for each, all one side's).
+        // The device drawn into the main camera from its eye alone (all the frame that eye's side), its lenses left open
+        // there for their picture, made from that frame (drawn by the game, it filled the lenses' picture with itself).
         if (BothEyesBare && CameraPosition.EyeOverride is float mainEye)
         {
             Vector3 otherEye = right * (-2f * mainEye);
             leftShift = mainEye >= 0f ? otherEye : Vector3.zero;
             rightShift = mainEye >= 0f ? Vector3.zero : otherEye;
+            split = mainEye >= 0f ? -1f : 2f;
         }
         binocular.SetFloat(SplitId, split);
 
