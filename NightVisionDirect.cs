@@ -95,7 +95,9 @@ internal static partial class NightVisionEyepieces
     private static int _arrangedCount = -1;
     private static bool _direct;
     private const int InsertPass = 0, SurfacePass = 1, EvenPass = 2, MotionPass = 3, StencilBitsPass = 4, PlacesPass = 12, LensOpenPass = 14,
-        SplitPass = 15, HalvesPass = 16;
+        SplitPass = 15, HalvesPass = 16, SourcePass = 17;
+    // TEMP PROBES: each eye's source alone (its own drawing of the device, the gun, the arms), NightVisionOtherEye.cs.
+    internal static readonly RenderTexture?[] _eyeSources = new RenderTexture?[2];
     // The experiment: each eye's lit frame, split from the chessboard before the post-processing (the frame it is made
     // of is the two half each), and the frame it was made for.
     internal static readonly RenderTexture?[] _eyesLit = new RenderTexture?[2];
@@ -667,6 +669,17 @@ internal static partial class NightVisionEyepieces
             buffer.SetGlobalTexture(DirectEyeRId, _eyesLit[1]!);
             buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
             buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, HalvesPass);
+            if (EyeProbes)
+            {
+                for (int half = 0; half < 2; half++)
+                {
+                    RenderTexture source = DirectTexture(_eyeSources, half, width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear, "Justachae NVG eye source " + half);
+                    buffer.SetRenderTarget(source);
+                    buffer.SetGlobalFloat(DirectHalf, half);
+                    buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, SourcePass);
+                }
+                buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+            }
             _eyesLitFrame = Time.frameCount;
         }
         else

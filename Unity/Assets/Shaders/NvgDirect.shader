@@ -557,5 +557,26 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
+  // 17: TEMP PROBE, one eye's source (_DirectHalf): what that eye's own drawing has (the device, the gun, the arms, by
+  // its own depth), lit, brightened to be seen (1 - exp(-40 x)); black where it has nothing.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   sampler2D _DirectEyeL, _DirectEyeR;
+   float _DirectHalf;
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    bool right = _DirectHalf > 0.5;
+    float raw = right ? SAMPLE_DEPTH_TEXTURE(_DirectRD, uv) : SAMPLE_DEPTH_TEXTURE(_DirectLD, uv);
+    if (!shown(raw))
+     return float4(0, 0, 0, 1);
+    float3 lit = right ? tex2D(_DirectEyeR, uv).rgb : tex2D(_DirectEyeL, uv).rgb;
+    return float4(1 - exp(-40 * max(lit, 0)), 1);
+   }
+   ENDCG
+  }
  }
 }

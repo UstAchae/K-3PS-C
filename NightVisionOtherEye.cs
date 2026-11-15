@@ -331,8 +331,8 @@ internal static partial class NightVisionEyepieces
         eyes.SetTexture(OtherId, seen[1]);
         eyes.SetFloat(OtherShareId, 0.5f);
         Graphics.Blit(seen[0], into, eyes, TubeHalves);
-        if (EyeProbes)
-            DrawEyeProbes(into, seen[0], seen[1]);
+        if (EyeProbes && _eyeSources[0] != null && _eyeSources[1] != null)
+            DrawEyeProbes(into, _eyeSources[0]!, _eyeSources[1]!);
         if (fusedMade != null)
             RenderTexture.ReleaseTemporary(fusedMade);
         foreach (RenderTexture texture in temporaries)
@@ -382,8 +382,9 @@ internal static partial class NightVisionEyepieces
         }
     }
 
-    // TEMP PROBES (the user's, to see each eye's view): the left eye's alone in the lower left corner, the right's in the
-    // lower right, a quarter of the frame across (before the game lays a sight's lens in).
+    // TEMP PROBES (the user's, to see what goes into the mix): each eye's own drawing alone (the device, the gun, the arms,
+    // as drawn from that eye, before the two are mixed), the left eye's in the lower left corner, the right's in the lower
+    // right, a quarter of the frame across.
     internal static bool EyeProbes = true;
     private static readonly int ProbeEyeId = Shader.PropertyToID("_ProbeEye");
     private static void DrawEyeProbes(RenderTexture into, RenderTexture left, RenderTexture right)
