@@ -109,8 +109,9 @@ internal static partial class NightVisionEyepieces
         if (!LensesOn(camera))
             return;
 
-        // The device as it truly stands from the camera (NightVisionPrecise.cs).
-        PrepareRelative(camera);
+        // The lenses placed by the device's place in the world, as the game draws it (rounded as coarsely far out in a
+        // map), not by where it truly stands from the camera: the game draws the device on this branch, and the lenses'
+        // picture placed apart from it slid against it from frame to frame (NightVisionPrecise.cs, left unused).
         RenderLenses(camera, binocular, view, position);
     }
 
