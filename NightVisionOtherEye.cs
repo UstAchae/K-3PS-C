@@ -65,39 +65,37 @@ internal static partial class NightVisionEyepieces
                 if ((r is MeshRenderer || r is SkinnedMeshRenderer) && !r.transform.IsChildOf(slot))
                     _nearRenderers.Add(r);
             }
-            // The gun in the hands: under the weapon root the hands' animation moves (the hands controller's own object
-            // has none of its renderers).
-            GameObject? gun = NearPlayer?.ProceduralWeaponAnimation?.HandsContainer?.WeaponRootAnim?.gameObject;
-            if (gun != null && !gun.transform.IsChildOf(slot.root))
+            // The gun in the hands, a model of its own apart from the body: its whole hierarchy, found from the firearm
+            // controller's weapon root, or from the sight aimed through.
+            Transform? gun = GunRoot();
+            int gunRenderers = 0;
+            if (gun != null && !gun.IsChildOf(slot.root))
             {
                 gun.GetComponentsInChildren(false, _nearFound);
                 foreach (Renderer r in _nearFound)
                 {
                     if (r is MeshRenderer || r is SkinnedMeshRenderer)
+                    {
                         _nearRenderers.Add(r);
+                        gunRenderers++;
+                    }
                 }
+            }
+            // TEMP DIAG: once the gun has renderers, why each is or is not drawn from each eye.
+            if (!_nearWhyNoted && gun != null && gunRenderers > 0)
+            {
+                _nearWhyNoted = true;
+                var why = new System.Collections.Generic.List<string>();
+                foreach (Renderer r in gun.GetComponentsInChildren<Renderer>(false))
+                {
+                    if (why.Count >= 30)
+                        break;
+                    why.Add($"{r.name} ({r.GetType().Name}) on {r.enabled} off {r.forceRenderingOff} shadows {r.shadowCastingMode} layer {LayerMask.LayerToName(r.gameObject.layer)} in mask {(camera.cullingMask & (1 << r.gameObject.layer)) != 0} finest {FinestLevel(r)}");
+                }
+                NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG gun {gun.name}: {gunRenderers} renderers; " + string.Join("; ", why));
             }
         }
         int meshes = 0, skinned = 0;
-        // TEMP DIAG: once, why each of the gun's renderers is or is not drawn from each eye.
-        Transform? weaponRoot = NearPlayer?.ProceduralWeaponAnimation?.HandsContainer?.WeaponRootAnim;
-        if (!_nearWhyNoted && weaponRoot != null)
-        {
-            GameObject gunObject = weaponRoot.gameObject;
-            Transform top = weaponRoot;
-            while (top.parent != null && !top.IsChildOf(slot.root) && top.parent != top.root)
-                top = top.parent;
-            NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG weapon root {weaponRoot.name}: under the body {weaponRoot.IsChildOf(slot.root)}, its root {weaponRoot.root.name}, the body's root {slot.root.name}, renderers {weaponRoot.GetComponentsInChildren<Renderer>(true).Length}");
-            _nearWhyNoted = true;
-            var why = new System.Collections.Generic.List<string>();
-            foreach (Renderer r in gunObject.GetComponentsInChildren<Renderer>(true))
-            {
-                if (why.Count >= 30)
-                    break;
-                why.Add($"{r.name} ({r.GetType().Name}) on {r.enabled}/{r.gameObject.activeInHierarchy} off {r.forceRenderingOff} shadows {r.shadowCastingMode} layer {LayerMask.LayerToName(r.gameObject.layer)} in mask {(camera.cullingMask & (1 << r.gameObject.layer)) != 0} finest {FinestLevel(r)} listed {_nearRenderers.Contains(r)} under body {r.transform.IsChildOf(slot.root)}");
-            }
-            NewCameraPlugin.Log?.LogInfo("NVG experiment DIAG gun renderers: " + string.Join("; ", why));
-        }
         foreach (Renderer r in _nearRenderers)
         {
             // Only what the main camera would draw: on, in its layers, not left to shadows (the head the body hides).
@@ -227,6 +225,28 @@ internal static partial class NightVisionEyepieces
             Read("near mask " + side, _directNear[side]);
         }
         NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG: active {Active}, direct {_direct}, tube power {_power[0]:F2} {_power[2]:F2}, eyes frame {_eyesFrame == Time.frameCount}.");
+    }
+
+    // The gun in the hands' whole model: the root of the firearm controller's weapon root (or, failing that, of the sight
+    // aimed through).
+    private static System.Reflection.PropertyInfo? _weaponRootProperty;
+    private static System.Type? _weaponRootOf;
+    private static Transform? GunRoot()
+    {
+        object? hands = NearPlayer?.HandsController;
+        Transform? at = null;
+        if (hands != null)
+        {
+            if (_weaponRootOf != hands.GetType())
+            {
+                _weaponRootOf = hands.GetType();
+                _weaponRootProperty = HarmonyLib.AccessTools.Property(_weaponRootOf, "WeaponRoot");
+            }
+            at = _weaponRootProperty?.GetValue(hands) as Transform;
+        }
+        if (at == null)
+            at = Scopes.Current(NearPlayer?.ProceduralWeaponAnimation)?.ScopePrefabCache?.transform;
+        return at != null ? at.root : null;
     }
 
     private static void ReleaseOtherEye()
