@@ -48,15 +48,15 @@ Shader "Justachae/NVG/Binocular" {
      float3 seenL = eyeL.rgb * (1 - saturate(coverL * _LensClear + (1 - _LensClear) * darkL)) + lightL.rgb * _Lamp.x + lit * (1 - lightL.w) + (1 - saturate(eyeL.a)) * (1 - coverL) * scene.rgb;
      float3 seenR = eyeR.rgb * (1 - saturate(coverR * _LensClear + (1 - _LensClear) * darkR)) + lightR.rgb * _Lamp.x + lit * (1 - lightR.w) + (1 - saturate(eyeR.a)) * (1 - coverR) * scene.rgb;
      // The right eye's share growing across the frame: the left eye's all at the left edge, half each in the middle.
-     // Where one eye sees its lens and the other only its device's housing there, the lens's picture is seen whole:
-     // the bright picture wins over the dark housing, as the two views are seen as one.
+     // Where one eye sees its lens and the other does not (its device's housing there, or the bare scene), the lens's
+     // picture is seen whole: the tube's picture wins, as the two views are seen as one. Only the other eye's own gun
+     // or arm there is still seen with it, by the share.
      float share = saturate(i.uv.x);
      bool lensL = lightL.w > 0.01, lensR = lightR.w > 0.01;
-     bool deviceL = deviceAt(SAMPLE_DEPTH_TEXTURE(_DirectLD, i.uv), tex2D(_DirectNearL, i.uv).r);
-     bool deviceR = deviceAt(SAMPLE_DEPTH_TEXTURE(_DirectRD, i.uv), tex2D(_DirectNearR, i.uv).r);
-     if (lensL && !lensR && deviceR)
+     bool nearL = tex2D(_DirectNearL, i.uv).r >= 0.5, nearR = tex2D(_DirectNearR, i.uv).r >= 0.5;
+     if (lensL && !lensR && !nearR)
       share = 0;
-     else if (lensR && !lensL && deviceL)
+     else if (lensR && !lensL && !nearL)
       share = 1;
      return float4(lerp(seenL, seenR, share), scene.a);
     }
