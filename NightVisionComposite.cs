@@ -159,7 +159,11 @@ internal static partial class NightVisionEyepieces
             picture = TubesGain(picture, ref dimmed);
             Texture? fusedPicture = Fused(picture, ref fused);
             ReleaseMask();
+            composite.SetFloat(ProbeEyeId, -1f);
             Compose(composite, glow, from, into, picture, fusedPicture);
+            // The experiment's probes (NightVisionOtherEye.cs): each eye's view alone, small, in the lower corners.
+            if (EyeProbes && TwoEyesNow)
+                DrawEyeProbes(composite, glow, from, into, picture, fusedPicture);
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
             if (tubed != null)

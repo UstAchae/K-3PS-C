@@ -20,6 +20,7 @@ Shader "Justachae/NVG/Binocular" {
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
  sampler2D _DirectNearL, _DirectNearR;
  float _DirectAimRight;   // the experiment's aiming eye: 1 the right, 0 the left
+ float _ProbeEye;         // the experiment's probe: 0 the left eye's view alone, 1 the right's; below 0 both
  bool deviceAt (float raw, float near) {
   #if defined(UNITY_REVERSED_Z)
   return raw > 0 && near < 0.5;
@@ -48,8 +49,8 @@ Shader "Justachae/NVG/Binocular" {
      float3 lit = tex2D(_Glow, i.uv).rgb * _Lamp.y;
      float3 seenL = eyeL.rgb * (1 - saturate(coverL * _LensClear + (1 - _LensClear) * darkL)) + lightL.rgb * _Lamp.x + lit * (1 - lightL.w) + (1 - saturate(eyeL.a)) * (1 - coverL) * scene.rgb;
      float3 seenR = eyeR.rgb * (1 - saturate(coverR * _LensClear + (1 - _LensClear) * darkR)) + lightR.rgb * _Lamp.x + lit * (1 - lightR.w) + (1 - saturate(eyeR.a)) * (1 - coverR) * scene.rgb;
-     // Half each.
-     float share = 0.5;
+     // Half each (a probe: one eye's alone).
+     float share = _ProbeEye >= 0 ? _ProbeEye : 0.5;
      return float4(lerp(seenL, seenR, share), scene.a);
     }
     float4 eye; float4 light; float cover, dark;

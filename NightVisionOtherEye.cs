@@ -277,6 +277,35 @@ internal static partial class NightVisionEyepieces
         NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG sight lens material {material.name}, shader {material.shader.name}, queue {material.renderQueue}, passes {material.passCount}; properties {string.Join(", ", properties)}");
     }
 
+    // TEMP PROBES (the user's, to see each eye's view): the left eye's view alone in the lower left corner, the right's in
+    // the lower right, a quarter of the frame across, as the eyepieces make them (before the game lays a sight's lens in).
+    internal static bool EyeProbes = true;
+    private static readonly int ProbeEyeId = Shader.PropertyToID("_ProbeEye");
+    private static void DrawEyeProbes(Material composite, Material glow, RenderTexture from, RenderTexture into, Texture picture, Texture? fused)
+    {
+        int width = into.width / 4, height = into.height / 4, margin = into.height / 40;
+        for (int side = 0; side < 2; side++)
+        {
+            RenderTexture whole = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
+            RenderTexture small = RenderTexture.GetTemporary(width, height, 0, into.format);
+            composite.SetFloat(ProbeEyeId, side);
+            Compose(composite, glow, from, whole, picture, fused);
+            Graphics.Blit(whole, small);
+            RenderTexture? active = RenderTexture.active;
+            RenderTexture.active = into;
+            GL.PushMatrix();
+            GL.LoadPixelMatrix(0, into.width, 0, into.height);
+            float x = side == 0 ? margin : into.width - width - margin;
+            Graphics.DrawTexture(new Rect(x - 2, margin - 2, width + 4, height + 4), Texture2D.whiteTexture);
+            Graphics.DrawTexture(new Rect(x, margin, width, height), small);
+            GL.PopMatrix();
+            RenderTexture.active = active;
+            RenderTexture.ReleaseTemporary(whole);
+            RenderTexture.ReleaseTemporary(small);
+        }
+        composite.SetFloat(ProbeEyeId, -1f);
+    }
+
     private static void ReleaseOtherEye()
     {
         CameraPosition.EyeOverride = null;
