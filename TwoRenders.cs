@@ -50,9 +50,16 @@ internal static class TwoRenders
             _handsOf = body;
             _gunLayers = 0;
             root.GetComponentsInChildren(false, _gunRenderers);
-            // The hands holding it too: one gun, one pair of hands (the user's, 2026-11-15).
-            if (body != null && body.BodySkins.TryGetValue(EFT.EBodyModelPart.Hands, out var handsSkin) && handsSkin != null)
-                _gunRenderers.AddRange(handsSkin.GetRenderers());
+            // The hands and the arms holding it too: one gun, one pair of hands and arms (the user's, 2026-11-15). The arms are
+            // the body's model (its sleeves with it), so the body goes along.
+            if (body != null)
+            {
+                foreach (EFT.EBodyModelPart part in new[] { EFT.EBodyModelPart.Hands, EFT.EBodyModelPart.Body })
+                {
+                    if (body.BodySkins.TryGetValue(part, out var skin) && skin != null)
+                        _gunRenderers.AddRange(skin.GetRenderers());
+                }
+            }
             _gunRenderers.RemoveAll(r => r is not MeshRenderer && r is not SkinnedMeshRenderer);
             foreach (Renderer r in _gunRenderers)
             {
