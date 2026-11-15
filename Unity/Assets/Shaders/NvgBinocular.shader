@@ -27,6 +27,17 @@ Shader "Justachae/NVG/Binocular" {
    float4 frag (v2f_img i) : SV_Target {
     float4 scene = tex2D(_MainTex, i.uv);
     if (_Mode < 0.5) return scene;
+    // The experiment: each eye's own result over the whole frame (its lens's picture where it looks into it, the frame
+    // elsewhere), half each (_EyeMix of the right's).
+    if (_EyeMix >= 0) {
+     float4 eyeL, lightL, eyeR, lightR; float coverL, darkL, coverR, darkR;
+     eyeSide(i.uv, false, eyeL, lightL, coverL, darkL);
+     eyeSide(i.uv, true, eyeR, lightR, coverR, darkR);
+     float3 lit = tex2D(_Glow, i.uv).rgb * _Lamp.y;
+     float3 seenL = eyeL.rgb * (1 - saturate(coverL * _LensClear + (1 - _LensClear) * darkL)) + lightL.rgb * _Lamp.x + lit * (1 - lightL.w) + (1 - saturate(eyeL.a)) * (1 - coverL) * scene.rgb;
+     float3 seenR = eyeR.rgb * (1 - saturate(coverR * _LensClear + (1 - _LensClear) * darkR)) + lightR.rgb * _Lamp.x + lit * (1 - lightR.w) + (1 - saturate(eyeR.a)) * (1 - coverR) * scene.rgb;
+     return float4(lerp(seenL, seenR, _EyeMix), scene.a);
+    }
     float4 eye; float4 light; float cover, dark;
     eyeAt(i.uv, eye, light, cover, dark);
     // The glow falls on the eyecups and the housing about the lenses, not on the lenses' own picture (over it, it

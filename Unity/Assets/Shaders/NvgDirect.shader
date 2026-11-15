@@ -14,6 +14,8 @@ Shader "Justachae/NVG/Direct" {
  // The experiment (NightVisionOtherEye.cs): each eye's share of the whole frame, the same everywhere (0.5 half each);
  // below 0, the left eye's on the left and the right's on the right, eased across the strip, as ever.
  float _DirectMix;
+ // Where each eye's nearest is the player's own (the gun, the arms: pass 13 on that eye's depth), not the device.
+ sampler2D _DirectNearL, _DirectNearR;
  float toRightAt (float x) {
   return _DirectMix >= 0 ? _DirectMix : smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, x);
  }
@@ -90,6 +92,23 @@ Shader "Justachae/NVG/Direct" {
  // the left eye's on the left of the line, the right's on the right, each by its share across the strip about it, and through a
  // lens that eye has nothing of the device. All that goes past the line is gone.
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
+  // The experiment, the two eyes over the whole frame (_DirectMix of the right's): an eye looking into its own lens here has
+  // the lens's picture (the composite), unless its gun or arm is what it sees there, before the lens's view; the frame is
+  // the others', each with its device (or gun) if it has it here, half each, or the scene.
+  if (_DirectMix >= 0) {
+   bool l = !(within(_DirectLens0, uv, _EyeInvVP0) && tex2Dlod(_DirectNearL, float4(uv, 0, 0)).r < 0.5);
+   bool r = !(within(_DirectLens1, uv, _EyeInvVP1) && tex2Dlod(_DirectNearR, float4(uv, 0, 0)).r < 0.5);
+   bool sl = l && shown(rawL), sr = r && shown(rawR);
+   if (l && r) {
+    if (sl && sr) { toRight = _DirectMix; return 1; }
+    if (sl) { toRight = 0; return 1 - _DirectMix; }
+    if (sr) { toRight = 1; return _DirectMix; }
+    toRight = _DirectMix; return 0;
+   }
+   if (l) { toRight = 0; return sl ? 1 : 0; }
+   if (r) { toRight = 1; return sr ? 1 : 0; }
+   toRight = _DirectMix; return 0;
+  }
   float t = toRightAt(uv.x);
   toRight = t;
   // Through either eye's lens here, nothing of the device: the lenses' picture is made from this frame, and the composite shows the

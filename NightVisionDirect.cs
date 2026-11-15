@@ -22,6 +22,7 @@ internal static partial class NightVisionEyepieces
         internal Matrix4x4 FromCamera;        // its mesh's frame from the camera (turned with the world, not moved)
         internal Material[] Materials;
         internal int[] Passes;                // each material's G-buffer pass (-1: none)
+        internal bool Near;                   // the player's own (the gun, the arms): the experiment's (NightVisionOtherEye.cs)
     }
 
     private struct PieceSource
@@ -47,6 +48,8 @@ internal static partial class NightVisionEyepieces
     private static readonly RenderTexture?[][] _directTextures = { new RenderTexture?[4], new RenderTexture?[4] };
     private static readonly RenderTexture?[] _directDepths = new RenderTexture?[2];
     private static readonly RenderTexture?[] _directRaisedHolder = new RenderTexture?[1];
+    private static readonly RenderTexture?[] _directNear = new RenderTexture?[2];
+    private static readonly int DirectNearLId = Shader.PropertyToID("_DirectNearL"), DirectNearRId = Shader.PropertyToID("_DirectNearR");
 
     private static RenderTexture DirectTexture(RenderTexture?[] kept, int which, int width, int height, int depth, RenderTextureFormat format, RenderTextureReadWrite readWrite, string name)
     {
@@ -121,6 +124,8 @@ internal static partial class NightVisionEyepieces
             });
         }
         HideTwins();
+        if (ExperimentOn)
+            AddNearPieces(camera);
     }
 
     // Another copy of the same model on the player, outside the device's own slot: left to itself it was seen beside the device
@@ -481,6 +486,23 @@ internal static partial class NightVisionEyepieces
             for (int t = 0; t < 4; t++)
                 buffer.SetGlobalTexture(ids[t], _directTextures[half][t]!);
             buffer.SetGlobalTexture(depth, depthTexture);
+            // The experiment: where this eye's nearest is its gun or arm (on its own depth), for the lens it looks through.
+            if (_nearCount > 0)
+            {
+                RenderTexture nearMask = DirectTexture(_directNear, half, width, height, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear, "Justachae NVG near " + half);
+                buffer.SetRenderTarget(nearMask, depthTexture);
+                buffer.ClearRenderTarget(false, true, Color.clear);
+                foreach (Piece piece in _pieces)
+                {
+                    if (!piece.Near)
+                        continue;
+                    for (int s = 0; s < piece.Mesh.subMeshCount; s++)
+                        buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, _directMaterial, s, DirectRaisedPass);
+                }
+                buffer.SetGlobalTexture(half == 0 ? DirectNearLId : DirectNearRId, nearMask);
+            }
+            else
+                buffer.SetGlobalTexture(half == 0 ? DirectNearLId : DirectNearRId, Texture2D.blackTexture);
         }
 
         // One eyepiece swung up, the other shown as a monocular: where the raised one is what the eye sees, it is kept out of
