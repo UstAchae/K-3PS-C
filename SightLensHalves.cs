@@ -79,17 +79,60 @@ internal static class SightLensHalves
     // TEMP DIAG: every few seconds, the sight's lens as the game lays it: how many pixels it changed, and how bright
     // they were before and after (to find where a black lens comes from).
     private static int _diagAt;
-    private static RenderTexture? _diagPre, _diagPost;
+    private static RenderTexture? _diagPre, _diagPost, _diagFinal, _diagRegion;
+    private static float[]? _diagPreData, _diagPostData;
+    private static bool _diagAfterDue;
+    // After the lens is laid in as the eyes see it (NvgTube pass 2): how bright the lens's pixels are now, and how many
+    // of them the aiming eye's own eyepiece region covers.
+    private static void DiagAfter(CommandBuffer buffer, RenderTexture frame)
+    {
+        if (!_diagAfterDue || _diagPre == null)
+            return;
+        _diagAfterDue = false;
+        int w = _diagPre.width, h = _diagPre.height;
+        if (_diagFinal == null || _diagFinal.width != w || _diagFinal.height != h)
+        {
+            _diagFinal = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBHalf) { hideFlags = HideFlags.DontSave };
+            _diagRegion = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBHalf) { hideFlags = HideFlags.DontSave };
+        }
+        buffer.Blit(frame, _diagFinal);
+        buffer.Blit(Shader.PropertyToID("_AimLensRegion"), _diagRegion);
+        float[]? fin = null, reg = null;
+        void All()
+        {
+            if (fin == null || reg == null || _diagPreData == null || _diagPostData == null)
+                return;
+            int changed = 0, covered = 0;
+            double after = 0;
+            for (int p = 0; p < fin.Length / 4; p++)
+            {
+                float yb = 0.2126f * _diagPreData[p * 4] + 0.7152f * _diagPreData[p * 4 + 1] + 0.0722f * _diagPreData[p * 4 + 2];
+                float ya = 0.2126f * _diagPostData[p * 4] + 0.7152f * _diagPostData[p * 4 + 1] + 0.0722f * _diagPostData[p * 4 + 2];
+                if (Mathf.Abs(ya - yb) <= 1e-4f)
+                    continue;
+                changed++;
+                after += 0.2126f * fin[p * 4] + 0.7152f * fin[p * 4 + 1] + 0.0722f * fin[p * 4 + 2];
+                if (reg[p * 4] > 0.5f)
+                    covered++;
+            }
+            NewCameraPlugin.Log?.LogInfo($"Sight lens DIAG after the eyes' lens pass: at the lens's {changed} pixels, mean light {(changed > 0 ? after / changed : 0):G3}; the aiming eye's eyepiece region over {covered} of them");
+        }
+        buffer.RequestAsyncReadback(_diagFinal, 0, TextureFormat.RGBAFloat, r => { if (!r.hasError) { fin = r.GetData<float>().ToArray(); All(); } });
+        buffer.RequestAsyncReadback(_diagRegion, 0, TextureFormat.RGBAFloat, r => { if (!r.hasError) { reg = r.GetData<float>().ToArray(); All(); } });
+    }
     private static void DiagLens(CommandBuffer buffer, int width, int height)
     {
         if (Time.frameCount < _diagAt)
             return;
         _diagAt = Time.frameCount + 300;
+        _diagAfterDue = true;
         float[]? pre = null, post = null;
         void Both()
         {
             if (pre == null || post == null)
                 return;
+            _diagPreData = pre;
+            _diagPostData = post;
             int changed = 0;
             double before = 0, after = 0;
             for (int p = 0; p < pre.Length / 4; p++)
@@ -145,6 +188,7 @@ internal static class SightLensHalves
         DiagLens(buffer, frame.width, frame.height);
         buffer.SetGlobalTexture(OtherId, PreLensId);
         buffer.Blit(PostLensId, frame, _halves, LensPass);
+        DiagAfter(buffer, frame);
         buffer.SetRenderTarget(frame, depth);
         buffer.ReleaseTemporaryRT(PreLensId);
         buffer.ReleaseTemporaryRT(PostLensId);
