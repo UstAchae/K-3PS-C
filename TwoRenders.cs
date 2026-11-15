@@ -30,7 +30,8 @@ internal static class TwoRenders
 
     private static int GunLayers()
     {
-        object? hands = Comfort.Common.Singleton<EFT.GameWorld>.Instance?.MainPlayer?.HandsController;
+        EFT.Player? player = Comfort.Common.Singleton<EFT.GameWorld>.Instance?.MainPlayer;
+        object? hands = player?.HandsController;
         if (hands == null)
             return 0;
         if (_handsType != hands.GetType())
@@ -41,12 +42,17 @@ internal static class TwoRenders
         Transform? root = (_weaponRoot?.GetValue(hands) as Transform)?.root;
         if (root == null)
             return 0;
-        if (root != _gunRoot || _gunRenderers.Exists(r => r == null))
+        EFT.PlayerBody? body = player?.PlayerBody;
+        if (root != _gunRoot || body != _handsOf || _gunRenderers.Exists(r => r == null))
         {
             HideGun(false);
             _gunRoot = root;
+            _handsOf = body;
             _gunLayers = 0;
             root.GetComponentsInChildren(false, _gunRenderers);
+            // The hands holding it too: one gun, one pair of hands (the user's, 2026-11-15).
+            if (body != null && body.BodySkins.TryGetValue(EFT.EBodyModelPart.Hands, out var handsSkin) && handsSkin != null)
+                _gunRenderers.AddRange(handsSkin.GetRenderers());
             _gunRenderers.RemoveAll(r => r is not MeshRenderer && r is not SkinnedMeshRenderer);
             foreach (Renderer r in _gunRenderers)
             {
@@ -56,6 +62,7 @@ internal static class TwoRenders
         }
         return _gunLayers;
     }
+    private static EFT.PlayerBody? _handsOf;
     private static readonly int NearReachId = Shader.PropertyToID("_NearReach");
     private static readonly int GunGId = Shader.PropertyToID("_GunG"), GunBId = Shader.PropertyToID("_GunB");
     // Only the aiming eye's gun is seen (the user's, 2026-11-15); as the gun goes over to the other shoulder, the one
