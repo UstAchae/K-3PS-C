@@ -193,6 +193,12 @@ internal static class TwoRenders
         // the reach cut to a couple of metres it found none); what is past NearReach is left out when laid in.
         int mask = main.cullingMask;
         main.cullingMask = gunLayers;
+        // The game's blur about a sight looked through (its depth of field on the FPS camera) off: the eye sees its gun
+        // as it is.
+        Behaviour? dof = DepthOfFieldOf(main);
+        bool dofOn = dof != null && dof.enabled;
+        if (dofOn)
+            dof!.enabled = false;
         _gun = which;
         try
         {
@@ -207,12 +213,35 @@ internal static class TwoRenders
         {
             _gun = GunPass.None;
             main.cullingMask = mask;
+            if (dofOn)
+                dof!.enabled = true;
             if (!aims && propagator != null)
             {
                 LensRenderer(propagator) = lens!;
                 CollimatorRenderer(propagator) = collimator!;
             }
         }
+    }
+
+    private static Camera? _dofOf;
+    private static Behaviour? _dof;
+
+    private static Behaviour? DepthOfFieldOf(Camera camera)
+    {
+        if (_dofOf != camera)
+        {
+            _dofOf = camera;
+            _dof = null;
+            foreach (Behaviour b in camera.GetComponents<Behaviour>())
+            {
+                if (b != null && b.GetType().Name == "DepthOfField")
+                {
+                    _dof = b;
+                    break;
+                }
+            }
+        }
+        return _dof;
     }
 
     // The gun kept from the frame's own render (its two eyes' pictures laid in instead); back once the frame is done.
