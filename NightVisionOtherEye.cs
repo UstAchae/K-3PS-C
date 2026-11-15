@@ -14,7 +14,7 @@ namespace EFTNewCamera;
 internal static partial class NightVisionEyepieces
 {
     internal static bool MonocularBothEyes = true;
-    private const float EyesApart = 0.064f;   // between the pupils (m)
+    internal static float EyesApart = 0.064f;   // between the pupils (m; F12 「头戴式成像装备」 实验：双眼眼距)
     private const int TubeHalvesPass = 1;     // NvgTube.shader: two pictures, mixed
 
     private static readonly Camera?[] _bareEyes = new Camera?[2];
