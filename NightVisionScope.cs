@@ -78,7 +78,7 @@ internal static partial class NightVisionEyepieces
         {
             _diagThrough = _scope.Through;
             _diagBare = AimEyeBare;
-            NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG sight: through the goggle {_scope.Through}, aiming eye bare {AimEyeBare}, aim side {(CameraPosition.AimSide >= 0f ? "right" : "left")}");
+            NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG sight (frame {Time.frameCount}): through the goggle {_scope.Through}, aiming eye bare {AimEyeBare}, aim side {(CameraPosition.AimSide >= 0f ? "right" : "left")}, pods {PodAngle(CentreLensA):F0}/{(_lensPods.Length > CentreLensB ? PodAngle(CentreLensB) : 0f):F0} deg");
         }
         return 0f;
     }
@@ -90,6 +90,7 @@ internal static partial class NightVisionEyepieces
 
     private static bool GoggleBeforeAimingEye(Vector3 cameraPlace, Quaternion cameraTurn)
     {
+        _headRight = cameraTurn * Vector3.right;
         // The two-eye experiment: the aiming eye's own eyepiece swung away (or a monocular before the other eye), the
         // aiming eye is bare: the sight's picture is its own, not the tube's (worked out for that eye, before the two
         // eyes are mixed; NightVisionEyes.cs, AimEyeBare).

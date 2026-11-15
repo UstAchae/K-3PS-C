@@ -295,7 +295,8 @@ internal static partial class NightVisionEyepieces
             bool aimRight = CameraPosition.AimSide >= 0f;
             int aimTube = (a >= b) == aimRight ? CentreLensA : CentreLensB;
             float aimLensAcross = aimTube == CentreLensA ? a : b;
-            AimEyeBare = PodGone(aimTube) >= 1f || _device.Monocular && Mathf.Abs(aimLensAcross) > BareEyeFrom;
+            _monocularAimBare = _device.Monocular && Mathf.Abs(aimLensAcross) > BareEyeFrom;
+            _headRight = right;
             if (!_mixedNoted)
             {
                 _mixedNoted = true;
@@ -364,7 +365,24 @@ internal static partial class NightVisionEyepieces
         return shift + lens.forward * ((least - along) * Mathf.Clamp01(_split));
     }
     private static bool _eyeHeldNoted, _mixedNoted;
-    internal static bool AimEyeBare;              // the experiment: the aiming eye has no eyepiece before it
+    // The experiment: the aiming eye has no eyepiece before it: its own eyepiece swung away on its pod (by where the
+    // eyepieces stand down, along the head's right: not by where the camera is, which moves with what is worked out
+    // from this, and made it flip from frame to frame), or a monocular before the other eye.
+    internal static bool AimEyeBare
+    {
+        get
+        {
+            if (_device.Monocular)
+                return _monocularAimBare;
+            if (_lensRest.Length <= CentreLensB || _lensRest[CentreLensA] == null || _lensRest[CentreLensB] == null)
+                return false;
+            float a = Vector3.Dot(_lensRest[CentreLensA].position, _headRight), b = Vector3.Dot(_lensRest[CentreLensB].position, _headRight);
+            int aimTube = (a >= b) == (CameraPosition.AimSide >= 0f) ? CentreLensA : CentreLensB;
+            return PodGone(aimTube) >= 1f;
+        }
+    }
+    private static bool _monocularAimBare;
+    internal static Vector3 _headRight = Vector3.right;
     private const float BareEyeFrom = 0.02f;      // a monocular's lens this far across from the aiming eye is not before it (m)
 
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
