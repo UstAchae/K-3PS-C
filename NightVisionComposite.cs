@@ -171,6 +171,8 @@ internal static partial class NightVisionEyepieces
             if (dimmed != null)
                 RenderTexture.ReleaseTemporary(dimmed);
         }
+        // The experiment (NightVisionOtherEye.cs): the other eye's whole frame kept, or this eye's mixed with it.
+        TakeOtherEye(into);
         if (lensed != null)
         {
             Fisheye.Blit(lensed, to);

@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.35";
+    public const string PluginVersion = "1.9.36";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -795,7 +795,7 @@ internal static class NewCameraSwitch
         if (main && _mainPlacedFrame == Time.frameCount)
         {
             if (_poseFrame == Time.frameCount)
-                camera.transform.SetPositionAndRotation(_posePosition, _poseRotation);
+                camera.transform.SetPositionAndRotation(_posePosition + NightVisionEyepieces.OtherEyeOffset(_poseRotation), _poseRotation);
             return;
         }
         if (main)
@@ -850,7 +850,7 @@ internal static class NewCameraSwitch
 
         if (main && _poseFrame == Time.frameCount)
         {
-            camera.transform.SetPositionAndRotation(_posePosition, _poseRotation);
+            camera.transform.SetPositionAndRotation(_posePosition + NightVisionEyepieces.OtherEyeOffset(_poseRotation), _poseRotation);
             NightVisionEyepieces.RedrawAmbient(camera);
         }
         if (optic && _poseFrame == Time.frameCount)

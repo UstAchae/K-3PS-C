@@ -267,20 +267,15 @@ internal static partial class NightVisionEyepieces
         // ...and the eye left taking the frame over, its half widening past the far edge.
         if (monocular < 0 && going > 0f)
             split = Mathf.Lerp(split, loneSide == 0 ? 1f + Overscan : -Overscan, going);
-        // The experiment (NightVisionOtherEye.cs): the camera is one eye, the other the eyes' distance from it; each
-        // eye's lens map from where it is (the composite then made once for each, all one side's).
-        // The experiment (NightVisionOtherEye.cs): the eyes at the two aiming eyes, AimEye either side of the head's
-        // middle, the camera between them where it is set; the device drawn into the main camera from each, and each
-        // eye's lenses mapped from it, the two laid over the whole frame half each.
-        bool mixed = ExperimentOn;
-        if (mixed)
+        // The experiment (NightVisionOtherEye.cs): the whole frame rendered once from each eye, the camera that eye; the
+        // device and its lenses from the camera itself, the same for the whole frame.
+        if (ExperimentOn)
         {
-            float middle = -CameraPosition.Horizontal;   // the head's middle, across from the camera
-            leftShift = right * (middle - CameraPosition.AimEye);
-            rightShift = right * (middle + CameraPosition.AimEye);
+            leftShift = rightShift = Vector3.zero;
+            split = 0.5f;
         }
-        binocular.SetFloat(EyeMixId, mixed ? 0.5f : -1f);
-        DirectMix = mixed ? 0.5f : -1f;
+        binocular.SetFloat(EyeMixId, -1f);
+        DirectMix = -1f;
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
