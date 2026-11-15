@@ -100,8 +100,13 @@ Shader "Justachae/NVG/Direct" {
   if (_DirectMix >= 0) {
    float m = saturate(uv.x);
    bool nearL = tex2Dlod(_DirectNearL, float4(uv, 0, 0)).r >= 0.5, nearR = tex2Dlod(_DirectNearR, float4(uv, 0, 0)).r >= 0.5;
-   bool l = !(within(_DirectLens0, uv, _EyeInvVP0) && !nearL);
-   bool r = !(within(_DirectLens1, uv, _EyeInvVP1) && !nearR);
+   bool inL = within(_DirectLens0, uv, _EyeInvVP0), inR = within(_DirectLens1, uv, _EyeInvVP1);
+   // Within an eye's own lens, where it sees its gun or arm past the lens: the frame there is that eye's alone, as
+   // the lens's picture is made from it (the other eye's copy mixed in, two guns showed in the picture).
+   if (inR && nearR && !inL) { toRight = 1; return shown(rawR) ? 1 : 0; }
+   if (inL && nearL && !inR) { toRight = 0; return shown(rawL) ? 1 : 0; }
+   bool l = !(inL && !nearL);
+   bool r = !(inR && !nearR);
    // Where one eye looks into its lens, the other's device is not seen there (the bright picture wins over the dark
    // housing, as the two eyes' views are seen as one); its gun or arm still is.
    bool sl = l && shown(rawL) && (r || nearL), sr = r && shown(rawR) && (l || nearR);
