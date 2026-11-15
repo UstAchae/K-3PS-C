@@ -118,7 +118,9 @@ Shader "Justachae/NVG/Direct" {
     if (aimShown) { toRight = aimRight ? 1 - _DirectOtherNear : _DirectOtherNear; return 1; }
     toRight = 1 - aimSide; return _DirectOtherNear;
    }
-   if (shL && shR) { toRight = m; return 1; }
+   // The device: the aiming eye's over the other's, whole where it has it; the other's, where only it has it, by
+   // where across the frame (fading toward the far side).
+   if (aimShown) { toRight = aimSide; return 1; }
    if (shL) { toRight = 0; return 1 - m; }
    if (shR) { toRight = 1; return m; }
    toRight = m; return 0;

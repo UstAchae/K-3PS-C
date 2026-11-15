@@ -19,6 +19,7 @@ Shader "Justachae/NVG/Binocular" {
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectLD);
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
  sampler2D _DirectNearL, _DirectNearR;
+ float _DirectAimRight;   // the experiment's aiming eye: 1 the right, 0 the left
  bool deviceAt (float raw, float near) {
   #if defined(UNITY_REVERSED_Z)
   return raw > 0 && near < 0.5;
@@ -54,10 +55,13 @@ Shader "Justachae/NVG/Binocular" {
      float share = saturate(i.uv.x);
      bool lensL = lightL.w > 0.01, lensR = lightR.w > 0.01;
      // (The other eye's gun or arm is already in the frame the lens's picture is made from, by its weight.)
+     // Both: the aiming eye's over the other's.
      if (lensL && !lensR)
       share = 0;
      else if (lensR && !lensL)
       share = 1;
+     else if (lensL && lensR)
+      share = _DirectAimRight;
      return float4(lerp(seenL, seenR, share), scene.a);
     }
     float4 eye; float4 light; float cover, dark;
