@@ -37,6 +37,7 @@ internal static partial class NightVisionEyepieces
     private static readonly System.Collections.Generic.Dictionary<Renderer, (Material[] materials, int[] passes)> _nearSources = new System.Collections.Generic.Dictionary<Renderer, (Material[], int[])>();
     private static readonly System.Collections.Generic.List<Material> _nearMaterials = new System.Collections.Generic.List<Material>();
     private static int _nearFrame = -1000, _nearCount;
+    internal static EFT.Player? NearPlayer;   // whose gun is in the hands (its model is not under the body's)
     private static bool _nearNoted;
 
     private static void AddNearPieces(Camera camera)
@@ -52,6 +53,17 @@ internal static partial class NightVisionEyepieces
             {
                 if ((r is MeshRenderer || r is SkinnedMeshRenderer) && !r.transform.IsChildOf(slot))
                     _nearRenderers.Add(r);
+            }
+            // The gun in the hands, a model of its own.
+            GameObject? gun = NearPlayer?.HandsController?.ControllerGameObject;
+            if (gun != null && !gun.transform.IsChildOf(slot.root))
+            {
+                gun.GetComponentsInChildren(false, _nearFound);
+                foreach (Renderer r in _nearFound)
+                {
+                    if (r is MeshRenderer || r is SkinnedMeshRenderer)
+                        _nearRenderers.Add(r);
+                }
             }
         }
         int meshes = 0, skinned = 0;
@@ -106,7 +118,64 @@ internal static partial class NightVisionEyepieces
         {
             _nearNoted = true;
             NewCameraPlugin.Log?.LogInfo($"NVG experiment: the player's own drawn from each eye too: {meshes} meshes, {skinned} skinned (baked), of {_nearRenderers.Count} found.");
+            // TEMP DIAG: which they are, and how near.
+            var names = new System.Collections.Generic.List<string>();
+            foreach (Piece piece in _pieces)
+            {
+                if (piece.Near && names.Count < 40)
+                    names.Add($"{piece.Renderer.name}{(piece.Renderer is SkinnedMeshRenderer ? "*" : "")} [{LayerMask.LayerToName(piece.Renderer.gameObject.layer)}] {(piece.Renderer.bounds.Contains(camera.transform.position) ? "AROUND-EYE " : "")}{Vector3.Distance(piece.Renderer.bounds.center, camera.transform.position):F2}m");
+            }
+            NewCameraPlugin.Log?.LogInfo("NVG experiment DIAG near pieces: " + string.Join("; ", names));
+            _diagReadAt = Time.frameCount + 90;
         }
+        DiagReadMaps();
+    }
+
+    // TEMP DIAG: once, a while after the experiment starts: how much of each eye's lens map, glass map and near mask is
+    // set (the share of pixels not zero), to find where the lens's picture went.
+    private static int _diagReadAt = -1;
+    private static void DiagReadMaps()
+    {
+        if (_diagReadAt < 0 || Time.frameCount < _diagReadAt)
+            return;
+        _diagReadAt = -1;
+        void Read(string what, RenderTexture? texture)
+        {
+            if (texture == null)
+            {
+                NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {what}: none");
+                return;
+            }
+            UnityEngine.Rendering.AsyncGPUReadback.Request(texture, 0, request =>
+            {
+                if (request.hasError)
+                {
+                    NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {what}: readback failed");
+                    return;
+                }
+                Unity.Collections.NativeArray<byte> data = request.GetData<byte>();
+                int pixels = request.width * request.height, step = Mathf.Max(data.Length / Mathf.Max(pixels, 1), 1), set = 0;
+                for (int p = 0; p < pixels; p++)
+                {
+                    for (int b = 0; b < step; b++)
+                    {
+                        if (data[p * step + b] != 0)
+                        {
+                            set++;
+                            break;
+                        }
+                    }
+                }
+                NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {what} ({request.width}x{request.height}, {texture.format}): {100f * set / Mathf.Max(pixels, 1):F1}% set");
+            });
+        }
+        for (int side = 0; side < 2; side++)
+        {
+            Read("lens map " + side, _lensMaps[side]);
+            Read("glass map " + side, _glassMaps[side]);
+            Read("near mask " + side, _directNear[side]);
+        }
+        NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG: active {Active}, direct {_direct}, tube power {_power[0]:F2} {_power[2]:F2}, eyes frame {_eyesFrame == Time.frameCount}.");
     }
 
     private static void ReleaseOtherEye()

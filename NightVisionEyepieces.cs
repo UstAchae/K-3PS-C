@@ -345,6 +345,7 @@ internal static partial class NightVisionEyepieces
 
     internal static void Update(Player player)
     {
+        NearPlayer = player;
         if (!LoadShaders())
         {
             Release();
