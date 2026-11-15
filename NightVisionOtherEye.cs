@@ -65,8 +65,9 @@ internal static partial class NightVisionEyepieces
                 if ((r is MeshRenderer || r is SkinnedMeshRenderer) && !r.transform.IsChildOf(slot))
                     _nearRenderers.Add(r);
             }
-            // The gun in the hands, a model of its own.
-            GameObject? gun = NearPlayer?.HandsController?.ControllerGameObject;
+            // The gun in the hands: under the weapon root the hands' animation moves (the hands controller's own object
+            // has none of its renderers).
+            GameObject? gun = NearPlayer?.ProceduralWeaponAnimation?.HandsContainer?.WeaponRootAnim?.gameObject;
             if (gun != null && !gun.transform.IsChildOf(slot.root))
             {
                 gun.GetComponentsInChildren(false, _nearFound);
@@ -79,8 +80,14 @@ internal static partial class NightVisionEyepieces
         }
         int meshes = 0, skinned = 0;
         // TEMP DIAG: once, why each of the gun's renderers is or is not drawn from each eye.
-        if (!_nearWhyNoted && NearPlayer?.HandsController?.ControllerGameObject is GameObject gunObject)
+        Transform? weaponRoot = NearPlayer?.ProceduralWeaponAnimation?.HandsContainer?.WeaponRootAnim;
+        if (!_nearWhyNoted && weaponRoot != null)
         {
+            GameObject gunObject = weaponRoot.gameObject;
+            Transform top = weaponRoot;
+            while (top.parent != null && !top.IsChildOf(slot.root) && top.parent != top.root)
+                top = top.parent;
+            NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG weapon root {weaponRoot.name}: under the body {weaponRoot.IsChildOf(slot.root)}, its root {weaponRoot.root.name}, the body's root {slot.root.name}, renderers {weaponRoot.GetComponentsInChildren<Renderer>(true).Length}");
             _nearWhyNoted = true;
             var why = new System.Collections.Generic.List<string>();
             foreach (Renderer r in gunObject.GetComponentsInChildren<Renderer>(true))
