@@ -334,6 +334,9 @@ internal static partial class NightVisionEyepieces
             seen[side] = Temporary();
             composite.SetFloat(ProbeEyeId, side);
             Compose(composite, glow, own, seen[side], picture, fusedPicture);
+            DiagStage(side, "own frame", own, 0);
+            DiagStage(side, "tube picture", picture, 1);
+            DiagStage(side, "seen", seen[side], 2);
             foreach (RenderTexture? texture in new[] { made, tubed, focused, dimmed })
             {
                 if (texture != null)
@@ -360,6 +363,44 @@ internal static partial class NightVisionEyepieces
         return true;
     }
     private static bool _apartNoted;
+
+    // TEMP DIAG: every few seconds, each eye's stages (its own frame, its tube's picture, what it sees): the brightest,
+    // the mean, and how many pixels are not numbers or infinite.
+    private static readonly RenderTexture?[] _diagStages = new RenderTexture?[6];
+    private static int _diagStageAt;
+    private static void DiagStage(int side, string what, Texture texture, int stage)
+    {
+        if (Time.frameCount < _diagStageAt)
+            return;
+        if (side == 1 && stage == 2)
+            _diagStageAt = Time.frameCount + 300;
+        int slot = side * 3 + stage;
+        RenderTexture copy = _diagStages[slot] ??= new RenderTexture(160, 90, 0, RenderTextureFormat.ARGBFloat) { hideFlags = HideFlags.DontSave };
+        Graphics.Blit(texture, copy);
+        string eye = side == 0 ? "left" : "right";
+        UnityEngine.Rendering.AsyncGPUReadback.Request(copy, 0, TextureFormat.RGBAFloat, r =>
+        {
+            if (r.hasError)
+                return;
+            var data = r.GetData<float>();
+            int bad = 0, n = 0;
+            double sum = 0;
+            float most = 0;
+            for (int p = 0; p < data.Length / 4; p++)
+            {
+                float y = 0.2126f * data[p * 4] + 0.7152f * data[p * 4 + 1] + 0.0722f * data[p * 4 + 2];
+                if (float.IsNaN(y) || float.IsInfinity(y))
+                {
+                    bad++;
+                    continue;
+                }
+                n++;
+                sum += y;
+                most = Mathf.Max(most, y);
+            }
+            NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {eye} {what} ({texture.width}x{texture.height}): mean {(n > 0 ? sum / n : 0):G3}, brightest {most:G3}, not numbers {bad}");
+        });
+    }
 
     // TEMP DIAG: every few seconds, how bright each eye's lit frame is (the luminance below which a tenth, half, nine
     // tenths of its pixels lie), and how much of it lay under the old floor (0.002) that made both eyes' frames the same.
