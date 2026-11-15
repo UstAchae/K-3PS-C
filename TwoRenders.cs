@@ -327,15 +327,51 @@ internal static class TwoRenders
                 if (b == null)
                     continue;
                 System.Type type = b.GetType();
-                bool effect = HarmonyLib.AccessTools.Method(type, "OnRenderImage") != null || type.Name.IndexOf("Motion", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                System.Reflection.MethodInfo? render = HarmonyLib.AccessTools.Method(type, "OnRenderImage");
+                bool effect = render != null || type.Name.IndexOf("Motion", System.StringComparison.OrdinalIgnoreCase) >= 0;
                 bool kept = b is SSAAPropagator || b is EyepieceImage || type.Name.StartsWith("SSAA", System.StringComparison.Ordinal) || type.Name == "PostProcessLayer" || type.Name == "DepthOfField";
                 if (effect && !kept)
-                    _blurs.Add(b);
-                all.Add(type.Name + (effect ? (kept ? " (kept)" : " (off)") : ""));
+                {
+                    // Passed over, not switched off: switched off and on each frame, some start over (BRNVG's gain was
+                    // reset every frame, and the picture pulsed).
+                    if (render != null)
+                        PassOver(render);
+                    else
+                        _blurs.Add(b);
+                }
+                all.Add(type.Name + (effect ? (kept ? " (kept)" : render != null ? " (passed over)" : " (off)") : ""));
             }
             NewCameraPlugin.Log?.LogInfo("Two renders: the FPS camera's components, image effects off in the gun renders marked: " + string.Join(", ", all));
         }
         return _blurs;
+    }
+
+    private static readonly System.Collections.Generic.HashSet<System.Reflection.MethodInfo> _passedOver = new System.Collections.Generic.HashSet<System.Reflection.MethodInfo>();
+    private static HarmonyLib.Harmony? _passHarmony;
+
+    // An image effect's OnRenderImage left out of the gun renders: the frame handed on as it came.
+    private static void PassOver(System.Reflection.MethodInfo render)
+    {
+        if (!_passedOver.Add(render) || render.GetParameters().Length != 2)
+            return;
+        try
+        {
+            _passHarmony ??= new HarmonyLib.Harmony(NewCameraPlugin.PluginGuid + ".gunRenderPassOver");
+            _passHarmony.Patch(render, prefix: new HarmonyLib.HarmonyMethod(typeof(TwoRenders), nameof(PassOverPrefix)));
+        }
+        catch (System.Exception e)
+        {
+            NewCameraPlugin.Log?.LogWarning($"Two renders: {render.DeclaringType?.Name}.OnRenderImage not passed over: {e.Message}");
+        }
+    }
+
+    private static bool PassOverPrefix(object[] __args)
+    {
+        if (!GunOnly)
+            return true;
+        if (__args.Length == 2 && __args[0] is RenderTexture source)
+            Graphics.Blit(source, __args[1] as RenderTexture);
+        return false;
     }
 
     private static Behaviour? DepthOfFieldOf(Camera camera)
