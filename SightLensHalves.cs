@@ -81,7 +81,70 @@ internal static class SightLensHalves
     private static int _diagAt;
     private static RenderTexture? _diagPre, _diagPost, _diagFinal, _diagRegion;
     private static float[]? _diagPreData, _diagPostData;
-    private static bool _diagAfterDue;
+    private static bool _diagAfterDue, _diagScreenDue;
+    private static RenderTexture? _diagScreenFull, _diagScreen;
+    private static int _drawsFrame = -1, _draws;
+    private static readonly Object?[] _drawers = new Object?[8];
+    private static string Drawers()
+    {
+        var parts = new List<string>();
+        for (int i = 0; i < Mathf.Min(_draws, 4); i++)
+            parts.Add($"{i + 1}:{(_drawers[i * 2] != null ? _drawers[i * 2]!.name : "?")}/{(_drawers[i * 2 + 1] != null ? _drawers[i * 2 + 1]!.name : "?")}");
+        return $"{_draws} draw(s) " + string.Join(" ", parts);
+    }
+    // At the end of the frame (NewCameraPlugin.EndOfFrame): the screen as shown, at the lens's pixels.
+    internal static void DiagScreen()
+    {
+        if (!_diagScreenDue || _diagPre == null)
+            return;
+        _diagScreenDue = false;
+        int w = _diagPre.width, h = _diagPre.height;
+        if (_diagScreenFull == null || _diagScreenFull.width != Screen.width || _diagScreenFull.height != Screen.height)
+            _diagScreenFull = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGB32) { hideFlags = HideFlags.DontSave };
+        if (_diagScreen == null || _diagScreen.width != w || _diagScreen.height != h)
+            _diagScreen = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32) { hideFlags = HideFlags.DontSave };
+        ScreenCapture.CaptureScreenshotIntoRenderTexture(_diagScreenFull);
+        Graphics.Blit(_diagScreenFull, _diagScreen);
+        string drawers = Drawers();
+        AsyncGPUReadback.Request(_diagScreen, 0, TextureFormat.RGBAFloat, r =>
+        {
+            if (r.hasError || _diagPreData == null || _diagPostData == null)
+            {
+                NewCameraPlugin.Log?.LogInfo("Sight lens DIAG screen: no reading");
+                return;
+            }
+            float[] s = r.GetData<float>().ToArray();
+            int width = r.width, height = r.height, changed = 0;
+            double straight = 0, flipped = 0, around = 0;
+            int aroundCount = 0;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int p = y * width + x;
+                    if (p * 4 + 2 >= _diagPreData.Length)
+                        continue;
+                    float yb = 0.2126f * _diagPreData[p * 4] + 0.7152f * _diagPreData[p * 4 + 1] + 0.0722f * _diagPreData[p * 4 + 2];
+                    float ya = 0.2126f * _diagPostData[p * 4] + 0.7152f * _diagPostData[p * 4 + 1] + 0.0722f * _diagPostData[p * 4 + 2];
+                    int q = (height - 1 - y) * width + x;
+                    float ls = 0.2126f * s[p * 4] + 0.7152f * s[p * 4 + 1] + 0.0722f * s[p * 4 + 2];
+                    float lf = 0.2126f * s[q * 4] + 0.7152f * s[q * 4 + 1] + 0.0722f * s[q * 4 + 2];
+                    if (Mathf.Abs(ya - yb) > 1e-4f)
+                    {
+                        changed++;
+                        straight += ls;
+                        flipped += lf;
+                    }
+                    else
+                    {
+                        around += ls;
+                        aroundCount++;
+                    }
+                }
+            }
+            NewCameraPlugin.Log?.LogInfo($"Sight lens DIAG screen as shown (0..1): at the lens's {changed} pixels mean {(changed > 0 ? straight / changed : 0):F3} (upside down {(changed > 0 ? flipped / changed : 0):F3}), elsewhere {(aroundCount > 0 ? around / aroundCount : 0):F3}; lens drawn this frame by: {drawers}");
+        });
+    }
     // After the lens is laid in as the eyes see it (NvgTube pass 2): how bright the lens's pixels are now, and how many
     // of them the aiming eye's own eyepiece region covers.
     private static void DiagAfter(CommandBuffer buffer, RenderTexture frame)
@@ -89,6 +152,7 @@ internal static class SightLensHalves
         if (!_diagAfterDue || _diagPre == null)
             return;
         _diagAfterDue = false;
+        _diagScreenDue = true;
         int w = _diagPre.width, h = _diagPre.height;
         if (_diagFinal == null || _diagFinal.width != w || _diagFinal.height != h)
         {
@@ -165,6 +229,17 @@ internal static class SightLensHalves
 
     private static void Draw(CommandBuffer buffer, Renderer renderer, Material material, SSAAPropagator propagator)
     {
+        if (_drawsFrame != Time.frameCount)
+        {
+            _drawsFrame = Time.frameCount;
+            _draws = 0;
+        }
+        if (_draws < 4)
+        {
+            _drawers[_draws * 2] = propagator;
+            _drawers[_draws * 2 + 1] = renderer;
+        }
+        _draws++;
         RenderTexture[]? targets = HdrTargets(propagator);
         RenderTexture? frame = targets != null && targets.Length > 0 ? targets[0] : null;
         RenderTexture? depth = DepthTarget(propagator);
