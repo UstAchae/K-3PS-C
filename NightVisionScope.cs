@@ -67,12 +67,10 @@ internal static partial class NightVisionEyepieces
     internal static float ScopePull(Player player, Vector3 cameraPlace, Quaternion cameraTurn)
     {
         // The gun is no longer brought forward to the goggle's objective (the user's wish, 2026-11-15): it stays where the
-        // aim puts it. The goggle's picture is still the sight's own while a magnified sight is aimed through with the
-        // goggle before the aiming eye: the sight's picture is at infinity, as the objective is focused, so it is sharp
-        // (not blurred as what is near).
+        // aim puts it, the sight seen through the goggle as anything near is (its objective focused far); its reticle sharp
+        // only to a bare eye, the eyepiece before that eye swung away. The goggle's picture is never the sight's own.
         ScopePullback = 0f;
-        _scope.Through = Active && !_device.Thermal && _body != null && player.HandsController != null && player.HandsController.IsAiming
-            && Scopes.Current(player.ProceduralWeaponAnimation) is { IsOptic: true } && ChestStance.Weight <= 0f && GoggleBeforeAimingEye(cameraPlace, cameraTurn);
+        _scope.Through = false;
         return 0f;
     }
 
