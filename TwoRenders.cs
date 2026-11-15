@@ -227,6 +227,26 @@ internal static class TwoRenders
             }
         }
         _gun = which;
+        // The gun's own meshes into a mask as it renders (pass 7), so that only the gun is laid in.
+        RenderTexture gunMask = Kept(ref _gunMask, Mathf.Max(main.pixelWidth, 8), Mathf.Max(main.pixelHeight, 8));
+        _maskBuffer ??= new UnityEngine.Rendering.CommandBuffer { name = "Justachae gun mask" };
+        _maskBuffer.Clear();
+        _maskBuffer.SetRenderTarget(gunMask);
+        _maskBuffer.ClearRenderTarget(false, true, Color.clear);
+        Material? maskMaterial = _material;
+        if (maskMaterial != null)
+        {
+            foreach (Renderer r in _gunRenderers)
+            {
+                if (r == null || !r.enabled || !r.gameObject.activeInHierarchy)
+                    continue;
+                int parts = r.sharedMaterials.Length;
+                for (int s = 0; s < parts; s++)
+                    _maskBuffer.DrawRenderer(r, maskMaterial, s, GunMaskPass);
+            }
+        }
+        main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _maskBuffer);
+        _maskReady = maskMaterial != null;
         try
         {
             main.Render();
@@ -238,6 +258,7 @@ internal static class TwoRenders
         }
         finally
         {
+            main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _maskBuffer);
             _gun = GunPass.None;
             main.cullingMask = mask;
             if (dofOn)
@@ -336,6 +357,27 @@ internal static class TwoRenders
     // From NewCameraPlugin.EndOfFrame.
     internal static void EndOfFrame() => HideGun(false);
 
+    private const int GunMaskPass = 7;   // NvgTube.shader
+    private static RenderTexture? _gunMask;
+    private static UnityEngine.Rendering.CommandBuffer? _maskBuffer;
+    private static bool _maskReady;
+    private static readonly int GunMaskId = Shader.PropertyToID("_GunMask"), UseGunMaskId = Shader.PropertyToID("_UseGunMask");
+
+    private static RenderTexture Kept(ref RenderTexture? kept, int width, int height)
+    {
+        if (kept == null || kept.width != width || kept.height != height)
+        {
+            if (kept != null)
+            {
+                kept.Release();
+                Object.Destroy(kept);
+            }
+            kept = new RenderTexture(width, height, 0, RenderTextureFormat.R8) { name = "Justachae gun mask", hideFlags = HideFlags.DontSave };
+            kept.Create();
+        }
+        return kept;
+    }
+
     private static RenderTexture Kept(ref RenderTexture? kept, RenderTexture like, string name)
     {
         if (kept == null || kept.width != like.width || kept.height != like.height)
@@ -365,12 +407,16 @@ internal static class TwoRenders
         material.SetFloat(NearReachId, NearReach);
         if (_gun == GunPass.Bare)
         {
+            material.SetTexture(GunMaskId, _gunMask != null ? _gunMask : Texture2D.blackTexture);
+            material.SetFloat(UseGunMaskId, _maskReady ? 1f : 0f);
             Graphics.Blit(scene, Kept(ref _bareGun, scene, "Justachae bare eye's gun"), material, NearPass);
             _bareDone = Time.frameCount;
             return;
         }
         if (_gun == GunPass.Goggle)
         {
+            material.SetTexture(GunMaskId, _gunMask != null ? _gunMask : Texture2D.blackTexture);
+            material.SetFloat(UseGunMaskId, _maskReady ? 1f : 0f);
             Graphics.Blit(scene, Kept(ref _goggleGun, scene, "Justachae goggle eye's gun"), material, NearPass);
             // Its depth too, for the objective's blur in the frame's own render (which has no gun in its depth).
             if (Shader.GetGlobalTexture(CameraDepthId) is Texture depth)

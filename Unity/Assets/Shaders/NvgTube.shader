@@ -71,8 +71,8 @@ Shader "Justachae/NVG/Tube" {
    #pragma fragment frag
    #include "UnityCG.cginc"
    UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
-   sampler2D _MainTex;
-   float _NearReach;
+   sampler2D _MainTex, _GunMask;
+   float _NearReach, _UseGunMask;
    float4 frag (v2f_img i) : SV_Target {
     float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
     #if defined(UNITY_REVERSED_Z)
@@ -81,6 +81,9 @@ Shader "Justachae/NVG/Tube" {
     bool none = raw >= 1;
     #endif
     bool near = !none && LinearEyeDepth(raw) < _NearReach * 0.95;
+    // Only where the gun itself is (_GunMask, pass 7): what shares its layers (a table, a wall) is not it.
+    if (_UseGunMask > 0.5)
+     near = near && tex2D(_GunMask, i.uv).r > 0.5;
     return float4(tex2D(_MainTex, i.uv).rgb, near ? 1 : 0);
    }
    ENDCG
@@ -136,6 +139,30 @@ Shader "Justachae/NVG/Tube" {
     #else
     return min(a, b);
     #endif
+   }
+   ENDCG
+  }
+  // 7: the gun's own meshes (TwoRenders.cs), drawn into a mask where they are the nearest thing the camera has: 1.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   struct v2f { float4 pos : SV_POSITION; float4 screen : TEXCOORD0; float depth : TEXCOORD1; };
+   v2f vert (float4 v : POSITION) {
+    v2f o;
+    o.pos = UnityObjectToClipPos(v);
+    o.screen = ComputeScreenPos(o.pos);
+    o.depth = -UnityObjectToViewPos(v).z;
+    return o;
+   }
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    float scene = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
+    clip(scene * 1.02 + 0.01 - i.depth);
+    return 1;
    }
    ENDCG
   }
