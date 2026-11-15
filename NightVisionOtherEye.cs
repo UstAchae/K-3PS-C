@@ -4,8 +4,8 @@ using UnityEngine.Rendering.PostProcessing;
 
 namespace EFTNewCamera;
 
-// EXPERIMENT (the user's, 2026-11-15; every device since 1.9.26): a device seen with both eyes, half each. The two eyes stand half
-// the eyes' distance either side of the head's middle. The main camera is the eye behind the eyepiece, put there
+// EXPERIMENT (the user's, 2026-11-15; every device since 1.9.26): a device seen with both eyes, half each. With the
+// camera's own place as (0, 0), the two eyes stand at (±x, 0) (EyeX). The main camera is the eye behind the eyepiece, put there
 // (CameraPosition.EyeOverride), the eyepiece's picture as ever, but nothing of the two-eye drawing: the device drawn into
 // the main camera from that eye alone, the eyes not moved from the camera, no monocular fade. The other eye sees the
 // device as the game draws it (shown to its camera while it renders). The other, bare eye's whole view is rendered by a camera
@@ -14,7 +14,7 @@ namespace EFTNewCamera;
 internal static partial class NightVisionEyepieces
 {
     internal static bool MonocularBothEyes = true;
-    internal static float EyesApart = 0.064f;   // between the pupils (m; F12 「头戴式成像装备」 实验：双眼眼距)
+    internal static float EyeX = 0.032f;   // each camera across from the camera's own place (m; F12 「头戴式成像装备」 实验：两个镜头的 x)
     private const int TubeHalvesPass = 1;     // NvgTube.shader: two pictures, mixed
 
     private static readonly Camera?[] _bareEyes = new Camera?[2];
@@ -32,7 +32,7 @@ internal static partial class NightVisionEyepieces
     private static void PlaceExperimentEye()
     {
         // A monocular's camera at the eye behind it; a binocular's at the right eye.
-        CameraPosition.EyeOverride = BothEyesBare && Active ? (_device.Monocular ? _eyepieceSide : 1f) * EyesApart * 0.5f : (float?)null;
+        CameraPosition.EyeOverride = BothEyesBare && Active ? (_device.Monocular ? _eyepieceSide : 1f) * EyeX : (float?)null;
     }
 
     private static Camera? BareEye(int side, Camera main)
@@ -94,7 +94,7 @@ internal static partial class NightVisionEyepieces
         return camera;
     }
 
-    // The bare eye's view this frame, as the main camera is about to render: the other side of the head's middle.
+    // The other camera's view this frame, as the main camera is about to render: at (-x, 0) where the main camera is at (x, 0).
     private static void RenderBareEyes(Camera main)
     {
         if (!BothEyesBare || !Active || CameraPosition.EyeOverride == null)
@@ -102,8 +102,6 @@ internal static partial class NightVisionEyepieces
         SSAA? ssaa = main.GetComponent<SSAA>();
         int width = Mathf.Max(ssaa != null ? ssaa.GetInputWidth() : Screen.width, 1), height = Mathf.Max(ssaa != null ? ssaa.GetInputHeight() : Screen.height, 1);
         Transform view = main.transform;
-        // The head's middle: the camera is CameraPosition.Horizontal to its right.
-        Vector3 middle = view.position - view.right * CameraPosition.Horizontal;
         const int side = 0;
         Camera? camera = BareEye(side, main);
         if (camera == null)
@@ -125,7 +123,8 @@ internal static partial class NightVisionEyepieces
             _bareEyePictures[side] = picture;
         }
         camera.CopyFrom(main);
-        camera.transform.SetPositionAndRotation(middle - view.right * CameraPosition.EyeOverride.Value, view.rotation);
+        // At (-x, 0) where the main camera is at (x, 0): the camera's own place the origin.
+        camera.transform.SetPositionAndRotation(view.position - view.right * (2f * CameraPosition.EyeOverride.Value), view.rotation);
         camera.rect = new Rect(0f, 0f, 1f, 1f);
         camera.projectionMatrix = main.nonJitteredProjectionMatrix;
         camera.targetTexture = picture;
@@ -156,10 +155,10 @@ internal static partial class NightVisionEyepieces
         }
         _bareEyesFrame = Time.frameCount;
         // Noted once the camera has come to the eye (the frame the experiment starts, it is still where it was).
-        if (!_bareEyesNoted && Mathf.Abs(CameraPosition.Horizontal - CameraPosition.EyeOverride.Value) < 1e-4f)
+        if (!_bareEyesNoted && Mathf.Abs(CameraPosition.Horizontal - CameraPosition.BaseHorizontal - CameraPosition.EyeOverride.Value) < 1e-4f)
         {
             _bareEyesNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG experiment: the main camera at the eyepiece's eye ({CameraPosition.Horizontal * 1000f:F0} mm across), the bare eye {EyesApart * 1000f:F0} mm from it ({width}x{height}), half each.");
+            NewCameraPlugin.Log?.LogInfo($"NVG experiment: the camera's own place (0, 0) at {CameraPosition.BaseHorizontal * 1000f:F0} mm across; the main camera at x = {CameraPosition.EyeOverride.Value * 1000f:F0} mm, the other at x = {-CameraPosition.EyeOverride.Value * 1000f:F0} mm ({width}x{height}), half each.");
         }
     }
 
