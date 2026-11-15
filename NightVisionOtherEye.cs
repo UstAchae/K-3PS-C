@@ -19,6 +19,8 @@ internal static partial class NightVisionEyepieces
     private static void PlaceExperimentEye()
     {
         CameraPosition.EyeOverride = ExperimentOn ? CameraPosition.Across : (float?)null;
+        if (!ExperimentOn)
+            CameraPosition.EyesOverride = null;
         if (ExperimentOn && !_experimentNoted)
         {
             _experimentNoted = true;
@@ -193,6 +195,7 @@ internal static partial class NightVisionEyepieces
     private static void ReleaseOtherEye()
     {
         CameraPosition.EyeOverride = null;
+        CameraPosition.EyesOverride = null;
         _experimentNoted = false;
         _nearNoted = false;
         _nearRenderers.Clear();

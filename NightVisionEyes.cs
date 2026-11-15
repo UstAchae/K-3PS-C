@@ -270,21 +270,26 @@ internal static partial class NightVisionEyepieces
             split = Mathf.Lerp(split, loneSide == 0 ? 1f + Overscan : -Overscan, going);
         // The experiment (NightVisionOtherEye.cs): the scene rendered once, the device, the arms and the gun drawn into it
         // from each eye, each eye's lenses mapped from it, the two laid over the whole frame half each. Each eye straight
-        // behind its own eyepiece, across (the middle of its picture across); a monocular's bare eye as far the other side
-        // of the head's middle.
+        // behind its own eyepiece, across: the middle of its eyecup's picture (an eyecup with two lenses, the GPNVG-18's
+        // "8", between the two); a monocular's bare eye as far the other side of the head's middle. The aiming eye is the
+        // one on the shouldered side (CameraPosition.EyesOverride), the gun placed for it.
         bool mixed = ExperimentOn;
         if (mixed)
         {
-            float leftAcross = a <= b ? a : b, rightAcross = a <= b ? b : a;
+            float Cup(int first) => 0.5f * (Vector3.Dot((Vector3)FromCamera(_lensRest[first], position).GetColumn(3), right)
+                + Vector3.Dot((Vector3)FromCamera(_lensRest[Mathf.Min(first + 1, _lensRest.Length - 1)], position).GetColumn(3), right));
+            float cupA = Cup(CentreLensA), cupB = Cup(Mathf.Min(CentreLensB, _lensRest.Length - 2));
+            float leftAcross = Mathf.Min(cupA, cupB), rightAcross = Mathf.Max(cupA, cupB);
+            float middle = -CameraPosition.Horizontal;   // the head's middle, across from the camera
             if (_device.Monocular)
             {
-                float middle = -CameraPosition.Horizontal;   // the head's middle, across from the camera
-                float other = 2f * middle - a;
-                leftAcross = Mathf.Min(a, other);
-                rightAcross = Mathf.Max(a, other);
+                float other = 2f * middle - cupA;
+                leftAcross = Mathf.Min(cupA, other);
+                rightAcross = Mathf.Max(cupA, other);
             }
             leftShift = right * leftAcross;
             rightShift = right * rightAcross;
+            CameraPosition.EyesOverride = new Vector2(leftAcross - middle, rightAcross - middle);
             if (!_mixedNoted)
             {
                 _mixedNoted = true;
