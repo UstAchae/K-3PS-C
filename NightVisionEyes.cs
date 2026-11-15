@@ -80,31 +80,19 @@ internal static partial class NightVisionEyepieces
 
     internal static void OnCameraPreCull(Camera camera)
     {
-        LightFace(camera);
         if (camera != Camera.main)
             return;
         HideIrLaserLights(camera);
-        if (_body != null)
-            AdjustMount(camera);
-        // Once the device's mount is set for this frame: the camera has been placed by now.
-        _direct = _directShader != null && LensesOn(camera) && PrepareRelative(camera);
-        if (_direct)
-            HideDevice(camera);
     }
 
     internal static void OnCameraPostRender(Camera camera)
     {
-        if (camera == Camera.main)
-            ShowDeviceAgain();
     }
 
     // Just before the main camera renders, when its pose for the frame is final: each eye, moved apart as far as the
     // device has flipped down; or, with one camera, the lens map from the main camera (only once the filter is on).
     internal static void OnCameraPreRender(Camera camera)
     {
-        // Whatever comes of this frame, the last one's device is not drawn again, on whichever camera it hangs on.
-        if (camera == _directCamera)
-            ClearDirect();
         if (camera != Camera.main || _body == null || _binocularMaterial == null || _lensNodes.Length == 0)
             return;
         Material binocular = _binocularMaterial;
@@ -115,19 +103,13 @@ internal static partial class NightVisionEyepieces
             binocular.SetVector(TubeAxisIds[i], -_lensNodes[i].forward);
         binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((TubeField + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(TubeField * Mathf.Deg2Rad), 0f, 0f));
 
-        ShadeMain(camera, !_direct);
-        if (!_direct)
-            ProbeStencil(camera);
+        ShadeMain(camera, true);
         if (!LensesOn(camera))
             return;
 
         // The device as it truly stands from the camera (NightVisionPrecise.cs).
-        if (!_direct)
-            PrepareRelative(camera);
+        PrepareRelative(camera);
         RenderLenses(camera, binocular, view, position);
-        // Thermal goggles' picture, for the lenses (LensPicture).
-        if (_device.Thermal && Active)
-            RenderThermal(camera);
     }
 
     private static void RenderLenses(Camera camera, Material binocular, Transform view, Vector3 position)
@@ -137,7 +119,8 @@ internal static partial class NightVisionEyepieces
         float a = Vector3.Dot(placeA, right), b = Vector3.Dot(placeB, right);
         // A monocular is before one eye only: over the other eye's half the device fades out toward the edge. Which eye, by where its lens
         // is from the head's middle, not from the camera: gone over to the aiming eye, the camera is right behind a lens before that eye.
-        int monocular = _device.Monocular && BinocularOn ? (a + CameraPosition.Horizontal >= 0f ? 1 : 0) : -1;
+        // This branch: no two eyes' halves, no monocular's fade; the lenses seen from the camera over the whole frame.
+        int monocular = -1;
         float seeThrough = Mathf.Clamp01(MonocularSeeThrough);
         float fade = seeThrough <= 0.5f ? seeThrough * 2f : 1f + (seeThrough - 0.5f) * 6f;
         binocular.SetVector(MonocularId, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
@@ -152,14 +135,14 @@ internal static partial class NightVisionEyepieces
         // A monocular comes in none of the way once aimed: as the camera goes over to the aiming eye, and back as it returns.
         Vector3 back = view.forward * ScopePullback;
         float comesIn = EyeShift * _split * (monocular >= 0 ? 1f - CameraPosition.ViewAimed : 1f);
-        Vector3 EyeShiftOf(float lens) => _direct ? right * (lens * comesIn) - back : Vector3.zero;
+        Vector3 EyeShiftOf(float lens) => Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
         Vector3 leftPlace = a <= b ? placeA : placeB, rightPlace = a <= b ? placeB : placeA;
         if (monocular >= 0)
             leftShift = rightShift = EyeShiftOf(a);
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
-        float split = monocular >= 0 ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
+        float split = 0.5f;
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
@@ -168,7 +151,7 @@ internal static partial class NightVisionEyepieces
         Matrix4x4 turned = camera.worldToCameraMatrix;
         turned.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));
         Matrix4x4 projection = Matrix4x4.Perspective(camera.fieldOfView, camera.aspect, EyeNear, LensMapRange);
-        Matrix4x4 inverse = (Matrix4x4.Perspective(camera.fieldOfView, camera.aspect, DirectNear, DirectFar) * turned).inverse;
+        Matrix4x4 inverse = (Matrix4x4.Perspective(camera.fieldOfView, camera.aspect, RayNear, RayFar) * turned).inverse;
         for (int side = 0; side < 2; side++)
         {
             Vector3 shift = side == 0 ? leftShift : rightShift;
@@ -193,9 +176,9 @@ internal static partial class NightVisionEyepieces
             binocular.SetMatrix(EyeInvVpIds[side], inverse);
             binocular.SetVector(EyePosIds[side], new Vector4(eye.x, eye.y, eye.z, eyeBack));
         }
-        if (_direct)
-            DrawDirect(camera, leftShift, rightShift, split, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
     }
+    private const float RayFar = 2f;                               // m: the lines of sight's frame (only their direction counts)
+    private static float RayNear => Mathf.Max(EyeNear, RayFar / 2e5f);
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.
     private static float Across(Camera camera, Vector3 to)
@@ -411,7 +394,6 @@ internal static partial class NightVisionEyepieces
 
     private static void ReleaseEyes()
     {
-        DropDirectTextures();
         for (int i = 0; i < 2; i++)
         {
             Drop(_lensMaps, i);

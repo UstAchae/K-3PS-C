@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.2";
+    public const string PluginVersion = "1.8.3";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -144,18 +144,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 
     private void BindNightVision()
     {
-        ConfigEntry<KeyboardShortcut> raiseMount = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架升高", new KeyboardShortcut(KeyCode.Equals, KeyCode.LeftAlt),
-            new ConfigDescription("按住时把支架往上调（TATM 的滑块、G24 的托架）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。每个支架（每一件物品）各自记住自己调好的高度、仰俯和前后，存在配置文件夹里的 justachae.thirdpersoncamera.mounts.txt。", null, new ConfigurationManagerAttributes { Order = -1 }));
-        ConfigEntry<KeyboardShortcut> lowerMount = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架降低", new KeyboardShortcut(KeyCode.Minus, KeyCode.LeftAlt),
-            new ConfigDescription("按住时把支架往下调。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -2 }));
-        ConfigEntry<KeyboardShortcut> tiltUp = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架仰起", new KeyboardShortcut(KeyCode.Equals, KeyCode.LeftShift),
-            new ConfigDescription("按住时把支架往上仰（目镜抬高）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -4 }));
-        ConfigEntry<KeyboardShortcut> tiltDown = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架俯下", new KeyboardShortcut(KeyCode.Minus, KeyCode.LeftShift),
-            new ConfigDescription("按住时把支架往下俯（目镜降低）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -5 }));
-        ConfigEntry<KeyboardShortcut> slideForward = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架往前", new KeyboardShortcut(KeyCode.Equals, KeyCode.LeftControl),
-            new ConfigDescription("按住时把夜视仪沿支架往前推（离眼睛远；G24 一格一格地走）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -7 }));
-        ConfigEntry<KeyboardShortcut> slideBack = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架往后", new KeyboardShortcut(KeyCode.Minus, KeyCode.LeftControl),
-            new ConfigDescription("按住时把夜视仪沿支架往后拉（离眼睛近）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -8 }));
         ConfigEntry<KeyboardShortcut> headwearUp = SettingsLayout.Bind(Config, "头戴式成像装备", "头部装备仰起", HeadwearTilt.Up,
             new ConfigDescription("按住时把头盔前沿往上抬（只转头盔和挂在上面的夜视仪，头和镜头不动）。每顶头盔各自记住自己的角度，像夜视仪支架一样。只在腰射（没有瞄准）时有效，瞄准时同样的键调瞄准距离。", null, new ConfigurationManagerAttributes { Order = -10 }));
         ConfigEntry<KeyboardShortcut> headwearDown = SettingsLayout.Bind(Config, "头戴式成像装备", "头部装备俯下", HeadwearTilt.Down,
@@ -175,13 +163,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<bool> reflections = SettingsLayout.Bind(Config, "头戴式成像装备", "镜片反光", false,
             new ConfigDescription("夜视仪翻下时，目镜镜片表面映出的周围环境和高光，叠在镜片里的夜视画面上。关掉后镜片里只剩夜视画面，设备上的玻璃部件也不画。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
-        // Saved under its old name (it was for the left eye only), kept.
-        string? wasLeft = SettingsLayout.TakeSaved(Config, "11 夜视仪与热成像", "PVS-14 左眼透明度") ?? SettingsLayout.TakeSaved(Config, "头戴式成像装备", "PVS-14 左眼透明度");
-        if (wasLeft != null)
-            SettingsLayout.PutSaved(Config, "头戴式成像装备", "PVS-14 另一只眼透明度", wasLeft);
-        ConfigEntry<float> monocularSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "PVS-14 另一只眼透明度", 0.5f,
-            new ConfigDescription("AN/PVS-14 单筒夜视仪只挡在一只眼前（插在双燕尾转接件的哪个槽位，就在哪只眼前），另一只眼看过去时机身往画面边缘逐渐变透明。0：不变透明（两只眼都看到完整的机身）；0.5：默认；1：变透明得最快。",
-                new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
         ConfigEntry<bool> nearBlur = SettingsLayout.Bind(Config, "头戴式成像装备", "近处虚化", true,
             new ConfigDescription("夜视仪的物镜对焦在远处，近处的手、枪和机瞄是虚的，越近越虚，几米外是清楚的，和真实夜视仪的物镜一样。原版夜视和 Borkel's Realistic NVGs 的画面都会这样，热成像不受影响。关掉后目镜里近处也是清楚的。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
@@ -203,9 +184,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<float> tritium = SettingsLayout.Bind(Config, "头戴式成像装备", "氚光亮度", 0.6f,
             new ConfigDescription("透过夜视仪看氚光机瞄（以及游戏里做了氚光的其他瞄具）：每个氚光点被物镜散成一个亮度均匀、边缘清楚的圆盘，离眼睛越近圆盘越大、越暗。这一项调这些圆盘有多亮，0 是不画。",
                 new AcceptableValueRange<float>(0f, 4f), new ConfigurationManagerAttributes { Order = 0 }));
-        ConfigEntry<float> eyeShift = SettingsLayout.Bind(Config, "头戴式成像装备", "双眼平移比例", 0.8f,
-            new ConfigDescription("两个目镜往中间合多少：1 是各自正好对准画面中间，0 是不合。画面里的景物始终完整，这里只改变目镜的样子。",
-                new AcceptableValueRange<float>(0f, 1.2f), new ConfigurationManagerAttributes { Order = 1 }));
         void Refresh()
         {
             NightVisionEyepieces.Picture = picture.Value;
@@ -215,17 +193,8 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             HeadwearTilt.Down = headwearDown.Value;
             NightVisionEyepieces.EyepieceGlow = glow.Value;
             NightVisionEyepieces.LensReflections = reflections.Value;
-            NightVisionEyepieces.MonocularSeeThrough = monocularSeeThrough.Value;
-            NightVisionEyepieces.EyeShift = eyeShift.Value;
-            NightVisionEyepieces.RaiseMount = raiseMount.Value;
-            NightVisionEyepieces.LowerMount = lowerMount.Value;
-            NightVisionEyepieces.TiltUp = tiltUp.Value;
-            NightVisionEyepieces.TiltDown = tiltDown.Value;
-            NightVisionEyepieces.SlideForward = slideForward.Value;
-            NightVisionEyepieces.SlideBack = slideBack.Value;
         }
 
-        eyeShift.SettingChanged += (_, _) => Refresh();
         picture.SettingChanged += (_, _) => Refresh();
         nearBlur.SettingChanged += (_, _) => Refresh();
         tritium.SettingChanged += (_, _) => Refresh();
@@ -233,13 +202,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         headwearDown.SettingChanged += (_, _) => Refresh();
         glow.SettingChanged += (_, _) => Refresh();
         reflections.SettingChanged += (_, _) => Refresh();
-        monocularSeeThrough.SettingChanged += (_, _) => Refresh();
-        raiseMount.SettingChanged += (_, _) => Refresh();
-        lowerMount.SettingChanged += (_, _) => Refresh();
-        tiltUp.SettingChanged += (_, _) => Refresh();
-        tiltDown.SettingChanged += (_, _) => Refresh();
-        slideForward.SettingChanged += (_, _) => Refresh();
-        slideBack.SettingChanged += (_, _) => Refresh();
         Refresh();
     }
 
@@ -634,7 +596,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     {
         NewCameraSwitch.LateUpdate();
         HeadwearTilt.UpdateShown();
-        NightVisionEyepieces.UpdatePreviewMounts();
         Fisheye.LateUpdate();
     }
 }

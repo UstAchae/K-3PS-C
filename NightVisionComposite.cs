@@ -177,7 +177,7 @@ internal static partial class NightVisionEyepieces
         if (!Active)
             return Texture2D.blackTexture;
         if (_device.Thermal)
-            return _thermalPicture != null ? _thermalPicture : Texture2D.blackTexture;
+            return Texture2D.blackTexture;
 
         Behaviour? brnvg = UseBrnvg ? NightRenderer(BodyVisibility.Cameras?.NightVision) : null;
         if (brnvg != null && _renderEffect != null)

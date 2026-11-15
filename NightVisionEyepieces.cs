@@ -240,10 +240,8 @@ internal static partial class NightVisionEyepieces
         MethodInfo? postfix = typeof(NightVisionEyepieces).GetMethod(nameof(NightVisionPreCullPostfix), BindingFlags.NonPublic | BindingFlags.Static);
         if (preCull != null && postfix != null)
             harmony.Patch(preCull, postfix: new HarmonyMethod(postfix) { priority = Priority.Last });
-        InstallThermal(harmony);
         InstallEyepieceImage(harmony);
         InstallIr(harmony);
-        InstallPreviewMounts(harmony);
         TrackAmbientLights();
 
         _installed = true;
@@ -294,7 +292,8 @@ internal static partial class NightVisionEyepieces
         // game's picture, as without BRNVG.
         bool brnvg = !thermal && UseBrnvg && (renderer != null || player is not HideoutPlayer);
         bool present = _body != null && _body.gameObject.activeInHierarchy;
-        bool worn = present && EyepieceImageReady(cameras) && (thermal ? EnsureThermalCamera() : !brnvg || renderer != null);
+        // Thermal goggles get no eyepieces on this branch: the game's own picture.
+        bool worn = present && !thermal && EyepieceImageReady(cameras) && (!brnvg || renderer != null);
         bool switchedOn = worn && (thermal ? thermalItem?.Togglable != null && thermalItem.Togglable.On : nightItem?.Togglable != null ? nightItem.Togglable.On : device != null && SwitchedOn(device));
         // The tubes come on once the device is all the way down and the game has done switching its own filter on
         // (its switch dims the filter for a moment, the picture the lenses show), and go off before it flips up:
@@ -311,13 +310,10 @@ internal static partial class NightVisionEyepieces
         bool filterThere = thermal || brnvg || cameras?.NightVision != null && cameras.NightVision.On;
         bool on = worn && (powered || power > 0.01f && filterThere);
         Wake(worn && (switchedOn || on) ? renderer : null, cameras?.NightVision);
-        HoldMainThermal(cameras, thermal && worn);
-        KeepThermalGlow(thermalDevice);
         Active = on;
         _split = _flip;
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
         KeepGlow(device);
-        UpdateMountHeight(player);
 
         EnsureRendererPatch();
         RestoreMask(cameras);
@@ -332,6 +328,51 @@ internal static partial class NightVisionEyepieces
     private static float _holdFilterUntil = -1f;
     private static bool _deviceThere;
 
+    private static float _flip;   // the device's flip down (0 up, 1 down), whatever the eye mode
+
+    private static readonly KeyCode[][] ModifierKeys =
+    {
+        new[] { KeyCode.LeftShift, KeyCode.RightShift }, new[] { KeyCode.LeftControl, KeyCode.RightControl }, new[] { KeyCode.LeftAlt, KeyCode.RightAlt },
+    };
+
+    // A shortcut held with exactly its modifiers: minus alone is not Shift or Ctrl and minus.
+    internal static bool Held(BepInEx.Configuration.KeyboardShortcut shortcut)
+    {
+        if (!shortcut.IsPressed())
+            return false;
+        var wanted = new System.Collections.Generic.List<KeyCode>(shortcut.Modifiers);
+        foreach (KeyCode[] group in ModifierKeys)
+        {
+            bool held = Input.GetKey(group[0]) || Input.GetKey(group[1]);
+            if (held && !wanted.Contains(group[0]) && !wanted.Contains(group[1]))
+                return false;
+        }
+        return true;
+    }
+
+    private static System.Reflection.FieldInfo? _phosphorTint;
+    private static bool _phosphorResolved;
+
+    // The colour the picture is drawn in, at its brightest component 1.
+    private static Color PhosphorColor()
+    {
+        Color color = Color.white;
+        BSG.CameraEffects.NightVision? nightVision = BodyVisibility.Cameras?.NightVision;
+        Behaviour? brnvg = UseBrnvg ? NightRenderer(nightVision) : null;
+        if (!_phosphorResolved)
+        {
+            _phosphorResolved = true;
+            System.Type? type = BodyVisibility.NightRendererType;
+            _phosphorTint = type != null ? AccessTools.Field(type, "phosphorTint") : null;
+        }
+        if (brnvg != null && _phosphorTint?.GetValue(brnvg) is Color tint)
+            color = tint;
+        else if (nightVision != null)
+            color = nightVision.Color;
+        float brightest = Mathf.Max(color.r, Mathf.Max(color.g, color.b));
+        return brightest > 1e-4f ? color / brightest : Color.white;
+    }
+
     private static bool HoldFilter => Time.time < _holdFilterUntil && (_body == null || !_body.gameObject.activeInHierarchy);
 
     private static void KeepFilterHeld(Player player, CameraManager? cameras, bool wornAny)
@@ -344,12 +385,8 @@ internal static partial class NightVisionEyepieces
 
     internal static void Release()
     {
-        ShowDeviceAgain();
-        ClearDirect();
-        _direct = false;
         ReleaseShade();
         Active = false;
-        ReleaseMount();
         _flip = 0f;
         System.Array.Clear(_warm, 0, 4);
         System.Array.Clear(_power, 0, 4);
@@ -362,7 +399,6 @@ internal static partial class NightVisionEyepieces
         _lenses = null;
         _lensNodes = Array.Empty<Transform>();
         _lensFloors = Array.Empty<Vector4>();
-        _faceLights = Array.Empty<Light?>();
         _body = null;
         _rotator = null;
         // What was learned of one device's rotator is not the next's.
@@ -373,7 +409,6 @@ internal static partial class NightVisionEyepieces
         _split = 0f;
         _searchedFrame = -100;
         ReleaseEyes();
-        ReleaseThermal();
         KeepEyepieceImage(null, false);
     }
 
@@ -495,7 +530,6 @@ internal static partial class NightVisionEyepieces
             _lensFloors[i] = new Vector4(local.x, local.y, local.z, tube.LensRadius > 0f ? tube.LensRadius : _device.LensRadius);
         }
         MeasureObjective(body);
-        MakeFaceLights();
     }
 
     private static bool LoadShaders()
@@ -527,8 +561,6 @@ internal static partial class NightVisionEyepieces
                 _irLightShader = shader;
             else if (shader.name == "Justachae/Fisheye")
                 _fisheyeShader = shader;
-            else if (shader.name == "Justachae/NVG/Direct")
-                _directShader = shader;
             else if (shader.name == "Justachae/NVG/Objective")
                 _objectiveShader = shader;
             else if (shader.name == "Justachae/NVG/Defocus")

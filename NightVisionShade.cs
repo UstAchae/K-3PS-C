@@ -57,6 +57,7 @@ internal static partial class NightVisionEyepieces
     }
 
     // How much of its light an eyecup's inside keeps now: all flipped up, next to none down against the face.
+    private const float EyepieceField = 40f;   // degrees, an eyepiece's field
     private static float ShadeKeep => Mathf.Lerp(1f, SealedKeep, Mathf.SmoothStep(0f, 1f, _flip));
 
     // A camera's fading: slot 0 and 1 the eyes, 2 the main camera; place: where each lens stands from this camera.
@@ -71,7 +72,7 @@ internal static partial class NightVisionEyepieces
             return;
         _shadeMaterial ??= new Material(_shadeShader) { name = "Justachae NVG eyecups sealed", hideFlags = HideFlags.DontSave };
         // An eye drawing the device itself has its places (NightVisionPrecise); the main camera works them out.
-        bool placed = _direct && _precise;
+        bool placed = false;
         if (keep >= 0.999f)
         {
             return;
@@ -90,7 +91,7 @@ internal static partial class NightVisionEyepieces
             float power = Active && !_device.Thermal ? _power[cups[k]] : 0f;
             apply.SetGlobalVector(ShadeLightIds[k], (Vector4)(PhosphorColor().linear * (LensRadiance * power)));
         }
-        apply.SetGlobalVector(ShadeLensId, new Vector4(_lensFloors[cups[0]].w * scale, Mathf.Cos(FieldOfView * 0.5f * Mathf.Deg2Rad), LensFieldSoftness, LensScatter));
+        apply.SetGlobalVector(ShadeLensId, new Vector4(_lensFloors[cups[0]].w * scale, Mathf.Cos(EyepieceField * 0.5f * Mathf.Deg2Rad), LensFieldSoftness, LensScatter));
         apply.SetGlobalFloat(ShadeSkinId, SkinAlbedo);
         Matrix4x4 turned = camera.worldToCameraMatrix;
         turned.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));
