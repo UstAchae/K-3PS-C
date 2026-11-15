@@ -17,7 +17,7 @@ namespace EFTNewCamera;
 internal static class TwoRenders
 {
     internal static bool On = true;
-    internal static bool Probes = true;
+    internal static bool Probes = false;
     private const int HalvesPass = 1, OpaquePass = 2, NearPass = 3;   // NvgTube.shader
     private const float NearReach = 2f;   // m: the bare eye's render goes no further
 
