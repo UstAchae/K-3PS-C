@@ -37,7 +37,7 @@ internal static partial class NightVisionEyepieces
     private static readonly System.Collections.Generic.List<Renderer> _nearRenderers = new System.Collections.Generic.List<Renderer>();
     private static readonly System.Collections.Generic.List<Renderer> _nearFound = new System.Collections.Generic.List<Renderer>();
     private static readonly System.Collections.Generic.Dictionary<SkinnedMeshRenderer, Mesh> _baked = new System.Collections.Generic.Dictionary<SkinnedMeshRenderer, Mesh>();
-    private static readonly System.Collections.Generic.Dictionary<Renderer, (Material[] materials, int[] passes)> _nearSources = new System.Collections.Generic.Dictionary<Renderer, (Material[], int[])>();
+    private static readonly System.Collections.Generic.Dictionary<Renderer, (Material[] materials, int[] passes, int[]? forward)> _nearSources = new System.Collections.Generic.Dictionary<Renderer, (Material[], int[], int[]?)>();
     private static readonly System.Collections.Generic.List<Material> _nearMaterials = new System.Collections.Generic.List<Material>();
     private static int _nearFrame = -1000, _nearCount;
     internal static EFT.Player? NearPlayer;   // whose gun is in the hands (its model is not under the body's)
@@ -75,7 +75,7 @@ internal static partial class NightVisionEyepieces
             // Only what the main camera would draw: on, in its layers, not left to shadows (the head the body hides).
             if (r == null || !r.enabled || !r.gameObject.activeInHierarchy || r.forceRenderingOff
                 || r.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly
-                || (camera.cullingMask & (1 << r.gameObject.layer)) == 0 || !Opaque(r) || !FinestLevel(r))
+                || (camera.cullingMask & (1 << r.gameObject.layer)) == 0 || !FinestLevel(r))
                 continue;
             Mesh? mesh = null;
             if (r is SkinnedMeshRenderer skin)
@@ -99,20 +99,29 @@ internal static partial class NightVisionEyepieces
             if (mesh == null)
                 continue;
             r.GetSharedMaterials(_nearMaterials);
-            if (!_nearSources.TryGetValue(r, out (Material[] materials, int[] passes) source) || !SameMaterials(source.materials, _nearMaterials))
+            if (!_nearSources.TryGetValue(r, out (Material[] materials, int[] passes, int[]? forward) source) || !SameMaterials(source.materials, _nearMaterials))
             {
+                // Its solid parts into the G-buffers like the device; its see-through ones (a sight's lens, the reticle)
+                // drawn after the scene's (NightVisionDirect.DrawDirect).
                 Material[] materials = _nearMaterials.ToArray();
-                int[] passes = new int[materials.Length];
+                int[] passes = new int[materials.Length], forward = new int[materials.Length];
+                bool anyForward = false;
                 for (int i = 0; i < materials.Length; i++)
+                {
                     passes[i] = GBufferPass(materials[i]);
-                source = (materials, passes);
+                    forward[i] = ForwardPass(materials[i]);
+                    anyForward |= forward[i] >= 0;
+                }
+                source = (materials, passes, anyForward ? forward : null);
                 _nearSources[r] = source;
             }
+            if (System.Array.TrueForAll(source.passes, pass => pass < 0) && source.forward == null)
+                continue;
             _hidden.Add((r, r.shadowCastingMode));
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
             _pieces.Add(new Piece
             {
-                Renderer = r, Mesh = mesh, Materials = source.materials, Passes = source.passes, Near = true,
+                Renderer = r, Mesh = mesh, Materials = source.materials, Passes = source.passes, Near = true, Forward = source.forward,
                 FromCamera = FromCamera(r.transform, camera.transform.position),
             });
             _nearCount++;

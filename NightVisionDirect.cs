@@ -23,6 +23,7 @@ internal static partial class NightVisionEyepieces
         internal Material[] Materials;
         internal int[] Passes;                // each material's G-buffer pass (-1: none)
         internal bool Near;                   // the player's own (the gun, the arms): the experiment's (NightVisionOtherEye.cs)
+        internal int[]? Forward;              // its see-through materials' pass, drawn after the scene's (-1: none)
     }
 
     private struct PieceSource
@@ -88,7 +89,7 @@ internal static partial class NightVisionEyepieces
     private static Shader? _directShader;
     private static Material? _directMaterial;
     private static Mesh? _directQuad;
-    private static CommandBuffer? _directBuffer, _directAgain, _directEnd, _directMotion;
+    private static CommandBuffer? _directBuffer, _directAgain, _directEnd, _directMotion, _directForward;
     private static readonly int DirectLitNow = Shader.PropertyToID("_DirectLitNow"), DirectTexel = Shader.PropertyToID("_DirectTexel");
     private static Camera? _directCamera;
     private static int _arrangedCount = -1;
@@ -369,6 +370,7 @@ internal static partial class NightVisionEyepieces
         _directAgain?.Clear();
         _directEnd?.Clear();
         _directMotion?.Clear();
+        _directForward?.Clear();
     }
 
     private static readonly int DirectMonocularId = Shader.PropertyToID("_DirectMonocular");
@@ -395,6 +397,8 @@ internal static partial class NightVisionEyepieces
         _directBuffer ??= new CommandBuffer { name = "Justachae NVG device in the main camera" };
         _directAgain ??= new CommandBuffer { name = "Justachae NVG device after the decals" };
         _directEnd ??= new CommandBuffer { name = "Justachae NVG device's fade evened" };
+        _directForward ??= new CommandBuffer { name = "Justachae NVG the player's own see-through parts" };
+        _directForward.Clear();
         _directMotion ??= new CommandBuffer { name = "Justachae NVG device's motion" };
         CommandBuffer buffer = _directBuffer;
         buffer.Clear();
@@ -410,6 +414,8 @@ internal static partial class NightVisionEyepieces
                 _directCamera.RemoveCommandBuffer(CameraEvent.AfterGBuffer, buffer);
                 _directCamera.RemoveCommandBuffer(CameraEvent.BeforeLighting, _directAgain);
                 _directCamera.RemoveCommandBuffer(CameraEvent.AfterImageEffectsOpaque, _directEnd);
+                if (_directForward != null)
+                    _directCamera.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, _directForward);
                 _directCamera.RemoveCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, _directMotion);
             }
             main.AddCommandBuffer(CameraEvent.AfterGBuffer, buffer);
@@ -423,6 +429,8 @@ internal static partial class NightVisionEyepieces
             main.AddCommandBuffer(CameraEvent.BeforeLighting, _directAgain);
             main.RemoveCommandBuffer(CameraEvent.AfterImageEffectsOpaque, _directEnd);
             main.AddCommandBuffer(CameraEvent.AfterImageEffectsOpaque, _directEnd);
+            main.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, _directForward);
+            main.AddCommandBuffer(CameraEvent.AfterForwardAlpha, _directForward);
             // Ahead of what reads the motion.
             main.RemoveCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, _directMotion);
             CommandBuffer[] opaqueEffects = main.GetCommandBuffers(CameraEvent.BeforeImageEffectsOpaque);
@@ -602,5 +610,47 @@ internal static partial class NightVisionEyepieces
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, EvenPass);
         buffer.ReleaseTemporaryRT(DirectLitNow);
+
+        // The experiment: the see-through parts of the player's own (a sight's lens and its reticle), kept from the main
+        // camera with the rest of it, drawn after the scene's from each eye.
+        if (_nearCount > 0)
+        {
+            CommandBuffer forward = _directForward!;
+            forward.SetViewProjectionMatrices(turned, main.projectionMatrix);
+            forward.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
+            for (int half = 0; half < 2; half++)
+            {
+                Matrix4x4 fromEye = Matrix4x4.Translate(-(half == 0 ? leftShift : rightShift));
+                foreach (Piece piece in _pieces)
+                {
+                    if (!piece.Near || piece.Forward == null)
+                        continue;
+                    piece.Renderer.GetPropertyBlock(_pieceBlock);
+                    int count = Mathf.Min(piece.Forward.Length, piece.Mesh.subMeshCount);
+                    for (int s = 0; s < count; s++)
+                    {
+                        if (piece.Forward[s] >= 0)
+                            forward.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, piece.Materials[s], s, piece.Forward[s], _pieceBlock);
+                    }
+                }
+            }
+            forward.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
+            forward.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
+        }
+    }
+
+    // A see-through material's pass that draws it to the frame (not its shadow, not a G-buffer); -1 when it has none.
+    private static int ForwardPass(Material? material)
+    {
+        if (material == null || GBufferPass(material) >= 0)
+            return -1;
+        for (int i = 0; i < material.passCount; i++)
+        {
+            string mode = material.shader.FindPassTagValue(i, new ShaderTagId("LightMode")).name ?? "";
+            if (mode.Length == 0 || string.Equals(mode, "ForwardBase", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mode, "Always", System.StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "SRPDefaultUnlit", System.StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
     }
 }
