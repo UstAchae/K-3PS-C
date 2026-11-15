@@ -150,6 +150,17 @@ internal static class TwoRenders
         int gunLayers = GunLayers();
         if (gunLayers == 0)
             return;
+        // The sight's lens too (its picture is laid where it was drawn; on a layer of its own, or switched on only
+        // while aimed, after the gun's layers were gathered, it was left out and the lens showed only the reticle).
+        try
+        {
+            Renderer? lens = EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight?.LensRenderer;
+            if (lens != null)
+                gunLayers |= 1 << lens.gameObject.layer;
+        }
+        catch
+        {
+        }
         RenderGun(main, GunPass.Bare, gunLayers);
         RenderGun(main, GunPass.Goggle, gunLayers);
         if (_bareDone == Time.frameCount && _goggleDone == Time.frameCount)
