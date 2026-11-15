@@ -297,20 +297,30 @@ internal static class TwoRenders
     private static readonly System.Collections.Generic.List<Behaviour> _blurs = new System.Collections.Generic.List<Behaviour>(), _blurOff = new System.Collections.Generic.List<Behaviour>();
     private static Camera? _blursOf;
 
-    // The FPS camera's motion blurs (AmplifyMotion's, the game's own), found once for it.
+    // The FPS camera's image effects that carry something over from frame to frame (motion blur, a night-vision
+    // picture's afterglow and noise, other mods' effects), found once for it: kept out of the gun renders, which would
+    // otherwise be taken into that history (the lights pulsed, the eyepiece kept ghosts of what was seen before). Left
+    // on: the upscaler (it lays the sight's lens in), this mod's eyepieces (the gun is taken there) and the game's
+    // post-processing (the gun's look).
     private static System.Collections.Generic.List<Behaviour> MotionBlursOf(Camera camera)
     {
         if (_blursOf != camera)
         {
             _blursOf = camera;
             _blurs.Clear();
+            var all = new System.Collections.Generic.List<string>();
             foreach (Behaviour b in camera.GetComponents<Behaviour>())
             {
-                string name = b != null ? b.GetType().Name : "";
-                if (name.IndexOf("Motion", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                    _blurs.Add(b!);
+                if (b == null)
+                    continue;
+                System.Type type = b.GetType();
+                bool effect = HarmonyLib.AccessTools.Method(type, "OnRenderImage") != null || type.Name.IndexOf("Motion", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                bool kept = b is SSAAPropagator || b is EyepieceImage || type.Name.StartsWith("SSAA", System.StringComparison.Ordinal) || type.Name == "PostProcessLayer" || type.Name == "DepthOfField";
+                if (effect && !kept)
+                    _blurs.Add(b);
+                all.Add(type.Name + (effect ? (kept ? " (kept)" : " (off)") : ""));
             }
-            NewCameraPlugin.Log?.LogInfo("Two renders: motion blurs off in the gun renders: " + (_blurs.Count > 0 ? string.Join(", ", _blurs.ConvertAll(x => x.GetType().Name)) : "none found"));
+            NewCameraPlugin.Log?.LogInfo("Two renders: the FPS camera's components, image effects off in the gun renders marked: " + string.Join(", ", all));
         }
         return _blurs;
     }
