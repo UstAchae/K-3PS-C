@@ -25,8 +25,9 @@ internal static class SightLensHalves
         AccessTools.FieldRefAccess<SSAAPropagator, RenderTexture>("_resampledDepthTarget");
     private static readonly FieldInfo? LensMaterialField = AccessTools.Field(typeof(SSAAPropagator), "_opticLensMaterial");
     private static readonly FieldInfo? CollimatorMaterialField = AccessTools.Field(typeof(SSAAPropagator), "_collimatorMaterial");
+    // The game calls the two-argument overload (its IL: ldfld renderer, ldfld material, callvirt DrawRenderer(Renderer, Material)).
     private static readonly MethodInfo? DrawRendererMethod = AccessTools.Method(typeof(CommandBuffer), nameof(CommandBuffer.DrawRenderer),
-        new[] { typeof(Renderer), typeof(Material), typeof(int), typeof(int) });
+        new[] { typeof(Renderer), typeof(Material) });
     private static readonly int PreLensId = Shader.PropertyToID("_JustachaeSightPreLens");
     private static readonly int PostLensId = Shader.PropertyToID("_JustachaeSightPostLens");
     private static readonly int OtherId = Shader.PropertyToID("_Other");
@@ -55,17 +56,17 @@ internal static class SightLensHalves
         NewCameraPlugin.Log?.LogInfo($"Sight lens halves: {_taken} of the game's sight lens draws taken over (laid in half in the two-eye experiment).");
     }
 
-    // Each DrawRenderer(lens or red dot, its material, 0, -1) in the method: our Draw, with the propagator, in its place.
+    // Each DrawRenderer(lens or red dot, its material) in the method: our Draw, with the propagator, in its place.
     private static IEnumerable<CodeInstruction> TakeLensDraws(IEnumerable<CodeInstruction> instructions)
     {
         var codes = new List<CodeInstruction>(instructions);
         MethodInfo draw = AccessTools.Method(typeof(SightLensHalves), nameof(Draw));
-        for (int i = 3; i < codes.Count; i++)
+        for (int i = 1; i < codes.Count; i++)
         {
             if (!codes[i].Calls(DrawRendererMethod!))
                 continue;
-            object? field = codes[i - 3].operand;
-            if (!(codes[i - 3].opcode == OpCodes.Ldfld && (Equals(field, LensMaterialField) || Equals(field, CollimatorMaterialField))))
+            object? field = codes[i - 1].operand;
+            if (!(codes[i - 1].opcode == OpCodes.Ldfld && (Equals(field, LensMaterialField) || Equals(field, CollimatorMaterialField))))
                 continue;
             codes[i] = new CodeInstruction(OpCodes.Call, draw).MoveLabelsFrom(codes[i]);
             codes.Insert(i, new CodeInstruction(OpCodes.Ldarg_0));
@@ -75,7 +76,7 @@ internal static class SightLensHalves
         return codes;
     }
 
-    private static void Draw(CommandBuffer buffer, Renderer renderer, Material material, int submesh, int pass, SSAAPropagator propagator)
+    private static void Draw(CommandBuffer buffer, Renderer renderer, Material material, SSAAPropagator propagator)
     {
         RenderTexture[]? targets = HdrTargets(propagator);
         RenderTexture? frame = targets != null && targets.Length > 0 ? targets[0] : null;
@@ -83,7 +84,7 @@ internal static class SightLensHalves
         Shader? tubeShader = NightVisionEyepieces.TubeShader;
         if (!NightVisionEyepieces.TwoEyesNow || frame == null || depth == null || tubeShader == null)
         {
-            buffer.DrawRenderer(renderer, material, submesh, pass);
+            buffer.DrawRenderer(renderer, material);
             return;
         }
         _halves ??= new Material(tubeShader) { name = "Justachae sight lens halves", hideFlags = HideFlags.DontSave };
@@ -95,7 +96,7 @@ internal static class SightLensHalves
         buffer.GetTemporaryRT(PostLensId, frame.width, frame.height, 0, FilterMode.Point, frame.format);
         buffer.Blit(frame, PreLensId);
         buffer.SetRenderTarget(frame, depth);
-        buffer.DrawRenderer(renderer, material, submesh, pass);
+        buffer.DrawRenderer(renderer, material);
         buffer.Blit(frame, PostLensId);
         buffer.SetGlobalTexture(OtherId, PreLensId);
         buffer.Blit(PostLensId, frame, _halves, LensPass);
