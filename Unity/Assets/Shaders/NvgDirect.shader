@@ -466,6 +466,32 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
+  // 14: the experiment, in an eye's own drawing: its device taken out where that eye looks into its own lens, for what
+  // lies past it (the gun, the arms) to be drawn there, and so be in the frame the lens's picture is made from.
+  Pass {
+   Cull Off ZWrite On ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   float _DirectHalf;
+   struct cleared { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; float4 g3 : SV_Target3; float depth : SV_Depth; };
+   cleared frag (v2f i) {
+    float2 uv = i.screen.xy / i.screen.w;
+    bool inLens = _DirectHalf < 0.5 ? within(_DirectLens0, uv, _EyeInvVP0) : within(_DirectLens1, uv, _EyeInvVP1);
+    if (!inLens)
+     discard;
+    cleared o;
+    o.g0 = 0; o.g1 = 0; o.g2 = 0; o.g3 = 0;
+    #if defined(UNITY_REVERSED_Z)
+    o.depth = 0;
+    #else
+    o.depth = 1;
+    #endif
+    return o;
+   }
+   ENDCG
+  }
   // 13: an eyepiece swung up on its pod, where it is what the eye sees (on the eye's own depth of the device): kept whole there.
   Pass {
    Cull Off ZWrite Off ZTest LEqual

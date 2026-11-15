@@ -94,7 +94,7 @@ internal static partial class NightVisionEyepieces
     private static Camera? _directCamera;
     private static int _arrangedCount = -1;
     private static bool _direct;
-    private const int InsertPass = 0, SurfacePass = 1, EvenPass = 2, MotionPass = 3, StencilBitsPass = 4, PlacesPass = 12;
+    private const int InsertPass = 0, SurfacePass = 1, EvenPass = 2, MotionPass = 3, StencilBitsPass = 4, PlacesPass = 12, LensOpenPass = 14;
     private static readonly int ShadeLeftCupId = Shader.PropertyToID("_ShadeLeftCup");
     private static readonly List<Renderer> _slotRenderers = new List<Renderer>();
     private static readonly List<(Renderer renderer, ShadowCastingMode casting)> _hidden = new List<(Renderer, ShadowCastingMode)>();
@@ -464,6 +464,12 @@ internal static partial class NightVisionEyepieces
         projection.m23 = -2f * DirectFar * near / (DirectFar - near);
         buffer.SetGlobalVector(DirectPlanes, new Vector4(1f / near, 1f / DirectFar, 1f / main.nearClipPlane, 1f / main.farClipPlane));
 
+        // Each eye's lens map, for its own lens left open in its drawing (the experiment's, LensOpenPass) as for the rest.
+        for (int side = 0; side < 2; side++)
+        {
+            if (_lensMaps[side] != null)
+                buffer.SetGlobalTexture(DirectLens[side], _lensMaps[side]);
+        }
         for (int half = 0; half < 2; half++)
         {
             int[] ids = half == 0 ? DirectLeft : DirectRight;
@@ -480,15 +486,29 @@ internal static partial class NightVisionEyepieces
             Matrix4x4 fromEye = Matrix4x4.Translate(-shift);
             buffer.SetViewProjectionMatrices(turned, projection);
             buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
-            foreach (Piece piece in _pieces)
+            // The device first; then, in the experiment, its lens left open (this eye's) and the player's own drawn, which
+            // shows there past the lens.
+            for (int stage = 0; stage < 2; stage++)
             {
-                piece.Renderer.GetPropertyBlock(_pieceBlock);
-                int count = Mathf.Min(piece.Materials.Length, piece.Mesh.subMeshCount);
-                for (int s = 0; s < count; s++)
+                if (stage == 1)
                 {
-                    if (piece.Passes[s] < 0)
+                    if (_nearCount <= 0)
+                        break;
+                    buffer.SetGlobalFloat(DirectHalf, half);
+                    buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, LensOpenPass);
+                }
+                foreach (Piece piece in _pieces)
+                {
+                    if (piece.Near != (stage == 1))
                         continue;
-                    buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, piece.Materials[s], s, piece.Passes[s], _pieceBlock);
+                    piece.Renderer.GetPropertyBlock(_pieceBlock);
+                    int count = Mathf.Min(piece.Materials.Length, piece.Mesh.subMeshCount);
+                    for (int s = 0; s < count; s++)
+                    {
+                        if (piece.Passes[s] < 0)
+                            continue;
+                        buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, piece.Materials[s], s, piece.Passes[s], _pieceBlock);
+                    }
                 }
             }
             for (int t = 0; t < 4; t++)

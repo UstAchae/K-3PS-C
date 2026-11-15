@@ -186,7 +186,18 @@ internal static partial class NightVisionEyepieces
                         }
                     }
                 }
-                NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {what} ({request.width}x{request.height}, {texture.format}): {100f * set / Mathf.Max(pixels, 1):F1}% set");
+                // A lens map's four channels are the four tubes': how much of the frame each one lights.
+                string tubes = "";
+                if (step == 4)
+                {
+                    var lit = new int[4];
+                    for (int p = 0; p < pixels; p++)
+                        for (int c = 0; c < 4; c++)
+                            if (data[p * 4 + c] > 8)
+                                lit[c]++;
+                    tubes = $"; per channel {100f * lit[0] / pixels:F1}% {100f * lit[1] / pixels:F1}% {100f * lit[2] / pixels:F1}% {100f * lit[3] / pixels:F1}%";
+                }
+                NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {what} ({request.width}x{request.height}, {texture.format}): {100f * set / Mathf.Max(pixels, 1):F1}% set{tubes}");
             });
         }
         for (int side = 0; side < 2; side++)
