@@ -63,7 +63,10 @@ internal static class TwoRenders
     // The goggle is never seen through: nothing laid over what the camera has nearer than this (m; the gun is further).
     private const float DeviceReach = 0.12f;
     private static readonly int ShareGId = Shader.PropertyToID("_ShareG"), ShareBId = Shader.PropertyToID("_ShareB"), DeviceReachId = Shader.PropertyToID("_DeviceReach");
-    private const int GunsInPass = 4;   // NvgTube.shader: the goggle eye's gun laid into its scene, ahead of the bare eye's
+    private const int GunsInPass = 4, DepthCopyPass = 5, DepthBothPass = 6;
+    private static RenderTexture? _goggleDepth, _bothDepth;
+    private static Texture? _ownDepth;
+    private static readonly int CameraDepthId = Shader.PropertyToID("_CameraDepthTexture"), GunDepthId = Shader.PropertyToID("_GunDepth");   // NvgTube.shader: the goggle eye's gun laid into its scene, ahead of the bare eye's
 
     // The renders of a frame: the gun alone from the bare eye, then from the goggle's eye; then the frame's own, from the
     // goggle's eye, without the gun.
@@ -264,6 +267,9 @@ internal static class TwoRenders
         if (_gun == GunPass.Goggle)
         {
             Graphics.Blit(scene, Kept(ref _goggleGun, scene, "Justachae goggle eye's gun"), material, NearPass);
+            // Its depth too, for the objective's blur in the frame's own render (which has no gun in its depth).
+            if (Shader.GetGlobalTexture(CameraDepthId) is Texture depth)
+                Graphics.Blit(null, KeptDepth(ref _goggleDepth, depth.width, depth.height, "Justachae goggle eye's gun depth"), material, DepthCopyPass);
             _goggleDone = Time.frameCount;
             return;
         }
@@ -278,11 +284,40 @@ internal static class TwoRenders
         Graphics.Blit(scene, laid, material, GunsInPass);
         Graphics.Blit(laid, scene);
         RenderTexture.ReleaseTemporary(laid);
+        // The depth the eyepieces' steps go by (the objective's blur above all): the gun's where it is nearer, until
+        // the eyepieces are done (TakeEye gives the camera's own back).
+        if (_goggleDepth != null && Shader.GetGlobalTexture(CameraDepthId) is Texture own && own.width == _goggleDepth.width && own.height == _goggleDepth.height)
+        {
+            material.SetTexture(GunDepthId, _goggleDepth);
+            Graphics.Blit(null, KeptDepth(ref _bothDepth, own.width, own.height, "Justachae depth with the gun"), material, DepthBothPass);
+            _ownDepth = own;
+            Shader.SetGlobalTexture(CameraDepthId, _bothDepth);
+        }
+    }
+
+    private static RenderTexture KeptDepth(ref RenderTexture? kept, int width, int height, string name)
+    {
+        if (kept == null || kept.width != width || kept.height != height)
+        {
+            if (kept != null)
+            {
+                kept.Release();
+                Object.Destroy(kept);
+            }
+            kept = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat) { name = name, hideFlags = HideFlags.DontSave, filterMode = FilterMode.Point };
+            kept.Create();
+        }
+        return kept;
     }
 
     // In the eyepieces' image effect, the frame done: the bare eye's gun laid over at half where it is.
     internal static void TakeEye(RenderTexture into, Shader? tubeShader)
     {
+        if (_ownDepth != null)
+        {
+            Shader.SetGlobalTexture(CameraDepthId, _ownDepth);
+            _ownDepth = null;
+        }
         Material? material = MaterialFor(tubeShader);
         if (material == null || _pass || !Now || !_gunHidden || _bareGun == null)
             return;

@@ -108,5 +108,36 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 5: the camera's depth as it is (raw), kept (TwoRenders.cs: the goggle eye's gun render's).
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   float4 frag (v2f_img i) : SV_Target { return SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv); }
+   ENDCG
+  }
+  // 6: the camera's depth (raw) with the goggle eye's gun's (_GunDepth, pass 5) where that is nearer: the depth the
+  // objective's blur goes by, the gun laid into the frame though the frame was rendered without it.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   sampler2D _GunDepth;
+   float4 frag (v2f_img i) : SV_Target {
+    float a = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv), b = tex2D(_GunDepth, i.uv).r;
+    #if defined(UNITY_REVERSED_Z)
+    return max(a, b);
+    #else
+    return min(a, b);
+    #endif
+   }
+   ENDCG
+  }
  }
 }
