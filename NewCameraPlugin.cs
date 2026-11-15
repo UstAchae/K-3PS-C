@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.93";
+    public const string PluginVersion = "1.9.94";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -611,6 +611,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void OnEnable()
     {
         StartCoroutine(EndOfFrame());
+        TwoRenderTest.Hook();
         Camera.onPreCull += PreCull;
         Camera.onPreRender += PreRender;
         Camera.onPostRender += PostRender;
@@ -624,7 +625,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         {
             yield return end;
             Fisheye.GiveBack();
-            TwoRenderTest.Overlay();
         }
     }
 
@@ -650,7 +650,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         HeadwearTilt.UpdateShown();
         NightVisionEyepieces.UpdatePreviewMounts();
         Fisheye.LateUpdate();
-        TwoRenderTest.LateUpdate();
     }
 }
 
@@ -665,7 +664,7 @@ internal static class NewCameraSwitch
 
     // The camera is where this mod put it this frame, at the player's eyes, and has not been moved off since (a free
     // camera places itself after this mod does).
-    internal static bool AtEyes(Camera camera) => _poseFrame == Time.frameCount && (camera.transform.position - _posePosition).sqrMagnitude < 1e-6f;
+    internal static bool AtEyes(Camera camera) => _poseFrame == Time.frameCount && (camera.transform.position - _posePosition - TwoRenderTest.OtherEyeOffset(_poseRotation)).sqrMagnitude < 1e-6f;
     private static Quaternion _poseRotation;
 
     // Where this mod has the camera for this player (last placed: this frame, or the one before if not yet this one).
@@ -797,8 +796,7 @@ internal static class NewCameraSwitch
         if (main && _mainPlacedFrame == Time.frameCount)
         {
             if (_poseFrame == Time.frameCount)
-                camera.transform.SetPositionAndRotation(_posePosition, _poseRotation);
-            TwoRenderTest.Offset(camera);
+                camera.transform.SetPositionAndRotation(_posePosition + TwoRenderTest.OtherEyeOffset(_poseRotation), _poseRotation);
             return;
         }
         if (main)
@@ -853,8 +851,7 @@ internal static class NewCameraSwitch
 
         if (main && _poseFrame == Time.frameCount)
         {
-            camera.transform.SetPositionAndRotation(_posePosition, _poseRotation);
-            TwoRenderTest.Offset(camera);
+            camera.transform.SetPositionAndRotation(_posePosition + TwoRenderTest.OtherEyeOffset(_poseRotation), _poseRotation);
             NightVisionEyepieces.RedrawAmbient(camera);
         }
         if (optic && _poseFrame == Time.frameCount)

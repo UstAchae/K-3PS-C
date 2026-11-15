@@ -200,6 +200,7 @@ internal static partial class NightVisionEyepieces
         float bare = lone >= 0 ? PodBare(raisedTube) * (1f - again) : 0f;
         int loneSide = lone >= 0 ? ((lone == CentreLensA) == (a <= b) ? 0 : 1) : -1;
         int monocular = !BinocularOn ? -1
+            : TwoRenderTest.Now ? -1
             : _device.Monocular ? (a + CameraPosition.Horizontal >= 0f ? 1 : 0)
             : going >= 1f ? loneSide : -1;
         if (lone < 0)
@@ -258,18 +259,19 @@ internal static partial class NightVisionEyepieces
             leftShift = Vector3.Lerp(leftShift, camera0, home);
             rightShift = Vector3.Lerp(rightShift, camera0, home);
         }
-        // TEMP TEST (TwoRenderTest.cs): each render is one eye, the camera itself: no two eyes' views split in one frame.
-        if (TwoRenderTest.Now)
-        {
-            leftShift = Vector3.zero;
-            rightShift = Vector3.zero;
-        }
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
         float split = monocular >= 0 ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
         // ...and the eye left taking the frame over, its half widening past the far edge.
         if (monocular < 0 && going > 0f)
             split = Mathf.Lerp(split, loneSide == 0 ? 1f + Overscan : -Overscan, going);
+        // TEMP TEST (TwoRenderTest.cs): each render is one eye, the camera itself: the device and its lenses from the
+        // camera, the same for the whole frame (no two eyes' views split in it).
+        if (TwoRenderTest.Now)
+        {
+            leftShift = rightShift = Vector3.zero;
+            split = 0.5f;
+        }
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);

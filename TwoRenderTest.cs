@@ -2,93 +2,104 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// TEMP TEST (the user's, 2026-11-15): the whole frame rendered twice, once from each eye (HalfApart either side of
-// where the camera is placed), the left eye's into a texture laid over the screen at half once the frame is done (the
-// interface included), the right eye's the camera's own. The goggle's two-eyes-in-one-frame split is off meanwhile
-// (NightVisionEyes.cs): each render is one eye. The mean frame time is logged every PhaseSeconds.
+// TEMP TEST (the user's, 2026-11-15), as the 1.9.36-1.9.39 experiment did it: with the goggle down, the whole frame
+// rendered twice, once from each eye (CameraPosition.AimEye either side of the head's middle), half each. The main
+// camera renders first, before anything else renders (Application.onBeforeRender), from the left eye, its finished
+// frame kept at the eyepieces' image effect; then as ever, from the right eye, its frame mixed half and half with the
+// kept one there (NightVisionComposite.cs, before the interface). Each render is one eye, the camera itself: the device
+// drawn into it and its lenses mapped from there, no two eyes' views split in one frame (NightVisionEyes.cs). The mean
+// frame time is logged every PhaseSeconds.
 internal static class TwoRenderTest
 {
     internal static bool On = true;
-    // Only with the goggle down (and on): otherwise the game's one render, as ever.
-    internal static bool Now => On && NightVisionEyepieces.Active;
-    private const float HalfApart = 0.032f;      // m, each eye this far from where the camera is placed
     private const float PhaseSeconds = 20f;
     private const int SettleFrames = 60;
+    private const int HalvesPass = 1;   // NvgTube.shader: two pictures, mixed
 
-    private static RenderTexture? _eye;
-    private static bool _rendering, _renderedThisFrame, _phaseOn;
+    private static bool _pass, _hooked, _failed;
+    private static int _leftDone = -100;
+    private static RenderTexture? _left;
+    private static Material? _halves;
+    private static readonly int OtherId = Shader.PropertyToID("_Other"), OtherShareId = Shader.PropertyToID("_OtherShare");
+
     private static float _phaseStart = -1f;
     private static int _phaseFrame, _frames;
     private static double _seconds;
 
-    internal static bool Rendering => _rendering;
+    // Only with the goggle down (and on): otherwise the game's one render, as ever.
+    internal static bool Now => On && !_failed && NightVisionEyepieces.Active;
 
-    // From NewCameraPlugin.LateUpdate: the second render, before the camera's own.
-    internal static void LateUpdate()
+    // The camera across from the head's middle while the test is on: at the right eye (the left eye's render is placed
+    // from there, OtherEyeOffset).
+    internal static float? EyeOverride => Now ? CameraPosition.AimEye : (float?)null;
+
+    // Where the camera is placed from its place this frame: over at the left eye during the left eye's render.
+    internal static Vector3 OtherEyeOffset(Quaternion turn) => _pass ? turn * new Vector3(-2f * CameraPosition.AimEye, 0f, 0f) : Vector3.zero;
+
+    internal static void Hook()
     {
-        _renderedThisFrame = false;
-        Camera? camera = Camera.main;
-        if (!Now || camera == null || !NewCameraSwitch.Enabled || Comfort.Common.Singleton<EFT.GameWorld>.Instance?.MainPlayer == null)
+        if (_hooked)
+            return;
+        _hooked = true;
+        Application.onBeforeRender += RenderLeftEye;
+    }
+
+    // The left eye's render, before the frame's own.
+    private static void RenderLeftEye()
+    {
+        if (!Now)
         {
             _phaseStart = -1f;
             return;
         }
         Measure();
-        if (!_phaseOn)
+        Camera? main = Camera.main;
+        if (main == null || !main.isActiveAndEnabled)
             return;
-        int width = Screen.width, height = Screen.height;
-        if (_eye == null || _eye.width != width || _eye.height != height)
-        {
-            if (_eye != null)
-                Object.Destroy(_eye);
-            _eye = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32) { name = "Justachae second eye", hideFlags = HideFlags.DontSave };
-        }
-        RenderTexture? before = camera.targetTexture;
-        Vector3 place = camera.transform.position;
-        Quaternion turn = camera.transform.rotation;
-        _rendering = true;
+        _pass = true;
         try
         {
-            camera.targetTexture = _eye;
-            camera.Render();
-            _renderedThisFrame = true;
+            main.Render();
         }
         catch (System.Exception e)
         {
-            NewCameraPlugin.Log?.LogError($"Two render test: the second render failed, test off: {e}");
-            On = false;
+            _failed = true;
+            NewCameraPlugin.Log?.LogError("Two render test: the left eye's render failed, not tried again: " + e);
         }
         finally
         {
-            _rendering = false;
-            camera.targetTexture = before;
-            camera.transform.SetPositionAndRotation(place, turn);
+            _pass = false;
         }
     }
 
-    // From the FPS camera's placing (NewCameraSwitch.OnCameraPreCull): during the second render, the other eye.
-    internal static void Offset(Camera camera)
+    // In the eyepieces' image effect, the frame done: the left eye's kept; the right eye's mixed half and half with it.
+    internal static void TakeEye(RenderTexture into, Shader? tubeShader)
     {
-        if (_rendering)
-            camera.transform.position += camera.transform.rotation * new Vector3(-HalfApart, 0f, 0f);
-        else if (Now)
-            camera.transform.position += camera.transform.rotation * new Vector3(HalfApart, 0f, 0f);
-    }
-
-    // From NewCameraPlugin.EndOfFrame: the second render laid over the screen at half.
-    internal static void Overlay()
-    {
-        if (!_renderedThisFrame || _eye == null)
+        if (_pass)
+        {
+            if (_left == null || _left.width != into.width || _left.height != into.height || _left.format != into.format)
+            {
+                if (_left != null)
+                {
+                    _left.Release();
+                    Object.Destroy(_left);
+                }
+                _left = new RenderTexture(into.width, into.height, 0, into.format) { name = "Justachae left eye frame", hideFlags = HideFlags.DontSave };
+                _left.Create();
+            }
+            Graphics.Blit(into, _left);
+            _leftDone = Time.frameCount;
             return;
-        RenderTexture? active = RenderTexture.active;
-        RenderTexture.active = null;
-        GL.PushMatrix();
-        // Bottom-left origin (the top-left one showed it upside down).
-        GL.LoadPixelMatrix(0, Screen.width, 0, Screen.height);
-        // Graphics.DrawTexture's colour: 0.5 is neutral, its alpha doubled; 0.25 is half.
-        Graphics.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _eye, new Rect(0f, 0f, 1f, 1f), 0, 0, 0, 0, new Color(0.5f, 0.5f, 0.5f, 0.25f));
-        GL.PopMatrix();
-        RenderTexture.active = active;
+        }
+        if (!Now || _leftDone != Time.frameCount || _left == null || tubeShader == null)
+            return;
+        _halves ??= new Material(tubeShader) { name = "Justachae two eyes", hideFlags = HideFlags.DontSave };
+        RenderTexture seen = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
+        Graphics.Blit(into, seen);
+        _halves.SetTexture(OtherId, _left);
+        _halves.SetFloat(OtherShareId, 0.5f);
+        Graphics.Blit(seen, into, _halves, HalvesPass);
+        RenderTexture.ReleaseTemporary(seen);
     }
 
     private static void Measure()
@@ -97,7 +108,6 @@ internal static class TwoRenderTest
         if (_phaseStart < 0f)
         {
             _phaseStart = now;
-            _phaseOn = true;
             _phaseFrame = Time.frameCount;
             _frames = 0;
             _seconds = 0;
@@ -113,9 +123,8 @@ internal static class TwoRenderTest
         if (_frames > 0)
         {
             double ms = 1000.0 * _seconds / _frames;
-            NewCameraPlugin.Log?.LogInfo($"Two render test: {(_phaseOn ? "TWO renders" : "one render")}: mean frame {ms:F2} ms ({1000.0 / ms:F1} FPS) over {_frames} frames");
+            NewCameraPlugin.Log?.LogInfo($"Two render test (goggle down, two renders): mean frame {ms:F2} ms ({1000.0 / ms:F1} FPS) over {_frames} frames");
         }
-        _phaseOn = true;
         _phaseStart = now;
         _phaseFrame = Time.frameCount;
         _frames = 0;
