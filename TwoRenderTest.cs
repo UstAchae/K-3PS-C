@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// TEMP TEST (the user's, 2026-11-15), as the 1.9.36-1.9.39 experiment did it: with the goggle down, the whole frame
+// TEMP TEST (the user's, 2026-11-15), as the 1.9.36-1.9.39 experiment did it: with the goggle down or flipping, the whole frame
 // rendered twice, once from each eye (CameraPosition.AimEye either side of the head's middle), half each. The main
 // camera renders first, before anything else renders (Application.onBeforeRender), from the left eye, its finished
 // frame kept at the eyepieces' image effect; then as ever, from the right eye, its frame mixed half and half with the
@@ -26,8 +26,9 @@ internal static class TwoRenderTest
     private static int _phaseFrame, _frames;
     private static double _seconds;
 
-    // Only with the goggle down (and on): otherwise the game's one render, as ever.
-    internal static bool Now => On && !_failed && NightVisionEyepieces.Active;
+    // With the goggle down, and while it flips down or up (the old two-eyes split never in between): otherwise the
+    // game's one render, as ever.
+    internal static bool Now => On && !_failed && NightVisionEyepieces.DownOrFlipping;
 
     // The camera across from the head's middle while the test is on: at the right eye (the left eye's render is placed
     // from there, OtherEyeOffset).

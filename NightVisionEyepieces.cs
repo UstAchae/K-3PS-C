@@ -39,6 +39,8 @@ internal static partial class NightVisionEyepieces
 
     internal static bool Active { get; private set; }
     internal static bool ThermalShown => Active && _device.Thermal;
+    // A device with eyepieces down, or on its way down or up (TwoRenderTest.cs: the frame rendered from each eye then).
+    internal static bool DownOrFlipping => _body != null && _lensNodes.Length > 0 && (Active || _flip > 0.001f);
 
     private struct Tube
     {
