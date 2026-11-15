@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.32";
+    public const string PluginVersion = "1.8.33";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -175,6 +175,9 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<bool> reflections = SettingsLayout.Bind(Config, "头戴式成像装备", "镜片反光", false,
             new ConfigDescription("夜视仪翻下时，目镜镜片表面映出的周围环境和高光，叠在镜片里的夜视画面上。关掉后镜片里只剩夜视画面，设备上的玻璃部件也不画。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
+        ConfigEntry<float> deviceSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "夜视仪透明度", 0f,
+            new ConfigDescription("夜视仪机身（不含目镜里的画面）有多透明：0 是实心（默认），1 是看不见。",
+                new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
         ConfigEntry<float> bareGunSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "单筒：裸眼瞄准时枪的透明度", 0.5f,
             new ConfigDescription("戴单筒夜视仪（PVS-14）、用没戴夜视仪的那只眼瞄准时，那只眼看到的枪有多透明：0 是实心，1 是看不见，默认 0.5。用戴夜视仪的那只眼瞄准时枪始终是实心的。",
                 new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
@@ -213,6 +216,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             NightVisionEyepieces.LensReflections = reflections.Value;
             NightVisionEyepieces.EyeShift = eyeShift.Value;
             TwoRenders.BareGunSeeThrough = bareGunSeeThrough.Value;
+            NightVisionEyepieces.DeviceSeeThrough = deviceSeeThrough.Value;
             NightVisionEyepieces.RaiseMount = raiseMount.Value;
             NightVisionEyepieces.LowerMount = lowerMount.Value;
             NightVisionEyepieces.TiltUp = tiltUp.Value;
@@ -223,6 +227,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 
         eyeShift.SettingChanged += (_, _) => Refresh();
         bareGunSeeThrough.SettingChanged += (_, _) => Refresh();
+        deviceSeeThrough.SettingChanged += (_, _) => Refresh();
         picture.SettingChanged += (_, _) => Refresh();
         raiseMount.SettingChanged += (_, _) => Refresh();
         lowerMount.SettingChanged += (_, _) => Refresh();

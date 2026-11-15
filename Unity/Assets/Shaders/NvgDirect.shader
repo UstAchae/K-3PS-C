@@ -111,11 +111,13 @@ Shader "Justachae/NVG/Direct" {
  // A monocular is before one eye only: toward the other eye's edge of the frame it fades out, as the composite once faded it (x 1 for
  // a monocular, y its eye: 0 left, 1 right, z the fade's power, 0 not at all).
  float4 _DirectMonocular;
+ float _DirectSeeThrough;   // the device seen through, all over (F12 夜视仪透明度): 0 solid
  float monocularShown (float2 uv) {
+  float all = 1 - saturate(_DirectSeeThrough);
   if (_DirectMonocular.x < 0.5 || _DirectMonocular.z <= 0)
-   return 1;
+   return all;
   float s = smoothstep(0, 0.5 + _DirectStrip * 0.5, _DirectMonocular.y > 0.5 ? uv.x : 1 - uv.x);
-  return pow(max(s, 1e-5), _DirectMonocular.z);
+  return pow(max(s, 1e-5), _DirectMonocular.z) * all;
  }
  bool fadingAt (float2 uv) { return monocularShown(uv) < 0.999; }
  // Every other pixel, as on a chessboard: across a monocular's fade those have the device, the others what lies behind.
