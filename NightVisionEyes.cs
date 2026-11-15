@@ -74,6 +74,9 @@ internal static partial class NightVisionEyepieces
             return false;
         if ((!BinocularOn && !Active) || _eyepieceImage == null || !_eyepieceImage.enabled)
             return false;
+        // The experiment: a monocular's eyepieces stood down, both eyes rendered bare (NightVisionOtherEye.cs).
+        if (BothEyesBare)
+            return false;
         // Both eyepieces swung all the way away on their pods: the eyes are bare, the device the game's to draw again,
         // as with it flipped up (the eyes eased back to the camera on the way, below).
         if (_lensPods.Length > 0 && PodBare(CentreLensA) >= 1f && PodBare(CentreLensB) >= 1f)
@@ -159,6 +162,8 @@ internal static partial class NightVisionEyepieces
         float half = _device.FieldDegrees * 0.5f;
         binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((half + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(half * Mathf.Deg2Rad), 0f, 0f));
 
+        // The experiment: both eyes' bare views, before the main camera renders (NightVisionOtherEye.cs).
+        RenderBareEyes(camera);
         ShadeMain(camera, !_direct);
         if (!_direct)
             ProbeStencil(camera);
@@ -172,9 +177,6 @@ internal static partial class NightVisionEyepieces
         // Thermal goggles' picture, for the lenses (LensPicture).
         if (_device.Thermal && Active)
             RenderThermal(camera);
-        // The experiment: the bare eye's view too, beside a monocular (NightVisionOtherEye.cs).
-        if (_device.Monocular && BinocularOn)
-            RenderOtherEye(camera);
     }
 
     private static void RenderLenses(Camera camera, Material binocular, Transform view, Vector3 position)
@@ -208,8 +210,6 @@ internal static partial class NightVisionEyepieces
         if (lone < 0)
             lone = CentreLensA;
         float loneAcross = lone == CentreLensA ? a : b;
-        // A monocular's bare eye: as far the other side of the head's middle as its eyepiece is this side.
-        _otherEyeAcross = -(a + CameraPosition.Horizontal) - CameraPosition.Horizontal;
         // The one swung up, for the device drawn into the main camera (NightVisionDirect.OnRaisedPod).
         RaisedPod = RaisedCupPod = null;
         if (monocular >= 0 && !_device.Monocular)

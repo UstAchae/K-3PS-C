@@ -147,7 +147,11 @@ internal static partial class NightVisionEyepieces
         RenderTexture? lensed = lens ? RenderTexture.GetTemporary(from.width, from.height, 0, from.format) : null;
         RenderTexture into = lensed != null ? lensed : to;
         bool eyes = _eyesFrame == Time.frameCount;
-        if (composite == null || glow == null || _body == null || !eyes)
+        if (LayBareEyes(into))
+        {
+            // The experiment (NightVisionOtherEye.cs): both bare eyes' views in place of the frame.
+        }
+        else if (composite == null || glow == null || _body == null || !eyes)
             Graphics.Blit(from, into);
         else
         {
@@ -160,7 +164,6 @@ internal static partial class NightVisionEyepieces
             Texture? fusedPicture = Fused(picture, ref fused);
             ReleaseMask();
             Compose(composite, glow, from, into, picture, fusedPicture);
-            LayOtherEye(into);
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
             if (tubed != null)

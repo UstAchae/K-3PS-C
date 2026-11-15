@@ -4,34 +4,38 @@ using UnityEngine.Rendering.PostProcessing;
 
 namespace EFTNewCamera;
 
-// EXPERIMENT (the user's, 2026-11-15): a monocular (the PVS-14) seen with both eyes at once. The bare eye's whole view
-// is rendered from where that eye stands, by a camera of its own (the game's scope camera prefab, as the thermal
-// goggles' is, so it has the game's lighting and post-processing), and laid over the frame the other eye sees, the one
-// through the eyepiece, each at half. To be kept or taken out once seen.
+// EXPERIMENT (the user's, 2026-11-15): a monocular (the PVS-14) seen with both eyes. The eyepieces stand down (the
+// game draws the device as it is, nothing seen through its lens), and each eye's whole view is rendered from where that
+// eye stands, half the eyes' distance either side of the head's middle, with the camera's turn and view, both bare (no
+// night vision): the two laid over each other at half each, in place of the frame. Each by a camera of its own, the
+// game's scope camera prefab (as the thermal goggles' is), so it has the game's lighting and post-processing.
+// To be kept or taken out once seen.
 internal static partial class NightVisionEyepieces
 {
     internal static bool MonocularBothEyes = true;
-    private const float OtherEyeShare = 0.5f;
-    private const int TubeHalvesPass = 1;   // NvgTube.shader: the frame and another, mixed
+    private const float EyesApart = 0.064f;   // between the pupils (m)
+    private const int TubeHalvesPass = 1;     // NvgTube.shader: two pictures, mixed
 
-    private static Camera? _otherEye;
-    private static RenderTexture? _otherEyePicture;
-    private static int _otherEyeFrame = -100;
-    private static float _otherEyeAcross;   // the bare eye, across from the camera along its right (m), this frame
-    private static bool _otherEyeNoted;
+    private static readonly Camera?[] _bareEyes = new Camera?[2];
+    private static readonly RenderTexture?[] _bareEyePictures = new RenderTexture?[2];
+    private static int _bareEyesFrame = -100;
+    private static bool _bareEyesNoted;
     private static readonly int OtherId = Shader.PropertyToID("_Other");
     private static readonly int OtherShareId = Shader.PropertyToID("_OtherShare");
 
-    private static bool EnsureOtherEye()
+    // Whether the experiment takes this device: a monocular, worn down and on.
+    private static bool BothEyesBare => MonocularBothEyes && _body != null && _lensNodes.Length > 0 && _device.Monocular;
+
+    private static Camera? BareEye(int side)
     {
-        if (_otherEye != null)
-            return true;
+        if (_bareEyes[side] != null)
+            return _bareEyes[side];
         if (UnityResourcesProxy.Load("BaseOpticCamera") is not GameObject prefab)
-            return false;
-        var holder = new GameObject("Justachae other eye holder");
+            return null;
+        var holder = new GameObject("Justachae bare eye holder");
         holder.SetActive(false);
         GameObject made = Object.Instantiate(prefab, holder.transform);
-        made.name = "Justachae other eye camera";
+        made.name = "Justachae bare eye " + (side == 0 ? "left" : "right");
         made.tag = "Untagged";
         foreach (MonoBehaviour behaviour in made.GetComponents<MonoBehaviour>())
         {
@@ -41,13 +45,13 @@ internal static partial class NightVisionEyepieces
         made.transform.SetParent(null, false);
         Object.Destroy(holder);
         Object.DontDestroyOnLoad(made);
-        _otherEye = made.GetComponent<Camera>();
-        if (_otherEye == null)
+        Camera? camera = made.GetComponent<Camera>();
+        if (camera == null)
         {
             Object.Destroy(made);
-            return false;
+            return null;
         }
-        _otherEye.enabled = false;
+        camera.enabled = false;
         // A bare eye: no night vision, no thermal, none of a scope's lens.
         foreach (MonoBehaviour behaviour in made.GetComponents<MonoBehaviour>())
         {
@@ -57,84 +61,96 @@ internal static partial class NightVisionEyepieces
         }
         if (made.TryGetComponent(out PostProcessLayer layer))
             layer.computeAutoExposure = false;
-        return true;
+        _bareEyes[side] = camera;
+        return camera;
     }
 
-    // The bare eye's view this frame, from beside the camera as far as that eye is, with the camera's turn and view.
-    private static void RenderOtherEye(Camera main)
+    // Both eyes' views this frame, as the main camera is about to render.
+    private static void RenderBareEyes(Camera main)
     {
-        if (!MonocularBothEyes || !_device.Monocular || !EnsureOtherEye())
+        if (!BothEyesBare || !Active)
             return;
         SSAA? ssaa = main.GetComponent<SSAA>();
         int width = Mathf.Max(ssaa != null ? ssaa.GetInputWidth() : Screen.width, 1), height = Mathf.Max(ssaa != null ? ssaa.GetInputHeight() : Screen.height, 1);
-        if (_otherEyePicture == null || _otherEyePicture.width != width || _otherEyePicture.height != height)
-        {
-            if (_otherEyePicture != null)
-            {
-                _otherEyePicture.Release();
-                Object.Destroy(_otherEyePicture);
-            }
-            _otherEyePicture = new RenderTexture(width, height, 24, main.allowHDR ? RenderTextureFormat.ARGBHalf : RenderTextureFormat.ARGB32)
-            {
-                name = "Justachae other eye picture",
-                filterMode = FilterMode.Bilinear,
-            };
-            _otherEyePicture.Create();
-        }
-        Camera camera = _otherEye!;
-        camera.CopyFrom(main);
         Transform view = main.transform;
-        camera.transform.SetPositionAndRotation(view.position + view.right * _otherEyeAcross, view.rotation);
-        camera.rect = new Rect(0f, 0f, 1f, 1f);
-        camera.projectionMatrix = main.nonJitteredProjectionMatrix;
-        camera.targetTexture = _otherEyePicture;
-        try
+        // The head's middle: the camera is CameraPosition.Horizontal to its right.
+        Vector3 middle = view.position - view.right * CameraPosition.Horizontal;
+        for (int side = 0; side < 2; side++)
         {
-            camera.Render();
-            _otherEyeFrame = Time.frameCount;
-            if (!_otherEyeNoted)
+            Camera? camera = BareEye(side);
+            if (camera == null)
+                return;
+            RenderTexture? picture = _bareEyePictures[side];
+            if (picture == null || picture.width != width || picture.height != height)
             {
-                _otherEyeNoted = true;
-                NewCameraPlugin.Log?.LogInfo($"NVG experiment: the bare eye's view rendered {_otherEyeAcross * 1000f:F0} mm across from the camera ({width}x{height}), laid over the frame at {OtherEyeShare:P0}.");
+                if (picture != null)
+                {
+                    picture.Release();
+                    Object.Destroy(picture);
+                }
+                picture = new RenderTexture(width, height, 24, main.allowHDR ? RenderTextureFormat.ARGBHalf : RenderTextureFormat.ARGB32)
+                {
+                    name = "Justachae bare eye picture " + side,
+                    filterMode = FilterMode.Bilinear,
+                };
+                picture.Create();
+                _bareEyePictures[side] = picture;
+            }
+            camera.CopyFrom(main);
+            camera.transform.SetPositionAndRotation(middle + view.right * ((side == 0 ? -0.5f : 0.5f) * EyesApart), view.rotation);
+            camera.rect = new Rect(0f, 0f, 1f, 1f);
+            camera.projectionMatrix = main.nonJitteredProjectionMatrix;
+            camera.targetTexture = picture;
+            try
+            {
+                camera.Render();
+            }
+            catch (System.Exception e)
+            {
+                NewCameraPlugin.Log?.LogWarning("NVG experiment: an eye's view failed: " + e);
+                return;
+            }
+            finally
+            {
+                camera.ResetProjectionMatrix();
+                camera.targetTexture = null;
             }
         }
-        catch (System.Exception e)
+        _bareEyesFrame = Time.frameCount;
+        if (!_bareEyesNoted)
         {
-            NewCameraPlugin.Log?.LogWarning("NVG experiment: the bare eye's view failed: " + e);
-        }
-        finally
-        {
-            camera.ResetProjectionMatrix();
-            camera.targetTexture = null;
+            _bareEyesNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG experiment: the eyepieces stood down; both eyes' bare views rendered {EyesApart * 1000f:F0} mm apart about the head's middle ({CameraPosition.Horizontal * 1000f:F0} mm left of the camera), {width}x{height}, half each.");
         }
     }
 
-    // The frame (into) and the bare eye's view, each at half, when that view was made this frame.
-    private static void LayOtherEye(RenderTexture into)
+    // In place of the frame: the two eyes' views, half each. False when they were not made this frame.
+    private static bool LayBareEyes(RenderTexture into)
     {
-        if (_otherEyeFrame != Time.frameCount || _otherEyePicture == null || _tubeShader == null)
-            return;
+        if (_bareEyesFrame != Time.frameCount || _bareEyePictures[0] == null || _bareEyePictures[1] == null || _tubeShader == null)
+            return false;
         Material halves = _tubeMaterial ??= new Material(_tubeShader) { name = "Justachae NVG tube", hideFlags = HideFlags.DontSave };
-        RenderTexture seen = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
-        Graphics.Blit(into, seen);
-        halves.SetTexture(OtherId, _otherEyePicture);
-        halves.SetFloat(OtherShareId, OtherEyeShare);
-        Graphics.Blit(seen, into, halves, TubeHalvesPass);
+        halves.SetTexture(OtherId, _bareEyePictures[1]);
+        halves.SetFloat(OtherShareId, 0.5f);
+        Graphics.Blit(_bareEyePictures[0], into, halves, TubeHalvesPass);
         halves.SetTexture(OtherId, Texture2D.blackTexture);
-        RenderTexture.ReleaseTemporary(seen);
+        return true;
     }
 
     private static void ReleaseOtherEye()
     {
-        if (_otherEye != null)
-            Object.Destroy(_otherEye.gameObject);
-        _otherEye = null;
-        if (_otherEyePicture != null)
+        for (int side = 0; side < 2; side++)
         {
-            _otherEyePicture.Release();
-            Object.Destroy(_otherEyePicture);
+            if (_bareEyes[side] != null)
+                Object.Destroy(_bareEyes[side]!.gameObject);
+            _bareEyes[side] = null;
+            if (_bareEyePictures[side] != null)
+            {
+                _bareEyePictures[side]!.Release();
+                Object.Destroy(_bareEyePictures[side]);
+            }
+            _bareEyePictures[side] = null;
         }
-        _otherEyePicture = null;
-        _otherEyeNoted = false;
+        _bareEyesNoted = false;
     }
 }
