@@ -43,7 +43,8 @@ internal static class CameraPosition
         float u = 0.5f * (_side + 1f);
         float side = 2f * u * u * (3f - 2f * u) - 1f;
         float pose = Mathf.Lerp(Across, side * AimEye, Smooth(_aimed));
-        Horizontal = Mathf.Lerp(Across, side * AimEye, Smooth(_viewAimed));
+        // The experiment (TwoRenders.cs): at the right eye while the frame is rendered from each eye.
+        Horizontal = TwoRenders.EyeOverride ?? Mathf.Lerp(Across, side * AimEye, Smooth(_viewAimed));
         PoseAcross = pose - Horizontal;
     }
 

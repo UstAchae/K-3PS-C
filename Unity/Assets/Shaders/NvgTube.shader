@@ -29,5 +29,32 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 1: the frame and another (_Other: the left eye's, TwoRenders.cs), mixed by _OtherShare.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _Other;
+   float _OtherShare;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2D(_MainTex, i.uv);
+    c.rgb = lerp(c.rgb, tex2D(_Other, i.uv).rgb, _OtherShare);
+    return c;
+   }
+   ENDCG
+  }
+  // 2: a picture as it is, opaque (the experiment's probes, drawn over the frame).
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex;
+   float4 frag (v2f_img i) : SV_Target { return float4(tex2D(_MainTex, i.uv).rgb, 1); }
+   ENDCG
+  }
  }
 }

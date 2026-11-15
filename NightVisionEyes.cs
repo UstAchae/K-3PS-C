@@ -133,6 +133,8 @@ internal static partial class NightVisionEyepieces
         Vector3 right = view.right;
         Vector3 placeA = FromCamera(_lensNodes[CentreLensA], position).GetColumn(3), placeB = FromCamera(_lensNodes[CentreLensB], position).GetColumn(3);
         float a = Vector3.Dot(placeA, right), b = Vector3.Dot(placeB, right);
+        // The eyes for the experiment's two renders: behind the centre lenses, across from the head's middle.
+        TwoRenders.SeeLenses(Mathf.Min(a, b) + CameraPosition.Horizontal, Mathf.Max(a, b) + CameraPosition.Horizontal);
         // A monocular is before one eye only: over the other eye's half the device fades out toward the edge. Which eye, by where its lens
         // is from the head's middle, not from the camera: gone over to the aiming eye, the camera is right behind a lens before that eye.
         // This branch: no two eyes' halves, no monocular's fade; the lenses seen from the camera over the whole frame.

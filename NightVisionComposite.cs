@@ -162,6 +162,8 @@ internal static partial class NightVisionEyepieces
             if (focused != null)
                 RenderTexture.ReleaseTemporary(focused);
         }
+        // The experiment (TwoRenders.cs): the left eye's whole frame kept, or this eye's mixed with it.
+        TwoRenders.TakeEye(into, _tubeShader);
         if (lensed != null)
         {
             Fisheye.Blit(lensed, to);
