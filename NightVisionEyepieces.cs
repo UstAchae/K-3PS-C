@@ -373,6 +373,9 @@ internal static partial class NightVisionEyepieces
 
     internal static void Release()
     {
+        ShowDeviceAgain();
+        ClearDirect();
+        _direct = false;
         ReleaseShade();
         Active = false;
         ReleaseMount();
@@ -550,6 +553,8 @@ internal static partial class NightVisionEyepieces
                 _irLightShader = shader;
             else if (shader.name == "Justachae/Fisheye")
                 _fisheyeShader = shader;
+            else if (shader.name == "Justachae/NVG/Direct")
+                _directShader = shader;
             else if (shader.name == "Justachae/NVG/Objective")
                 _objectiveShader = shader;
             else if (shader.name == "Justachae/NVG/Defocus")

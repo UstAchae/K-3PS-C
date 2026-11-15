@@ -85,16 +85,27 @@ internal static partial class NightVisionEyepieces
         HideIrLaserLights(camera);
         if (_body != null)
             AdjustMount(camera);
+        // Once the device's mount is set for this frame: the camera has been placed by now. The device drawn into the
+        // main camera by this mod (NightVisionDirect.cs), its lenses left open, so the lenses' picture is made from the
+        // scene behind them; drawn with the eye at the origin, so it does not shake far out in a map.
+        _direct = _directShader != null && LensesOn(camera) && PrepareRelative(camera);
+        if (_direct)
+            HideDevice(camera);
     }
 
     internal static void OnCameraPostRender(Camera camera)
     {
+        if (camera == Camera.main)
+            ShowDeviceAgain();
     }
 
     // Just before the main camera renders, when its pose for the frame is final: each eye, moved apart as far as the
     // device has flipped down; or, with one camera, the lens map from the main camera (only once the filter is on).
     internal static void OnCameraPreRender(Camera camera)
     {
+        // Whatever comes of this frame, the last one's device is not drawn again, on whichever camera it hangs on.
+        if (camera == _directCamera)
+            ClearDirect();
         if (camera != Camera.main || _body == null || _binocularMaterial == null || _lensNodes.Length == 0)
             return;
         Material binocular = _binocularMaterial;
@@ -105,13 +116,15 @@ internal static partial class NightVisionEyepieces
             binocular.SetVector(TubeAxisIds[i], -_lensNodes[i].forward);
         binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((TubeField + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(TubeField * Mathf.Deg2Rad), 0f, 0f));
 
-        ShadeMain(camera, true);
+        ShadeMain(camera, !_direct);
+        if (!_direct)
+            ProbeStencil(camera);
         if (!LensesOn(camera))
             return;
 
-        // The lenses placed by the device's place in the world, as the game draws it (rounded as coarsely far out in a
-        // map), not by where it truly stands from the camera: the game draws the device on this branch, and the lenses'
-        // picture placed apart from it slid against it from frame to frame (NightVisionPrecise.cs, left unused).
+        // The device as it truly stands from the camera (NightVisionPrecise.cs).
+        if (!_direct)
+            PrepareRelative(camera);
         RenderLenses(camera, binocular, view, position);
     }
 
@@ -179,6 +192,9 @@ internal static partial class NightVisionEyepieces
             binocular.SetMatrix(EyeInvVpIds[side], inverse);
             binocular.SetVector(EyePosIds[side], new Vector4(eye.x, eye.y, eye.z, eyeBack));
         }
+        // Drawn from the camera itself (no eye moved apart, no halves): the same for the whole frame.
+        if (_direct)
+            DrawDirect(camera, leftShift, rightShift, split, new Vector4(0f, -1f, fade, 0f));
     }
     private const float RayFar = 2f;                               // m: the lines of sight's frame (only their direction counts)
     private static float RayNear => Mathf.Max(EyeNear, RayFar / 2e5f);
@@ -397,6 +413,7 @@ internal static partial class NightVisionEyepieces
 
     private static void ReleaseEyes()
     {
+        DropDirectTextures();
         for (int i = 0; i < 2; i++)
         {
             Drop(_lensMaps, i);

@@ -72,7 +72,7 @@ internal static partial class NightVisionEyepieces
             return;
         _shadeMaterial ??= new Material(_shadeShader) { name = "Justachae NVG eyecups sealed", hideFlags = HideFlags.DontSave };
         // An eye drawing the device itself has its places (NightVisionPrecise); the main camera works them out.
-        bool placed = false;
+        bool placed = _direct && _precise;
         if (keep >= 0.999f)
         {
             return;
