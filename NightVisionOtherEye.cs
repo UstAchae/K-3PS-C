@@ -298,6 +298,7 @@ internal static partial class NightVisionEyepieces
             return texture;
         }
         ScopeLensStep(camera, from);
+        DiagEyeLight();
         var seen = new RenderTexture[2];
         RenderTexture? fusedMade = null;
         for (int side = 0; side < 2; side++)
@@ -344,6 +345,42 @@ internal static partial class NightVisionEyepieces
         return true;
     }
     private static bool _apartNoted;
+
+    // TEMP DIAG: every few seconds, how bright each eye's lit frame is (the luminance below which a tenth, half, nine
+    // tenths of its pixels lie), and how much of it lay under the old floor (0.002) that made both eyes' frames the same.
+    private static int _diagLightAt;
+    private static void DiagEyeLight()
+    {
+        if (Time.frameCount < _diagLightAt)
+            return;
+        _diagLightAt = Time.frameCount + 300;
+        for (int side = 0; side < 2; side++)
+        {
+            RenderTexture? texture = _eyesLit[side];
+            if (texture == null)
+                continue;
+            string name = side == 0 ? "left" : "right";
+            UnityEngine.Rendering.AsyncGPUReadback.Request(texture, 0, TextureFormat.RGBAFloat, request =>
+            {
+                if (request.hasError)
+                    return;
+                Unity.Collections.NativeArray<float> data = request.GetData<float>();
+                int pixels = request.width * request.height, under = 0, step = 7, n = 0;
+                var lum = new System.Collections.Generic.List<float>(pixels / step + 1);
+                for (int p = 0; p < pixels; p += step)
+                {
+                    float y = 0.2126f * data[p * 4] + 0.7152f * data[p * 4 + 1] + 0.0722f * data[p * 4 + 2];
+                    lum.Add(y);
+                    if (y < 0.002f)
+                        under++;
+                    n++;
+                }
+                lum.Sort();
+                float At(float f) => lum.Count > 0 ? lum[Mathf.Clamp((int)(f * lum.Count), 0, lum.Count - 1)] : 0f;
+                NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {name} eye lit: 10% {At(0.1f):G3}, 50% {At(0.5f):G3}, 90% {At(0.9f):G3}; under 0.002: {100f * under / Mathf.Max(n, 1):F0}%");
+            });
+        }
+    }
 
     // TEMP PROBES (the user's, to see each eye's view): the left eye's alone in the lower left corner, the right's in the
     // lower right, a quarter of the frame across (before the game lays a sight's lens in).

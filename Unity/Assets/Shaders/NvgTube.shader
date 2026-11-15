@@ -85,7 +85,9 @@ Shader "Justachae/NVG/Tube" {
     float4 blend = tex2D(_MainTex, i.uv);
     float3 eye = tex2D(_EyePre, i.uv).rgb, other = tex2D(_OtherPre, i.uv).rgb;
     float3 mean = 0.5 * (eye + other);
-    float3 ratio = clamp((eye + 0.002) / (mean + 0.002), 0, 8);
+    // No fixed floor: a night scene's lit frame lies far below any (a floor of 0.002 made the ratio 1 there, and each
+    // eye kept the two eyes' frame half and half, both guns in it). Where the two are both black, black.
+    float3 ratio = mean > 1e-9 ? saturate(eye / max(mean, 1e-9) * 0.5) * 2 : float3(0, 0, 0);
     return float4(blend.rgb * ratio, blend.a);
    }
    ENDCG
