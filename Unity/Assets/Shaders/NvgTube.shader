@@ -166,5 +166,21 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 8: a gun's render (_MainTex, its alpha the gun's mask) with the sight's lens kept sharp: where _LensMask is, _Sharp.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _Sharp, _LensMask;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2D(_MainTex, i.uv);
+    if (tex2D(_LensMask, i.uv).r > 0.5)
+     c.rgb = tex2D(_Sharp, i.uv).rgb;
+    return c;
+   }
+   ENDCG
+  }
  }
 }

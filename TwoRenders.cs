@@ -259,6 +259,19 @@ internal static class TwoRenders
                     _maskBuffer.DrawRenderer(r, maskMaterial, s, GunMaskPass);
             }
         }
+        RenderTexture lensMask = Kept(ref _lensMask, gunMask.width, gunMask.height);
+        _maskBuffer.SetRenderTarget(lensMask);
+        _maskBuffer.ClearRenderTarget(false, true, Color.clear);
+        Renderer? sightLens = null;
+        try
+        {
+            sightLens = EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight?.LensRenderer;
+        }
+        catch
+        {
+        }
+        if (maskMaterial != null && sightLens != null && sightLens.enabled)
+            _maskBuffer.DrawRenderer(sightLens, maskMaterial, 0, GunMaskPass);
         main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _maskBuffer);
         _maskReady = maskMaterial != null;
         try
@@ -381,7 +394,9 @@ internal static class TwoRenders
     // From NewCameraPlugin.EndOfFrame.
     internal static void EndOfFrame() => HideGun(false);
 
-    private const int GunMaskPass = 7;   // NvgTube.shader
+    private const int GunMaskPass = 7, LensSharpPass = 8;   // NvgTube.shader
+    private static RenderTexture? _lensMask;
+    private static readonly int SharpId = Shader.PropertyToID("_Sharp"), LensMaskId = Shader.PropertyToID("_LensMask");
     private static RenderTexture? _gunMask;
     private static UnityEngine.Rendering.CommandBuffer? _maskBuffer;
     private static bool _maskReady;
@@ -433,7 +448,22 @@ internal static class TwoRenders
         {
             material.SetTexture(GunMaskId, _gunMask != null ? _gunMask : Texture2D.blackTexture);
             material.SetFloat(UseGunMaskId, _maskReady ? 1f : 0f);
-            Graphics.Blit(scene, Kept(ref _bareGun, scene, "Justachae bare eye's gun"), material, NearPass);
+            // Blurred as the goggle's objective blurs what is near (the user's, 2026-11-15), its sight's lens kept sharp.
+            RenderTexture? blurred = null;
+            Component? camera = Camera.main;
+            bool blur = camera != null && NightVisionEyepieces.BlurNear(camera, scene, ref blurred) && blurred != null;
+            RenderTexture bare = Kept(ref _bareGun, scene, "Justachae bare eye's gun");
+            Graphics.Blit(blur ? blurred! : scene, bare, material, NearPass);
+            if (blur)
+            {
+                RenderTexture sharpened = RenderTexture.GetTemporary(bare.width, bare.height, 0, bare.format);
+                material.SetTexture(SharpId, scene);
+                material.SetTexture(LensMaskId, _lensMask != null ? _lensMask : Texture2D.blackTexture);
+                Graphics.Blit(bare, sharpened, material, LensSharpPass);
+                Graphics.Blit(sharpened, bare);
+                RenderTexture.ReleaseTemporary(sharpened);
+                RenderTexture.ReleaseTemporary(blurred);
+            }
             _bareDone = Time.frameCount;
             return;
         }
