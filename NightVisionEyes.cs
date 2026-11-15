@@ -529,7 +529,9 @@ internal static partial class NightVisionEyepieces
             Matrix4x4 node = fromEye * FromCamera(_lensNodes[i], cameraPlace);
             Vector3 point = node.GetColumn(3), floor = node.MultiplyPoint3x4(_lensFloors[i]);
             // An eyepiece swung away on its pod: its lens no picture region any more (no size: nothing is inside it).
-            bool gone = PodGone(i - i % 2) >= 1f;
+            // (In the two-eye experiment no such judging: where the eyepiece stands and faces, as the tube's field from
+            // the eye says, is all there is to where its picture is.)
+            bool gone = !TwoEyesNow && PodGone(i - i % 2) >= 1f;
             _lensMapMaterial.SetVector(LensIds4[i], new Vector4(point.x, point.y, point.z, gone ? -1f : _lensFloors[i].w * scale));
             // TEMP DIAG: where each lens is from this eye, and its pod's angle, as a pod comes up.
             if (i % 2 == 0 && TwoEyesNow && Time.frameCount >= _diagLensAt)
@@ -569,7 +571,7 @@ internal static partial class NightVisionEyepieces
         {
             // An eyepiece swung away on its pod, its tube off: no lens to look into there, only the device. With its card
             // still drawn, the composite and the device drawn into the main camera left a lens-shaped hole in it.
-            if (PodGone(centre) >= 1f)
+            if (!TwoEyesNow && PodGone(centre) >= 1f)
                 continue;
             Transform a = _lensNodes[centre], b = _lensNodes[centre + 1];
             Vector3 normal = (a.forward + b.forward).normalized;

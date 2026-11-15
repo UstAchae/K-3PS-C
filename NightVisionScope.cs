@@ -86,6 +86,7 @@ internal static partial class NightVisionEyepieces
     // A monocular before the other eye: the aiming eye looks through the sight bare, as without the goggle. Taken for the goggle's, the
     // sight's beam missed its objective altogether and the sight was black.
     private static bool _diagThrough, _diagBare;
+    internal static string PodAnglesNow => $"{PodAngle(CentreLensA):F0}/{(_lensPods.Length > CentreLensB ? PodAngle(CentreLensB) : 0f):F0} deg";
     private const float BeforeEyeWithin = 0.03f;   // m across, half the way to the other eye
 
     private static bool GoggleBeforeAimingEye(Vector3 cameraPlace, Quaternion cameraTurn)

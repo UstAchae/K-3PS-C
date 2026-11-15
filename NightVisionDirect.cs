@@ -96,7 +96,7 @@ internal static partial class NightVisionEyepieces
     private static bool _direct;
     private const int InsertPass = 0, SurfacePass = 1, EvenPass = 2, MotionPass = 3, StencilBitsPass = 4, PlacesPass = 12, LensOpenPass = 14,
         SplitPass = 15, HalvesPass = 16, SourcePass = 17, AimRegionPass = 18;
-    private static readonly RenderTexture?[] _aimRegion = new RenderTexture?[1];
+    internal static readonly RenderTexture?[] _aimRegion = new RenderTexture?[1];
     // Each eye's own eyepiece's picture region (the left's, the right's), for the final blend (NvgTube pass 1).
     private static readonly RenderTexture?[] _eyeRegions = new RenderTexture?[2];
     private static readonly int EyeRegionLId = Shader.PropertyToID("_EyeRegionL"), EyeRegionRId = Shader.PropertyToID("_EyeRegionR");

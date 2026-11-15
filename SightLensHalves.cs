@@ -96,7 +96,10 @@ internal static class SightLensHalves
             _diagRegion = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBHalf) { hideFlags = HideFlags.DontSave };
         }
         buffer.Blit(frame, _diagFinal);
-        buffer.Blit(Shader.PropertyToID("_AimLensRegion"), _diagRegion);
+        RenderTexture? region = NightVisionEyepieces._aimRegion[0];
+        if (region == null)
+            return;
+        buffer.Blit(region, _diagRegion);
         float[]? fin = null, reg = null;
         void All()
         {
@@ -115,7 +118,7 @@ internal static class SightLensHalves
                 if (reg[p * 4] > 0.5f)
                     covered++;
             }
-            NewCameraPlugin.Log?.LogInfo($"Sight lens DIAG after the eyes' lens pass: at the lens's {changed} pixels, mean light {(changed > 0 ? after / changed : 0):G3}; the aiming eye's eyepiece region over {covered} of them");
+            NewCameraPlugin.Log?.LogInfo($"Sight lens DIAG after the eyes' lens pass: at the lens's {changed} pixels, mean light {(changed > 0 ? after / changed : 0):G3}; the aiming eye's eyepiece region over {covered} of them; pods {NightVisionEyepieces.PodAnglesNow}");
         }
         buffer.RequestAsyncReadback(_diagFinal, 0, TextureFormat.RGBAFloat, r => { if (!r.hasError) { fin = r.GetData<float>().ToArray(); All(); } });
         buffer.RequestAsyncReadback(_diagRegion, 0, TextureFormat.RGBAFloat, r => { if (!r.hasError) { reg = r.GetData<float>().ToArray(); All(); } });
