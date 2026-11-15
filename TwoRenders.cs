@@ -86,13 +86,44 @@ internal static class TwoRenders
         if (_hooked)
             return;
         _hooked = true;
-        Application.onBeforeRender += RenderLeftEye;
+        Application.onBeforeRender += BeforeRender;
+        Camera.onPostRender += AfterOptic;
+    }
+
+    // A sight's camera at work this frame: the bare eye rendered once it has (its picture is what the game lays on the
+    // sight's lens; rendered before it, the lens showed nothing but the reticle). Otherwise as rendering begins.
+    private static int _bareFrame = -1;
+
+    private static bool OpticAtWork()
+    {
+        try
+        {
+            Camera? optic = EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.Camera;
+            return optic != null && optic.isActiveAndEnabled;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void BeforeRender()
+    {
+        if (!OpticAtWork())
+            RenderLeftEye();
+    }
+
+    private static void AfterOptic(Camera camera)
+    {
+        if (!_pass && OpticPicture.IsCamera(camera))
+            RenderLeftEye();
     }
 
     private static void RenderLeftEye()
     {
-        if (!Now)
+        if (!Now || _bareFrame == Time.frameCount)
             return;
+        _bareFrame = Time.frameCount;
         Camera? main = Camera.main;
         if (main == null || !main.isActiveAndEnabled)
             return;
