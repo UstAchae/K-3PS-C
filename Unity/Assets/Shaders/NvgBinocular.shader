@@ -36,7 +36,8 @@ Shader "Justachae/NVG/Binocular" {
      float3 lit = tex2D(_Glow, i.uv).rgb * _Lamp.y;
      float3 seenL = eyeL.rgb * (1 - saturate(coverL * _LensClear + (1 - _LensClear) * darkL)) + lightL.rgb * _Lamp.x + lit * (1 - lightL.w) + (1 - saturate(eyeL.a)) * (1 - coverL) * scene.rgb;
      float3 seenR = eyeR.rgb * (1 - saturate(coverR * _LensClear + (1 - _LensClear) * darkR)) + lightR.rgb * _Lamp.x + lit * (1 - lightR.w) + (1 - saturate(eyeR.a)) * (1 - coverR) * scene.rgb;
-     return float4(lerp(seenL, seenR, _EyeMix), scene.a);
+     // The right eye's share growing across the frame: the left eye's all at the left edge, half each in the middle.
+     return float4(lerp(seenL, seenR, saturate(i.uv.x)), scene.a);
     }
     float4 eye; float4 light; float cover, dark;
     eyeAt(i.uv, eye, light, cover, dark);

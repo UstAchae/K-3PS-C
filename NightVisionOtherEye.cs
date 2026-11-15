@@ -22,7 +22,9 @@ internal static partial class NightVisionEyepieces
         // from the camera alone (a sight's picture, a red dot's reticle, laid in at its upscaler) is that eye's. Until
         // the eyes are known, where it is set.
         float? aimingEye = CameraPosition.EyesOverride is Vector2 eyes ? (CameraPosition.AimSide >= 0f ? eyes.y : eyes.x) : (float?)null;
-        CameraPosition.EyeOverride = ExperimentOn ? aimingEye ?? CameraPosition.Across : (float?)null;
+        // Over to it as the device comes down, back as it goes up, with the eyes (NightVisionEyes.RenderLenses).
+        float apart = Mathf.SmoothStep(0f, 1f, _split);
+        CameraPosition.EyeOverride = ExperimentOn ? Mathf.Lerp(CameraPosition.Across, aimingEye ?? CameraPosition.Across, apart) : (float?)null;
         if (!ExperimentOn)
             CameraPosition.EyesOverride = null;
         if (ExperimentOn && !_experimentNoted)

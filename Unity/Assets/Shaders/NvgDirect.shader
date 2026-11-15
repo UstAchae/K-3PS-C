@@ -17,7 +17,9 @@ Shader "Justachae/NVG/Direct" {
  // Where each eye's nearest is the player's own (the gun, the arms: pass 13 on that eye's depth), not the device.
  sampler2D _DirectNearL, _DirectNearR;
  float toRightAt (float x) {
-  return _DirectMix >= 0 ? _DirectMix : smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, x);
+  // The experiment: the right eye's share growing across the frame, none at its left edge, all at its right (half in the
+  // middle).
+  return _DirectMix >= 0 ? saturate(x) : smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, x);
  }
  float4x4 _EyeInvVP0, _EyeInvVP1;
  float4 _TubeField, _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;
@@ -96,18 +98,19 @@ Shader "Justachae/NVG/Direct" {
   // the lens's picture (the composite), unless its gun or arm is what it sees there, before the lens's view; the frame is
   // the others', each with its device (or gun) if it has it here, half each, or the scene.
   if (_DirectMix >= 0) {
+   float m = saturate(uv.x);
    bool l = !(within(_DirectLens0, uv, _EyeInvVP0) && tex2Dlod(_DirectNearL, float4(uv, 0, 0)).r < 0.5);
    bool r = !(within(_DirectLens1, uv, _EyeInvVP1) && tex2Dlod(_DirectNearR, float4(uv, 0, 0)).r < 0.5);
    bool sl = l && shown(rawL), sr = r && shown(rawR);
    if (l && r) {
-    if (sl && sr) { toRight = _DirectMix; return 1; }
-    if (sl) { toRight = 0; return 1 - _DirectMix; }
-    if (sr) { toRight = 1; return _DirectMix; }
-    toRight = _DirectMix; return 0;
+    if (sl && sr) { toRight = m; return 1; }
+    if (sl) { toRight = 0; return 1 - m; }
+    if (sr) { toRight = 1; return m; }
+    toRight = m; return 0;
    }
    if (l) { toRight = 0; return sl ? 1 : 0; }
    if (r) { toRight = 1; return sr ? 1 : 0; }
-   toRight = _DirectMix; return 0;
+   toRight = m; return 0;
   }
   float t = toRightAt(uv.x);
   toRight = t;

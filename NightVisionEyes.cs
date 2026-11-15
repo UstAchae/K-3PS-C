@@ -285,8 +285,10 @@ internal static partial class NightVisionEyepieces
                 leftAcross = Mathf.Min(cupA, other);
                 rightAcross = Mathf.Max(cupA, other);
             }
-            leftShift = right * leftAcross;
-            rightShift = right * rightAcross;
+            // As the device comes down, the eyes go out from the head's middle to their eyepieces (back in as it goes up).
+            float apart = Mathf.SmoothStep(0f, 1f, _split);
+            leftShift = right * Mathf.Lerp(middle, leftAcross, apart);
+            rightShift = right * Mathf.Lerp(middle, rightAcross, apart);
             CameraPosition.EyesOverride = new Vector2(leftAcross - middle, rightAcross - middle);
             if (!_mixedNoted)
             {
