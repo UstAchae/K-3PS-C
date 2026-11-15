@@ -307,7 +307,11 @@ internal static partial class NightVisionEyepieces
             eyes.SetTexture(OtherPreId, _eyesLit[1 - side]);
             Graphics.Blit(from, own, eyes, EyeFromBlendPass);
             RenderTexture? made = null, tubed = null, focused = null, dimmed = null;
-            Texture picture = LensPicture(camera, ThroughObjective(camera, ForTube(own, ref tubed), ref focused), ref made);
+            // The non-aiming eye's picture without the objective's near blur: that goes by the depth, which holds the
+            // aiming eye's gun as well, and blurred its shape into this eye's picture.
+            bool aiming = side == (CameraPosition.AimSide >= 0f ? 1 : 0);
+            RenderTexture tube = ForTube(own, ref tubed);
+            Texture picture = LensPicture(camera, aiming ? ThroughObjective(camera, tube, ref focused) : tube, ref made);
             picture = EaseGrain(picture, ref made);
             picture = TubesGain(picture, ref dimmed);
             ReleaseMask();

@@ -499,11 +499,13 @@ Shader "Justachae/NVG/Direct" {
    #pragma vertex vert
    #pragma fragment frag
    #pragma target 3.5
-   float _DirectHalf;
+   float _DirectHalf, _DirectOpenBoth;
    struct cleared { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; float4 g3 : SV_Target3; float depth : SV_Depth; };
    cleared frag (v2f i) {
     float2 uv = i.screen.xy / i.screen.w;
-    bool inLens = _DirectHalf < 0.5 ? within(_DirectLens0, uv, _EyeInvVP0) : within(_DirectLens1, uv, _EyeInvVP1);
+    // Its own lens; with _DirectOpenBoth, either (the non-aiming eye's gun and arms, never in an eyepiece).
+    bool inLens = _DirectOpenBoth > 0.5 ? within(_DirectLens0, uv, _EyeInvVP0) || within(_DirectLens1, uv, _EyeInvVP1)
+        : _DirectHalf < 0.5 ? within(_DirectLens0, uv, _EyeInvVP0) : within(_DirectLens1, uv, _EyeInvVP1);
     if (!inLens)
      discard;
     cleared o;

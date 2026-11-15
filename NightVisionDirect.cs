@@ -101,6 +101,7 @@ internal static partial class NightVisionEyepieces
     internal static readonly RenderTexture?[] _eyesLit = new RenderTexture?[2];
     internal static int _eyesLitFrame = -100;
     private static readonly int OtherTexId = Shader.PropertyToID("_Other");
+    private static readonly int DirectOpenBothId = Shader.PropertyToID("_DirectOpenBoth");
     private static readonly int ShadeLeftCupId = Shader.PropertyToID("_ShadeLeftCup");
     private static readonly List<Renderer> _slotRenderers = new List<Renderer>();
     private static readonly List<(Renderer renderer, ShadowCastingMode casting)> _hidden = new List<(Renderer, ShadowCastingMode)>();
@@ -519,6 +520,14 @@ internal static partial class NightVisionEyepieces
                             continue;
                         buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, piece.Materials[s], s, piece.Passes[s], _pieceBlock);
                     }
+                }
+                // The experiment: the non-aiming eye's gun and arms taken out again within either eyepiece (they are
+                // never in one, nor in what its picture is made from).
+                if (stage == 1 && DirectMix >= 0f && half == (CameraPosition.AimSide >= 0f ? 0 : 1))
+                {
+                    buffer.SetGlobalFloat(DirectOpenBothId, 1f);
+                    buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, LensOpenPass);
+                    buffer.SetGlobalFloat(DirectOpenBothId, 0f);
                 }
             }
             for (int t = 0; t < 4; t++)
