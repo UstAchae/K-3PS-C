@@ -99,9 +99,12 @@ Shader "Justachae/NVG/Direct" {
   // the others', each with its device (or gun) if it has it here, half each, or the scene.
   if (_DirectMix >= 0) {
    float m = saturate(uv.x);
-   bool l = !(within(_DirectLens0, uv, _EyeInvVP0) && tex2Dlod(_DirectNearL, float4(uv, 0, 0)).r < 0.5);
-   bool r = !(within(_DirectLens1, uv, _EyeInvVP1) && tex2Dlod(_DirectNearR, float4(uv, 0, 0)).r < 0.5);
-   bool sl = l && shown(rawL), sr = r && shown(rawR);
+   bool nearL = tex2Dlod(_DirectNearL, float4(uv, 0, 0)).r >= 0.5, nearR = tex2Dlod(_DirectNearR, float4(uv, 0, 0)).r >= 0.5;
+   bool l = !(within(_DirectLens0, uv, _EyeInvVP0) && !nearL);
+   bool r = !(within(_DirectLens1, uv, _EyeInvVP1) && !nearR);
+   // Where one eye looks into its lens, the other's device is not seen there (the bright picture wins over the dark
+   // housing, as the two eyes' views are seen as one); its gun or arm still is.
+   bool sl = l && shown(rawL) && (r || nearL), sr = r && shown(rawR) && (l || nearR);
    if (l && r) {
     if (sl && sr) { toRight = m; return 1; }
     if (sl) { toRight = 0; return 1 - m; }

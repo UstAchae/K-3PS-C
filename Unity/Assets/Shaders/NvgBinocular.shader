@@ -15,6 +15,17 @@ Shader "Justachae/NVG/Binocular" {
  Properties { _MainTex ("scene", 2D) = "black" {} }
  CGINCLUDE
  #include "NvgEyes.cginc"
+ // The experiment: each eye's own drawing of the device (NvgDirect.shader), and where its nearest is the player's own.
+ UNITY_DECLARE_DEPTH_TEXTURE(_DirectLD);
+ UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
+ sampler2D _DirectNearL, _DirectNearR;
+ bool deviceAt (float raw, float near) {
+  #if defined(UNITY_REVERSED_Z)
+  return raw > 0 && near < 0.5;
+  #else
+  return raw < 1 && near < 0.5;
+  #endif
+ }
  ENDCG
  SubShader {
   Cull Off ZWrite Off ZTest Always
@@ -37,7 +48,17 @@ Shader "Justachae/NVG/Binocular" {
      float3 seenL = eyeL.rgb * (1 - saturate(coverL * _LensClear + (1 - _LensClear) * darkL)) + lightL.rgb * _Lamp.x + lit * (1 - lightL.w) + (1 - saturate(eyeL.a)) * (1 - coverL) * scene.rgb;
      float3 seenR = eyeR.rgb * (1 - saturate(coverR * _LensClear + (1 - _LensClear) * darkR)) + lightR.rgb * _Lamp.x + lit * (1 - lightR.w) + (1 - saturate(eyeR.a)) * (1 - coverR) * scene.rgb;
      // The right eye's share growing across the frame: the left eye's all at the left edge, half each in the middle.
-     return float4(lerp(seenL, seenR, saturate(i.uv.x)), scene.a);
+     // Where one eye sees its lens and the other only its device's housing there, the lens's picture is seen whole:
+     // the bright picture wins over the dark housing, as the two views are seen as one.
+     float share = saturate(i.uv.x);
+     bool lensL = lightL.w > 0.01, lensR = lightR.w > 0.01;
+     bool deviceL = deviceAt(SAMPLE_DEPTH_TEXTURE(_DirectLD, i.uv), tex2D(_DirectNearL, i.uv).r);
+     bool deviceR = deviceAt(SAMPLE_DEPTH_TEXTURE(_DirectRD, i.uv), tex2D(_DirectNearR, i.uv).r);
+     if (lensL && !lensR && deviceR)
+      share = 0;
+     else if (lensR && !lensL && deviceL)
+      share = 1;
+     return float4(lerp(seenL, seenR, share), scene.a);
     }
     float4 eye; float4 light; float cover, dark;
     eyeAt(i.uv, eye, light, cover, dark);
