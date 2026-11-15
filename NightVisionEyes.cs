@@ -268,15 +268,31 @@ internal static partial class NightVisionEyepieces
         // ...and the eye left taking the frame over, its half widening past the far edge.
         if (monocular < 0 && going > 0f)
             split = Mathf.Lerp(split, loneSide == 0 ? 1f + Overscan : -Overscan, going);
-        // The experiment (NightVisionOtherEye.cs): the whole frame rendered once from each eye, the camera that eye; the
-        // device and its lenses from the camera itself, the same for the whole frame.
-        if (ExperimentOn)
+        // The experiment (NightVisionOtherEye.cs): the scene rendered once, the device, the arms and the gun drawn into it
+        // from each eye, each eye's lenses mapped from it, the two laid over the whole frame half each. Each eye straight
+        // behind its own eyepiece, across (the middle of its picture across); a monocular's bare eye as far the other side
+        // of the head's middle.
+        bool mixed = ExperimentOn;
+        if (mixed)
         {
-            leftShift = rightShift = Vector3.zero;
-            split = 0.5f;
+            float leftAcross = a <= b ? a : b, rightAcross = a <= b ? b : a;
+            if (_device.Monocular)
+            {
+                float middle = -CameraPosition.Horizontal;   // the head's middle, across from the camera
+                float other = 2f * middle - a;
+                leftAcross = Mathf.Min(a, other);
+                rightAcross = Mathf.Max(a, other);
+            }
+            leftShift = right * leftAcross;
+            rightShift = right * rightAcross;
+            if (!_mixedNoted)
+            {
+                _mixedNoted = true;
+                NewCameraPlugin.Log?.LogInfo($"NVG experiment: the eyes behind the eyepieces, {leftAcross * 1000f:F0} and {rightAcross * 1000f:F0} mm across from the camera.");
+            }
         }
-        binocular.SetFloat(EyeMixId, -1f);
-        DirectMix = -1f;
+        binocular.SetFloat(EyeMixId, mixed ? 0.5f : -1f);
+        DirectMix = mixed ? 0.5f : -1f;
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
@@ -310,7 +326,6 @@ internal static partial class NightVisionEyepieces
             binocular.SetMatrix(EyeInvVpIds[side], inverse);
             binocular.SetVector(EyePosIds[side], new Vector4(eye.x, eye.y, eye.z, eyeBack));
         }
-        DiagExperimentEye(camera, position);
         if (_direct)
             DrawDirect(camera, leftShift, rightShift, split, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
         FusionField(camera, a <= b ? CentreLensB : CentreLensA, position + rightShift);
@@ -337,7 +352,7 @@ internal static partial class NightVisionEyepieces
         }
         return shift + lens.forward * ((least - along) * Mathf.Clamp01(_split));
     }
-    private static bool _eyeHeldNoted;
+    private static bool _eyeHeldNoted, _mixedNoted;
 
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
     // The eyepiece's own glass (its rim, as the lens node stands), projected from where this file puts the eye: the

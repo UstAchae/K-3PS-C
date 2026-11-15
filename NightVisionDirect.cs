@@ -124,6 +124,8 @@ internal static partial class NightVisionEyepieces
             });
         }
         HideTwins();
+        if (ExperimentOn)
+            AddNearPieces(camera);
     }
 
     // Another copy of the same model on the player, outside the device's own slot: left to itself it was seen beside the device
