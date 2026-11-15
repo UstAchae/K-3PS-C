@@ -102,6 +102,58 @@ internal static partial class NightVisionEyepieces
         RenderTexture.ReleaseTemporary(seen);
     }
 
+    // TEMP DIAG: a while after the experiment starts, for each of the frame's two renders: where each lens is from the
+    // camera (across, up, ahead; mm) and off its axis, the tubes' power, and how much of each lens map has light.
+    private static int _diagFrame = -1, _diagStart = -1;
+    private static void DiagExperimentEye(Camera camera, Vector3 position)
+    {
+        if (!ExperimentOn)
+        {
+            _diagStart = -1;
+            return;
+        }
+        if (_diagStart < 0)
+            _diagStart = Time.frameCount;
+        if (_diagFrame >= 0 && Time.frameCount > _diagFrame || Time.frameCount < _diagStart + 120)
+            return;
+        _diagFrame = Time.frameCount;
+        string pass = _otherEyePass ? "left render" : "right render";
+        Transform view = camera.transform;
+        var lenses = new System.Collections.Generic.List<string>();
+        for (int i = 0; i < _lensNodes.Length; i += 2)
+        {
+            Vector3 to = _lensNodes[i].position - position;
+            Vector3 axis = -_lensNodes[i].forward;
+            float along = Vector3.Dot(to, axis);
+            float off = (to - axis * along).magnitude;
+            lenses.Add($"lens {i}: across {Vector3.Dot(to, view.right) * 1000f:F0} up {Vector3.Dot(to, view.up) * 1000f:F0} ahead {Vector3.Dot(to, view.forward) * 1000f:F0}, {off * 1000f:F0} mm off its axis");
+        }
+        NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {pass}: camera across {CameraPosition.Horizontal * 1000f:F0} mm (+{OtherEyeOffset(view.rotation).magnitude * 1000f:F0}), active {Active}, power {_power[0]:F2}/{_power[2]:F2}, direct {_direct}; {string.Join("; ", lenses)}");
+        for (int side = 0; side < 2; side++)
+        {
+            RenderTexture? map = _lensMaps[side];
+            if (map == null)
+                continue;
+            string what = $"{pass} lens map {side}";
+            UnityEngine.Rendering.AsyncGPUReadback.Request(map, 0, TextureFormat.RGBA32, request =>
+            {
+                if (request.hasError)
+                {
+                    NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {what}: readback failed");
+                    return;
+                }
+                Unity.Collections.NativeArray<Color32> data = request.GetData<Color32>();
+                int lit = 0;
+                foreach (Color32 c in data)
+                {
+                    if (c.r > 0 || c.g > 0 || c.b > 0 || c.a > 0)
+                        lit++;
+                }
+                NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {what}: {100f * lit / Mathf.Max(data.Length, 1):F2}% lit");
+            });
+        }
+    }
+
     private static void ReleaseOtherEye()
     {
         CameraPosition.EyeOverride = null;

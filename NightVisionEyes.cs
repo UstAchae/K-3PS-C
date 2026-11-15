@@ -309,6 +309,7 @@ internal static partial class NightVisionEyepieces
             binocular.SetMatrix(EyeInvVpIds[side], inverse);
             binocular.SetVector(EyePosIds[side], new Vector4(eye.x, eye.y, eye.z, eyeBack));
         }
+        DiagExperimentEye(camera, position);
         if (_direct)
             DrawDirect(camera, leftShift, rightShift, split, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
         FusionField(camera, a <= b ? CentreLensB : CentreLensA, position + rightShift);
