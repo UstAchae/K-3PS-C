@@ -15,6 +15,8 @@ internal static class SightAtBareEye
 {
     private static readonly MethodInfo? BeginSampleMethod = AccessTools.Method(typeof(CommandBuffer), nameof(CommandBuffer.BeginSample), new[] { typeof(string) });
     private static readonly MethodInfo? EndSampleMethod = AccessTools.Method(typeof(CommandBuffer), nameof(CommandBuffer.EndSample), new[] { typeof(string) });
+    private static readonly AccessTools.FieldRef<SSAAPropagator, RenderTexture[]> HdrTargets =
+        AccessTools.FieldRefAccess<SSAAPropagator, RenderTexture[]>("_resampledColorTargetHDR");
     private static readonly AccessTools.FieldRef<SSAAPropagator, Camera> CameraOf = AccessTools.FieldRefAccess<SSAAPropagator, Camera>("_camera");
     private static readonly int CameraPlaceId = Shader.PropertyToID("_WorldSpaceCameraPos");
     private const string OpticPart = "OutputOptic";
@@ -66,6 +68,10 @@ internal static class SightAtBareEye
         if (camera == null || !TwoRenders.SightFromBareEye(camera.transform.rotation, out Vector3 shift))
             return;
         Vector3 eye = camera.transform.position + shift;
+        // The frame as it is before the lens is laid in: where it differs after is the lens, the gun's (TwoRenders.cs).
+        RenderTexture[]? targets = HdrTargets(propagator);
+        if (targets != null && targets.Length > 0 && targets[0] != null)
+            buffer.Blit(targets[0], TwoRenders.PreLensFor(targets[0]));
         buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix * Matrix4x4.Translate(-shift), camera.nonJitteredProjectionMatrix);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(eye.x, eye.y, eye.z, 1f));
         _moved = true;

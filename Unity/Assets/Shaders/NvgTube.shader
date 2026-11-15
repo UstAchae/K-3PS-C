@@ -305,10 +305,15 @@ Shader "Justachae/NVG/Tube" {
     float2 p = floor(uv * _DirectGD_TexelSize.zw);
     return fmod(p.x + p.y, 2) < 0.5;
    }
+   sampler2D _PreLens;
    float4 frag (v2f_img i) : SV_Target {
+    float3 own = tex2D(_MainTex, i.uv).rgb;
+    // The sight's lens laid in (it differs from the frame before it): the gun's.
+    float3 laid = abs(own - tex2D(_PreLens, i.uv).rgb);
+    if (max(laid.r, max(laid.g, laid.b)) > 1e-4)
+     return float4(own, 1);
     if (!gunAt(i.uv))
      return 0;
-    float3 own = tex2D(_MainTex, i.uv).rgb;
     if (gunPixel(i.uv))
      return float4(own, 1);
     float2 d = 1.0 / _DirectGD_TexelSize.zw;

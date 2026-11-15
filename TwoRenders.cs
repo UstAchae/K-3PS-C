@@ -125,7 +125,16 @@ internal static class TwoRenders
     // The bare eye's gun kept out of the eyepieces' picture, laid over it after (no night vision, no blur on it).
     internal static bool GunKeptApart => DrawnIntoFrame;
     private const int GunOutPass = 9, GunAlonePass = 10;   // NvgTube.shader
-    private static RenderTexture? _gunApart;
+    private static RenderTexture? _gunApart, _preLens;
+    private static int _preLensFrame = -1;
+    private static readonly int PreLensId = Shader.PropertyToID("_PreLens");
+
+    // For SightAtBareEye: where the frame from before the lens is kept, this frame.
+    internal static RenderTexture PreLensFor(RenderTexture frame)
+    {
+        _preLensFrame = Time.frameCount;
+        return Kept(ref _preLens, frame, "Justachae frame before the lens");
+    }
     private static int _gunApartFrame = -1;
     private static readonly int DirectGunDepthId = Shader.PropertyToID("_DirectGD");
 
@@ -534,10 +543,14 @@ internal static class TwoRenders
         _gunApartFrame = -1;
         if (GunKeptApart && !_pass && Now && _shareBare > 0.001f && _gunsFrame == Time.frameCount && Shader.GetGlobalTexture(DirectGunDepthId) != null)
         {
+            // The sight's lens laid in this frame from the bare eye (SightAtBareEye.cs): the frame from before it, where
+            // it differs the lens, the gun's too.
+            bool lens = _preLensFrame == Time.frameCount && _preLens != null && _preLens.width == scene.width && _preLens.height == scene.height;
+            material.SetTexture(PreLensId, lens ? _preLens : scene);
             RenderTexture gunAlone = Kept(ref _gunApart, scene, "Justachae bare eye's gun apart");
             Graphics.Blit(scene, gunAlone, material, GunAlonePass);
             RenderTexture without = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
-            Graphics.Blit(scene, without, material, GunOutPass);
+            Graphics.Blit(lens ? _preLens : scene, without, material, GunOutPass);
             Graphics.Blit(without, scene);
             RenderTexture.ReleaseTemporary(without);
             _gunApartFrame = Time.frameCount;
