@@ -122,6 +122,12 @@ internal static class TwoRenders
     // From NightVisionEyes.RenderLenses in the goggle eye's own render: its lens across from the head's middle.
     // The bare eye's gun drawn into the frame (the user's, 2026-11-15) rather than rendered by the camera again.
     internal static bool DrawnIntoFrame = true;
+    // The bare eye's gun kept out of the eyepieces' picture, laid over it after (no night vision, no blur on it).
+    internal static bool GunKeptApart => DrawnIntoFrame;
+    private const int GunOutPass = 9, GunAlonePass = 10;   // NvgTube.shader
+    private static RenderTexture? _gunApart;
+    private static int _gunApartFrame = -1;
+    private static readonly int DirectGunDepthId = Shader.PropertyToID("_DirectGD");
 
     // For NightVisionDirect.DrawDirect: the bare eye's gun to draw this frame, from where that eye is (along the world's
     // axes, from the camera), and how much of it is seen.
@@ -523,6 +529,20 @@ internal static class TwoRenders
         Material? material = MaterialFor(tubeShader);
         if (material == null)
             return;
+        // The bare eye's gun drawn into the frame: taken out of it here (the eyepieces' picture is the goggle eye's,
+        // which does not see it), and laid back over it once the eyepieces are done (TakeEye).
+        _gunApartFrame = -1;
+        if (GunKeptApart && !_pass && Now && _shareBare > 0.001f && _gunsFrame == Time.frameCount && Shader.GetGlobalTexture(DirectGunDepthId) != null)
+        {
+            RenderTexture gunAlone = Kept(ref _gunApart, scene, "Justachae bare eye's gun apart");
+            Graphics.Blit(scene, gunAlone, material, GunAlonePass);
+            RenderTexture without = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
+            Graphics.Blit(scene, without, material, GunOutPass);
+            Graphics.Blit(without, scene);
+            RenderTexture.ReleaseTemporary(without);
+            _gunApartFrame = Time.frameCount;
+            return;
+        }
         material.SetFloat(NearReachId, NearReach);
         if (_gun == GunPass.Bare)
         {
@@ -604,6 +624,18 @@ internal static class TwoRenders
         {
             Shader.SetGlobalTexture(CameraDepthId, _ownDepth);
             _ownDepth = null;
+        }
+        if (_gunApartFrame == Time.frameCount && _gunApart != null && MaterialFor(tubeShader) is Material laying)
+        {
+            _gunApartFrame = -1;
+            RenderTexture frame = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
+            Graphics.Blit(into, frame);
+            laying.SetTexture(OtherId, _gunApart);
+            laying.SetFloat(OtherShareId, GunOpacity * _shareBare);
+            laying.SetFloat(DeviceReachId, 0f);
+            Graphics.Blit(frame, into, laying, HalvesPass);
+            RenderTexture.ReleaseTemporary(frame);
+            return;
         }
         Material? material = MaterialFor(tubeShader);
         if (material == null || _pass || !Now || !_gunHidden || _bareGun == null || _bareDone != Time.frameCount)

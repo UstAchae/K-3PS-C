@@ -551,7 +551,9 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalTexture(DirectLitNow, DirectLitNow);
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, EvenPass);
-        if (gun)
+        // Kept apart to the eyepieces' stage, where the gun is laid over their picture (TwoRenders.cs): evened here,
+        // it went into the goggle's picture too.
+        if (gun && !TwoRenders.GunKeptApart)
         {
             buffer.Blit(BuiltinRenderTextureType.CameraTarget, DirectLitNow);
             buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);

@@ -182,5 +182,148 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 9: the frame without the bare eye's gun (TwoRenders.cs): where it is, its chessboard's other pixels (what lies behind)
+  // in place of its own, for the eyepieces' picture (the goggle's eye does not see it).
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   UNITY_DECLARE_DEPTH_TEXTURE(_DirectGD);
+   float4 _DirectGD_TexelSize;
+   float4 _DirectPlanes;
+   sampler2D _MainTex;
+   float4 _MainTex_TexelSize;
+   // As NvgDirect.shader has them: the gun's own depth into the main camera's.
+   float inverseDepth (float raw) {
+    #if !defined(UNITY_REVERSED_Z)
+    raw = 1 - raw;
+    #endif
+    return raw * (_DirectPlanes.x - _DirectPlanes.y) + _DirectPlanes.y;
+   }
+   float mainDepth (float inverse) {
+    float limit = _DirectPlanes.z, knee = limit * 0.7;
+    if (inverse > knee)
+     inverse = knee + (limit - knee) * (1 - exp((knee - inverse) / (limit - knee)));
+    float d = saturate((inverse - _DirectPlanes.w) / (_DirectPlanes.z - _DirectPlanes.w));
+    #if !defined(UNITY_REVERSED_Z)
+    d = 1 - d;
+    #endif
+    return d;
+   }
+   bool shownAt (float raw) {
+    #if defined(UNITY_REVERSED_Z)
+    return raw > 0;
+    #else
+    return raw < 1;
+    #endif
+   }
+   // The gun seen here (drawn here, and nothing the camera has before it: the device).
+   bool gunAt (float2 uv) {
+    float raw = SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(uv, 0, 0));
+    if (!shownAt(raw))
+     return false;
+    float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
+    #if defined(UNITY_REVERSED_Z)
+    return gun >= scene - 0.001;
+    #else
+    return gun <= scene + 0.001;
+    #endif
+   }
+   // Which pixels had the gun put in (NvgDirect.shader's chessboard), by the render's own pixels.
+   bool gunPixel (float2 uv) {
+    float2 p = floor(uv * _DirectGD_TexelSize.zw);
+    return fmod(p.x + p.y, 2) < 0.5;
+   }
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2D(_MainTex, i.uv);
+    if (!gunAt(i.uv) || !gunPixel(i.uv))
+     return c;
+    float2 d = 1.0 / _DirectGD_TexelSize.zw;
+    float3 sum = tex2D(_MainTex, i.uv + float2(d.x, 0)).rgb + tex2D(_MainTex, i.uv - float2(d.x, 0)).rgb
+        + tex2D(_MainTex, i.uv + float2(0, d.y)).rgb + tex2D(_MainTex, i.uv - float2(0, d.y)).rgb;
+    return float4(sum * 0.25, c.a);
+   }
+   ENDCG
+  }
+  // 10: the bare eye's gun alone (TwoRenders.cs): its chessboard's pixels, its other pixels from the four next to them;
+  // in alpha where it is seen.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   UNITY_DECLARE_DEPTH_TEXTURE(_DirectGD);
+   float4 _DirectGD_TexelSize;
+   float4 _DirectPlanes;
+   sampler2D _MainTex;
+   float4 _MainTex_TexelSize;
+   // As NvgDirect.shader has them: the gun's own depth into the main camera's.
+   float inverseDepth (float raw) {
+    #if !defined(UNITY_REVERSED_Z)
+    raw = 1 - raw;
+    #endif
+    return raw * (_DirectPlanes.x - _DirectPlanes.y) + _DirectPlanes.y;
+   }
+   float mainDepth (float inverse) {
+    float limit = _DirectPlanes.z, knee = limit * 0.7;
+    if (inverse > knee)
+     inverse = knee + (limit - knee) * (1 - exp((knee - inverse) / (limit - knee)));
+    float d = saturate((inverse - _DirectPlanes.w) / (_DirectPlanes.z - _DirectPlanes.w));
+    #if !defined(UNITY_REVERSED_Z)
+    d = 1 - d;
+    #endif
+    return d;
+   }
+   bool shownAt (float raw) {
+    #if defined(UNITY_REVERSED_Z)
+    return raw > 0;
+    #else
+    return raw < 1;
+    #endif
+   }
+   // The gun seen here (drawn here, and nothing the camera has before it: the device).
+   bool gunAt (float2 uv) {
+    float raw = SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(uv, 0, 0));
+    if (!shownAt(raw))
+     return false;
+    float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
+    #if defined(UNITY_REVERSED_Z)
+    return gun >= scene - 0.001;
+    #else
+    return gun <= scene + 0.001;
+    #endif
+   }
+   // Which pixels had the gun put in (NvgDirect.shader's chessboard), by the render's own pixels.
+   bool gunPixel (float2 uv) {
+    float2 p = floor(uv * _DirectGD_TexelSize.zw);
+    return fmod(p.x + p.y, 2) < 0.5;
+   }
+   float4 frag (v2f_img i) : SV_Target {
+    if (!gunAt(i.uv))
+     return 0;
+    float3 own = tex2D(_MainTex, i.uv).rgb;
+    if (gunPixel(i.uv))
+     return float4(own, 1);
+    float2 d = 1.0 / _DirectGD_TexelSize.zw;
+    float3 sum = 0;
+    float n = 0;
+    static const float2 steps[4] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1) };
+    [unroll] for (int k = 0; k < 4; k++) {
+     float2 at = i.uv + steps[k] * d;
+     float w = gunAt(at) ? 1 : 0;
+     sum += tex2D(_MainTex, at).rgb * w;
+     n += w;
+    }
+    return n > 0 ? float4(sum / n, 1) : 0;
+   }
+   ENDCG
+  }
  }
 }
