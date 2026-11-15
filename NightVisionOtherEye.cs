@@ -128,6 +128,11 @@ internal static partial class NightVisionEyepieces
             float off = (to - axis * along).magnitude;
             lenses.Add($"lens {i}: across {Vector3.Dot(to, view.right) * 1000f:F0} up {Vector3.Dot(to, view.up) * 1000f:F0} ahead {Vector3.Dot(to, view.forward) * 1000f:F0}, {off * 1000f:F0} mm off its axis");
         }
+        GameObject? gun = NearPlayer?.HandsController?.ControllerGameObject;
+        Vector3 gunFrom = gun != null ? view.InverseTransformPoint(gun.transform.position) * 1000f : Vector3.zero;
+        Transform? deviceRoot = _body;
+        Vector3 deviceFrom = deviceRoot != null ? view.InverseTransformPoint(deviceRoot.position) * 1000f : Vector3.zero;
+        NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {pass}: camera at {view.position.x:F4},{view.position.y:F4},{view.position.z:F4}; gun from it {gunFrom.x:F0},{gunFrom.y:F0},{gunFrom.z:F0} mm (parent chain has camera: {(gun != null && gun.transform.IsChildOf(view))}); device {deviceFrom.x:F0},{deviceFrom.y:F0},{deviceFrom.z:F0} mm; claimed {Interop.EyepieceFusion.ClaimedFrame == Time.frameCount}");
         NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG {pass}: camera across {CameraPosition.Horizontal * 1000f:F0} mm (+{OtherEyeOffset(view.rotation).magnitude * 1000f:F0}), active {Active}, power {_power[0]:F2}/{_power[2]:F2}, direct {_direct}; {string.Join("; ", lenses)}");
         for (int side = 0; side < 2; side++)
         {
