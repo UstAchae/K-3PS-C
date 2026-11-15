@@ -242,6 +242,7 @@ internal static partial class NightVisionEyepieces
             harmony.Patch(preCull, postfix: new HarmonyMethod(postfix) { priority = Priority.Last });
         InstallEyepieceImage(harmony);
         InstallIr(harmony);
+        InstallPreviewMounts(harmony);
         TrackAmbientLights();
 
         _installed = true;
@@ -314,6 +315,7 @@ internal static partial class NightVisionEyepieces
         _split = _flip;
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
         KeepGlow(device);
+        UpdateMountHeight(player);
 
         EnsureRendererPatch();
         RestoreMask(cameras);
@@ -327,28 +329,6 @@ internal static partial class NightVisionEyepieces
     private const float HoldFilterSeconds = 1f;
     private static float _holdFilterUntil = -1f;
     private static bool _deviceThere;
-
-    private static float _flip;   // the device's flip down (0 up, 1 down), whatever the eye mode
-
-    private static readonly KeyCode[][] ModifierKeys =
-    {
-        new[] { KeyCode.LeftShift, KeyCode.RightShift }, new[] { KeyCode.LeftControl, KeyCode.RightControl }, new[] { KeyCode.LeftAlt, KeyCode.RightAlt },
-    };
-
-    // A shortcut held with exactly its modifiers: minus alone is not Shift or Ctrl and minus.
-    internal static bool Held(BepInEx.Configuration.KeyboardShortcut shortcut)
-    {
-        if (!shortcut.IsPressed())
-            return false;
-        var wanted = new System.Collections.Generic.List<KeyCode>(shortcut.Modifiers);
-        foreach (KeyCode[] group in ModifierKeys)
-        {
-            bool held = Input.GetKey(group[0]) || Input.GetKey(group[1]);
-            if (held && !wanted.Contains(group[0]) && !wanted.Contains(group[1]))
-                return false;
-        }
-        return true;
-    }
 
     private static System.Reflection.FieldInfo? _phosphorTint;
     private static bool _phosphorResolved;
@@ -387,6 +367,7 @@ internal static partial class NightVisionEyepieces
     {
         ReleaseShade();
         Active = false;
+        ReleaseMount();
         _flip = 0f;
         System.Array.Clear(_warm, 0, 4);
         System.Array.Clear(_power, 0, 4);

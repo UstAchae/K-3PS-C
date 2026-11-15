@@ -83,6 +83,8 @@ internal static partial class NightVisionEyepieces
         if (camera != Camera.main)
             return;
         HideIrLaserLights(camera);
+        if (_body != null)
+            AdjustMount(camera);
     }
 
     internal static void OnCameraPostRender(Camera camera)

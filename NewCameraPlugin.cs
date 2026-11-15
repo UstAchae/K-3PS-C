@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.3";
+    public const string PluginVersion = "1.8.4";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -144,6 +144,18 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 
     private void BindNightVision()
     {
+        ConfigEntry<KeyboardShortcut> raiseMount = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架升高", new KeyboardShortcut(KeyCode.Equals, KeyCode.LeftAlt),
+            new ConfigDescription("按住时把支架往上调（TATM 的滑块、G24 的托架）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。每个支架（每一件物品）各自记住自己调好的高度、仰俯和前后，存在配置文件夹里的 justachae.thirdpersoncamera.mounts.txt。", null, new ConfigurationManagerAttributes { Order = -1 }));
+        ConfigEntry<KeyboardShortcut> lowerMount = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架降低", new KeyboardShortcut(KeyCode.Minus, KeyCode.LeftAlt),
+            new ConfigDescription("按住时把支架往下调。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -2 }));
+        ConfigEntry<KeyboardShortcut> tiltUp = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架仰起", new KeyboardShortcut(KeyCode.Equals, KeyCode.LeftShift),
+            new ConfigDescription("按住时把支架往上仰（目镜抬高）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -4 }));
+        ConfigEntry<KeyboardShortcut> tiltDown = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架俯下", new KeyboardShortcut(KeyCode.Minus, KeyCode.LeftShift),
+            new ConfigDescription("按住时把支架往下俯（目镜降低）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -5 }));
+        ConfigEntry<KeyboardShortcut> slideForward = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架往前", new KeyboardShortcut(KeyCode.Equals, KeyCode.LeftControl),
+            new ConfigDescription("按住时把夜视仪沿支架往前推（离眼睛远；G24 一格一格地走）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -7 }));
+        ConfigEntry<KeyboardShortcut> slideBack = SettingsLayout.Bind(Config, "头戴式成像装备", "挂架往后", new KeyboardShortcut(KeyCode.Minus, KeyCode.LeftControl),
+            new ConfigDescription("按住时把夜视仪沿支架往后拉（离眼睛近）。只在夜视仪开着、并且处于腰射（没有瞄准）时有效。", null, new ConfigurationManagerAttributes { Order = -8 }));
         ConfigEntry<KeyboardShortcut> headwearUp = SettingsLayout.Bind(Config, "头戴式成像装备", "头部装备仰起", HeadwearTilt.Up,
             new ConfigDescription("按住时把头盔前沿往上抬（只转头盔和挂在上面的夜视仪，头和镜头不动）。每顶头盔各自记住自己的角度，像夜视仪支架一样。只在腰射（没有瞄准）时有效，瞄准时同样的键调瞄准距离。", null, new ConfigurationManagerAttributes { Order = -10 }));
         ConfigEntry<KeyboardShortcut> headwearDown = SettingsLayout.Bind(Config, "头戴式成像装备", "头部装备俯下", HeadwearTilt.Down,
@@ -193,9 +205,21 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             HeadwearTilt.Down = headwearDown.Value;
             NightVisionEyepieces.EyepieceGlow = glow.Value;
             NightVisionEyepieces.LensReflections = reflections.Value;
+            NightVisionEyepieces.RaiseMount = raiseMount.Value;
+            NightVisionEyepieces.LowerMount = lowerMount.Value;
+            NightVisionEyepieces.TiltUp = tiltUp.Value;
+            NightVisionEyepieces.TiltDown = tiltDown.Value;
+            NightVisionEyepieces.SlideForward = slideForward.Value;
+            NightVisionEyepieces.SlideBack = slideBack.Value;
         }
 
         picture.SettingChanged += (_, _) => Refresh();
+        raiseMount.SettingChanged += (_, _) => Refresh();
+        lowerMount.SettingChanged += (_, _) => Refresh();
+        tiltUp.SettingChanged += (_, _) => Refresh();
+        tiltDown.SettingChanged += (_, _) => Refresh();
+        slideForward.SettingChanged += (_, _) => Refresh();
+        slideBack.SettingChanged += (_, _) => Refresh();
         nearBlur.SettingChanged += (_, _) => Refresh();
         tritium.SettingChanged += (_, _) => Refresh();
         headwearUp.SettingChanged += (_, _) => Refresh();
@@ -596,6 +620,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     {
         NewCameraSwitch.LateUpdate();
         HeadwearTilt.UpdateShown();
+        NightVisionEyepieces.UpdatePreviewMounts();
         Fisheye.LateUpdate();
     }
 }
