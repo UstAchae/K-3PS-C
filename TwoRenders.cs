@@ -61,7 +61,10 @@ internal static class TwoRenders
     // Only the aiming eye's gun is seen (the user's, 2026-11-15); as the gun goes over to the other shoulder, the one
     // fades out as the other fades in: how much of each this frame (they add up to one).
     private static float _shareGoggle = 1f, _shareBare;
-    private const float GunOpacity = 0.5f;   // the bare eye's gun seen through at half, as the two eyes' frames laid together did
+    // How far the bare eye's gun is seen through (F12 单筒：裸眼瞄准时枪的透明度): 0 solid, 1 not seen; at half, as the two
+    // eyes' frames laid together did.
+    internal static float BareGunSeeThrough = 0.5f;
+    private static float GunOpacity => 1f - Mathf.Clamp01(BareGunSeeThrough);
     // The goggle is never seen through: nothing laid over what the camera has nearer than this (m; the gun is further).
     private const float DeviceReach = 0.12f;
     private static readonly int ShareGId = Shader.PropertyToID("_ShareG"), ShareBId = Shader.PropertyToID("_ShareB"), DeviceReachId = Shader.PropertyToID("_DeviceReach");
