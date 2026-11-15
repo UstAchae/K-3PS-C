@@ -87,6 +87,7 @@ internal static class OpticElevation
     internal static void Initialize()
     {
         LegacyReticle.Install();
+        SightAtBareEye.Install();
         Harmony harmony = new Harmony(NewCameraPlugin.PluginGuid + ".opticElevation");
         harmony.Patch(AccessTools.Method(typeof(FirearmHandsInputTranslator), "TranslateCommand"),
             prefix: new HarmonyMethod(typeof(OpticElevation), nameof(InputPrefix)));

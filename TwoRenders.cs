@@ -136,6 +136,17 @@ internal static class TwoRenders
         return _gunRenderers;
     }
 
+    // For SightAtBareEye: the sight's lens laid in from the bare eye this frame (it aims, its gun drawn into the frame):
+    // where that eye is from the camera, along the world's axes.
+    internal static bool SightFromBareEye(Quaternion turn, out Vector3 shift)
+    {
+        shift = Vector3.zero;
+        if (!DrawnIntoFrame || !Now || _gunsFrame != Time.frameCount || _shareBare <= 0.5f)
+            return false;
+        shift = turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
+        return true;
+    }
+
     internal static void SeeLens(float across)
     {
         if (_pass || !Now || Mathf.Abs(across) < 0.01f)
@@ -438,7 +449,8 @@ internal static class TwoRenders
         // The sight's lens too: the game lays it in at its upscaler whatever the camera draws, and with the gun kept out
         // it hung there by itself, a dark disc going with the camera.
         SSAAPropagator? propagator = Camera.main != null ? Camera.main.GetComponent<SSAAPropagator>() : null;
-        if (hide && propagator != null)
+        // (Drawn into the frame, the bare eye's gun keeps its lens: laid in from that eye, SightAtBareEye.cs.)
+        if (hide && propagator != null && !DrawnIntoFrame)
         {
             _lensKept = LensRenderer(propagator);
             _collimatorKept = CollimatorRenderer(propagator);
