@@ -8,9 +8,8 @@ using UnityEngine.Rendering;
 namespace EFTNewCamera;
 
 // A magnified sight looked through with the goggle down. The goggle's objective sits well in front of the eye, so the
-// head cannot come to the sight: it stays back, and the objective comes to where the eye would be (the sight's own
-// eye point, where the game puts the camera). The camera, which makes the goggle's picture, goes there with it, the
-// eyes and the device a hand's breadth behind (NightVisionEyes: each eye's shift).
+// head cannot come to the sight: the gun is held further out instead, its eye point brought to the objective. The camera
+// is the eye and stays where it is (NewCameraSwitch.EyePlace): only the pose the gun is placed from goes ahead.
 // The sight's picture is at infinity, as the goggle is focused, so it is sharp (no objective blur over the lens). Its
 // light leaves the eyepiece through the sight's exit pupil (objective diameter over magnification) and only what of it the
 // goggle's objective takes in reaches the tube: the sight's picture as bright as the overlap of the pupil's beam and the
@@ -30,7 +29,7 @@ namespace EFTNewCamera;
 // Whether the sight's own picture is a night-vision one follows from it too (OpticSeesNightVision, NightVisionIr.cs).
 internal static partial class NightVisionEyepieces
 {
-    internal static float ScopePullback;                 // how far the camera is ahead of the eyes now (m)
+    internal static float ScopePullback;                 // how far the gun is brought forward now, to the goggle's objective (m)
     private const float ScopePullbackSeconds = 0.15f;
     private const float ThroughScopeFrom = 0.005f;       // the pull from which the goggle's picture is the sight's (m)
     private const float DefaultScopeObjective = 0.032f;  // a sight's objective when its name gives none (m)
@@ -122,8 +121,10 @@ internal static partial class NightVisionEyepieces
                 Transform view = optic.transform;
                 Vector3 lensCentre = _scope.LensMatrix.MultiplyPoint3x4(mesh.bounds.center);
                 Vector3 axis = view.forward;
-                float relief = Vector3.Dot(lensCentre - _renderedFrom, axis);
-                Vector3 off = _renderedFrom - (lensCentre - axis * relief);
+                // The goggle's objective, ahead of the eye (the camera) by as far as the gun was brought forward.
+                Vector3 objectiveAt = _renderedFrom + _renderedForward * ScopePullback;
+                float relief = Vector3.Dot(lensCentre - objectiveAt, axis);
+                Vector3 off = objectiveAt - (lensCentre - axis * relief);
                 float magnification = MagnificationOf(scope.Mod, sight!, optic);
                 float objective = ObjectiveOf(scope.Mod);
                 _scope.ObjectiveRadius = 0.5f * objective;

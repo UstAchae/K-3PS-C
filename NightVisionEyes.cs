@@ -231,7 +231,8 @@ internal static partial class NightVisionEyepieces
         // that eye, its eyepiece straight ahead in the middle of the frame, the other off to its side. They stay back of the
         // camera when it has come forward to a sight (NightVisionScope.cs). Where the game draws the device, from the camera.
         // A monocular comes in none of the way once aimed: as the camera goes over to the aiming eye, and back as it returns.
-        Vector3 back = view.forward * ScopePullback;
+        // The camera is the eye even through a magnified sight (the gun brought forward instead): nothing to take back.
+        Vector3 back = Vector3.zero;
         float bothIn = EyeShift * _split, oneIn = bothIn * (1f - CameraPosition.ViewAimed);
         float comesIn = monocular >= 0 ? oneIn : bothIn;
         Vector3 EyeShiftOf(float lens) => _direct ? right * (lens * comesIn) - back : Vector3.zero;

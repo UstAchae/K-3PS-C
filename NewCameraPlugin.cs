@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.39";
+    public const string PluginVersion = "1.9.40";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -663,13 +663,19 @@ internal static class NewCameraSwitch
 
     // The camera is where this mod put it this frame, at the player's eyes, and has not been moved off since (a free
     // camera places itself after this mod does).
-    internal static bool AtEyes(Camera camera) => _poseFrame == Time.frameCount && (camera.transform.position - _posePosition - NightVisionEyepieces.OtherEyeOffset(_poseRotation)).sqrMagnitude < 1e-6f;
+    internal static bool AtEyes(Camera camera) => _poseFrame == Time.frameCount && (camera.transform.position - EyePlace - NightVisionEyepieces.OtherEyeOffset(_poseRotation)).sqrMagnitude < 1e-6f;
+
+    // The camera is the eye: where the pose puts it, less what a magnified sight looked through with the goggle takes the
+    // pose (and the gun with it) ahead of the eye (CameraPosition.ScopeAhead, NightVisionScope.cs). The gun goes forward,
+    // to bring the sight to the goggle's objective; the eye stays where it is.
+    private static Vector3 EyePlace => _posePosition - _poseRotation * (Vector3.forward * CameraPosition.ScopeAhead);
+    internal static Vector3 EyeBehindPose => _poseRotation * (Vector3.forward * CameraPosition.ScopeAhead);
     private static Quaternion _poseRotation;
 
     // Where this mod has the camera for this player (last placed: this frame, or the one before if not yet this one).
     internal static bool CameraOf(Player player, out Vector3 position, out Quaternion rotation)
     {
-        position = _posePosition;
+        position = EyePlace;
         rotation = _poseRotation;
         return _applied && ReferenceEquals(player, _appliedTo) && _poseFrame >= Time.frameCount - 1;
     }
@@ -763,7 +769,7 @@ internal static class NewCameraSwitch
     // Where the camera was last placed, if that was just now.
     internal static bool LastPose(out Vector3 position, out Quaternion rotation)
     {
-        position = _posePosition;
+        position = EyePlace;
         rotation = _poseRotation;
         return _poseFrame >= 0 && Time.frameCount - _poseFrame <= 2;
     }
@@ -795,7 +801,7 @@ internal static class NewCameraSwitch
         if (main && _mainPlacedFrame == Time.frameCount)
         {
             if (_poseFrame == Time.frameCount)
-                camera.transform.SetPositionAndRotation(_posePosition + NightVisionEyepieces.OtherEyeOffset(_poseRotation), _poseRotation);
+                camera.transform.SetPositionAndRotation(EyePlace + NightVisionEyepieces.OtherEyeOffset(_poseRotation), _poseRotation);
             return;
         }
         if (main)
@@ -850,7 +856,7 @@ internal static class NewCameraSwitch
 
         if (main && _poseFrame == Time.frameCount)
         {
-            camera.transform.SetPositionAndRotation(_posePosition + NightVisionEyepieces.OtherEyeOffset(_poseRotation), _poseRotation);
+            camera.transform.SetPositionAndRotation(EyePlace + NightVisionEyepieces.OtherEyeOffset(_poseRotation), _poseRotation);
             NightVisionEyepieces.RedrawAmbient(camera);
         }
         if (optic && _poseFrame == Time.frameCount)
