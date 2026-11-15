@@ -96,6 +96,7 @@ internal static partial class NightVisionEyepieces
             }
         }
         int meshes = 0, skinned = 0;
+        DiagSightLens(camera);
         foreach (Renderer r in _nearRenderers)
         {
             // Only what the main camera would draw: on, in its layers, not left to shadows (the head the body hides).
@@ -247,6 +248,25 @@ internal static partial class NightVisionEyepieces
         if (at == null)
             at = Scopes.Current(NearPlayer?.ProceduralWeaponAnimation)?.ScopePrefabCache?.transform;
         return at != null ? at.root : null;
+    }
+
+    // TEMP DIAG: once, the material the game lays a sight's lens in with at its upscaler (SSAAPropagator), to see how it
+    // could be laid in half.
+    private static readonly HarmonyLib.AccessTools.FieldRef<SSAAPropagator, Material> DiagLensMaterial =
+        HarmonyLib.AccessTools.FieldRefAccess<SSAAPropagator, Material>("_opticLensMaterial");
+    private static bool _sightLensNoted;
+    private static void DiagSightLens(Camera camera)
+    {
+        if (_sightLensNoted || !camera.TryGetComponent(out SSAAPropagator propagator))
+            return;
+        Material? material = DiagLensMaterial(propagator);
+        if (material == null || material.shader == null)
+            return;
+        _sightLensNoted = true;
+        var properties = new System.Collections.Generic.List<string>();
+        for (int i = 0; i < material.shader.GetPropertyCount(); i++)
+            properties.Add(material.shader.GetPropertyName(i));
+        NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG sight lens material {material.name}, shader {material.shader.name}, queue {material.renderQueue}, passes {material.passCount}; properties {string.Join(", ", properties)}");
     }
 
     private static void ReleaseOtherEye()

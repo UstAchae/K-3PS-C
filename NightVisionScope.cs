@@ -127,7 +127,9 @@ internal static partial class NightVisionEyepieces
                 float magnification = MagnificationOf(scope.Mod, sight!, optic);
                 float objective = ObjectiveOf(scope.Mod);
                 _scope.ObjectiveRadius = 0.5f * objective;
-                float apart = new Vector2(Vector3.Dot(off, view.right), Vector3.Dot(off, view.up)).magnitude;
+                // The aim brings the eye, and the goggle's objective before it, onto the sight's axis (the gun no longer brought
+                // forward, the objective is behind the eye point, not off it): the beam fills what of the aperture it can.
+                float apart = 0f;
                 float aperture = 0.5f * Aperture;
                 _scope.Light = DiscsOverlap(0.5f * objective / magnification, aperture, apart) / (Mathf.PI * aperture * aperture);
             }

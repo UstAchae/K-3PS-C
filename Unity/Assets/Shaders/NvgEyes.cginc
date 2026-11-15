@@ -88,7 +88,7 @@ void eyeSide (float2 uv, bool right, out float4 eye, out float4 light, out float
 // A monocular's one eye everywhere, fading over the other eye's half: that eye sees past the device, and the two
 // views are seen as one, the device the fainter the further out toward that eye's edge.
 void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover, out float dark) {
- float toRight = _EyeMix >= 0 ? saturate(uv.x) : smoothstep(_Split - _Overscan * 0.5, _Split + _Overscan * 0.5, uv.x);
+ float toRight = _EyeMix >= 0 ? 0.5 : smoothstep(_Split - _Overscan * 0.5, _Split + _Overscan * 0.5, uv.x);
  if (_Monocular.x > 0.5) {
   bool right = _Monocular.y > 0.5;
   eyeSide(uv, right, eye, light, cover, dark);

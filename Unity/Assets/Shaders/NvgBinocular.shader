@@ -48,20 +48,8 @@ Shader "Justachae/NVG/Binocular" {
      float3 lit = tex2D(_Glow, i.uv).rgb * _Lamp.y;
      float3 seenL = eyeL.rgb * (1 - saturate(coverL * _LensClear + (1 - _LensClear) * darkL)) + lightL.rgb * _Lamp.x + lit * (1 - lightL.w) + (1 - saturate(eyeL.a)) * (1 - coverL) * scene.rgb;
      float3 seenR = eyeR.rgb * (1 - saturate(coverR * _LensClear + (1 - _LensClear) * darkR)) + lightR.rgb * _Lamp.x + lit * (1 - lightR.w) + (1 - saturate(eyeR.a)) * (1 - coverR) * scene.rgb;
-     // The right eye's share growing across the frame: the left eye's all at the left edge, half each in the middle.
-     // Where one eye sees its lens and the other does not (its device's housing there, or the bare scene), the lens's
-     // picture is seen whole: the tube's picture wins, as the two views are seen as one. Only the other eye's own gun
-     // or arm there is still seen with it, by the share.
-     float share = saturate(i.uv.x);
-     bool lensL = lightL.w > 0.01, lensR = lightR.w > 0.01;
-     // (The other eye's gun or arm is already in the frame the lens's picture is made from, by its weight.)
-     // Both: the aiming eye's over the other's.
-     if (lensL && !lensR)
-      share = 0;
-     else if (lensR && !lensL)
-      share = 1;
-     else if (lensL && lensR)
-      share = _DirectAimRight;
+     // Half each.
+     float share = 0.5;
      return float4(lerp(seenL, seenR, share), scene.a);
     }
     float4 eye; float4 light; float cover, dark;

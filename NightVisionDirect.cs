@@ -377,6 +377,8 @@ internal static partial class NightVisionEyepieces
     private static readonly int DirectMixId = Shader.PropertyToID("_DirectMix");
     private static readonly int DirectAimRightId = Shader.PropertyToID("_DirectAimRight"), DirectOtherNearId = Shader.PropertyToID("_DirectOtherNear");
     private const float OtherEyeNearShare = 0.15f;   // the non-aiming eye's gun and arms, faint
+    private const float AimingEyeNearShare = 0.5f;   // the aiming eye's, seen through (the other eye sees past them)
+    private static readonly int DirectAimNearId = Shader.PropertyToID("_DirectAimNear");
     private static readonly int EyeMixId = Shader.PropertyToID("_EyeMix");
     private static float DirectMix = -1f;   // the experiment's mix of the two eyes over the whole frame (below 0 none)
     private static readonly int DirectRaisedId = Shader.PropertyToID("_DirectRaised");
@@ -564,6 +566,7 @@ internal static partial class NightVisionEyepieces
         // The experiment: which eye aims, and how much the other eye's gun and arms show (NightVisionOtherEye.cs's rules).
         buffer.SetGlobalFloat(DirectAimRightId, CameraPosition.AimSide >= 0f ? 1f : 0f);
         buffer.SetGlobalFloat(DirectOtherNearId, OtherEyeNearShare);
+        buffer.SetGlobalFloat(DirectAimNearId, AimingEyeNearShare);
         buffer.SetGlobalFloat(DirectStrip, Overscan);
         buffer.SetGlobalVector(DirectInset, new Vector4(DirectInsetPixels / Mathf.Max(Screen.width, 1), DirectInsetPixels / Mathf.Max(Screen.height, 1), 0f, 0f));
         for (int side = 0; side < 2; side++)
