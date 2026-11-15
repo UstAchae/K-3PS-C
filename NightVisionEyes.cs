@@ -290,6 +290,12 @@ internal static partial class NightVisionEyepieces
             leftShift = right * Mathf.Lerp(middle, leftAcross, apart);
             rightShift = right * Mathf.Lerp(middle, rightAcross, apart);
             CameraPosition.EyesOverride = new Vector2(leftAcross - middle, rightAcross - middle);
+            // Whether the aiming eye (the camera's) is bare: no eyepiece before it (its pod swung away, or a monocular before
+            // the other eye). Only then does it see a sight's own picture (SightLensHalves).
+            bool aimRight = CameraPosition.AimSide >= 0f;
+            int aimTube = (a >= b) == aimRight ? CentreLensA : CentreLensB;
+            float aimLensAcross = aimTube == CentreLensA ? a : b;
+            AimEyeBare = PodGone(aimTube) >= 1f || _device.Monocular && Mathf.Abs(aimLensAcross) > BareEyeFrom;
             if (!_mixedNoted)
             {
                 _mixedNoted = true;
@@ -358,6 +364,8 @@ internal static partial class NightVisionEyepieces
         return shift + lens.forward * ((least - along) * Mathf.Clamp01(_split));
     }
     private static bool _eyeHeldNoted, _mixedNoted;
+    internal static bool AimEyeBare;              // the experiment: the aiming eye has no eyepiece before it
+    private const float BareEyeFrom = 0.02f;      // a monocular's lens this far across from the aiming eye is not before it (m)
 
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
     // The eyepiece's own glass (its rim, as the lens node stands), projected from where this file puts the eye: the

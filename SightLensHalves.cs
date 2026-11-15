@@ -11,9 +11,10 @@ namespace EFTNewCamera;
 // them. The game lays a sight's lens (its picture, its reticle) and a red dot's into the frame at its upscaler
 // (SSAAPropagator.FillCommandBuffer / OnRenderImage: DrawRenderer of the lens with its own material, after the frame is
 // scaled to the screen), whole, over what lies behind it. Its call is taken over here: the frame copied just before,
-// the lens drawn as ever, then the copy mixed back half and half (where the lens is not drawn the two are the same,
-// so nothing else changes): the sight's picture seen through, the other eye's view behind it. Outside the experiment the
-// call is the game's, unchanged.
+// the lens drawn as ever, then, where the lens is: the sight's picture only to the aiming eye, and only while no eyepiece
+// is before it (the picture is seen only from the sight's exit pupil, on its axis, and the goggle's objective is not
+// there): half its picture, half what lay behind (the other eye's view); with an eyepiece before it, dark glass.
+// Outside the experiment the call is the game's, unchanged.
 internal static class SightLensHalves
 {
     private static readonly AccessTools.FieldRef<SSAAPropagator, RenderTexture[]> HdrTargets =
@@ -28,6 +29,8 @@ internal static class SightLensHalves
     private static readonly int PostLensId = Shader.PropertyToID("_JustachaeSightPostLens");
     private static readonly int OtherId = Shader.PropertyToID("_Other");
     private static readonly int OtherShareId = Shader.PropertyToID("_OtherShare");
+    private static readonly int AimBareId = Shader.PropertyToID("_AimBare");
+    private const int LensPass = 2;   // NvgTube.shader: the lens as the two eyes see it
     private static Material? _halves;
     private static int _taken;
 
@@ -82,6 +85,7 @@ internal static class SightLensHalves
         }
         _halves ??= new Material(tubeShader) { name = "Justachae sight lens halves", hideFlags = HideFlags.DontSave };
         _halves.SetFloat(OtherShareId, 0.5f);
+        _halves.SetFloat(AimBareId, NightVisionEyepieces.AimEyeBare ? 1f : 0f);
         buffer.GetTemporaryRT(PreLensId, frame.width, frame.height, 0, FilterMode.Point, frame.format);
         buffer.GetTemporaryRT(PostLensId, frame.width, frame.height, 0, FilterMode.Point, frame.format);
         buffer.Blit(frame, PreLensId);
@@ -89,7 +93,7 @@ internal static class SightLensHalves
         buffer.DrawRenderer(renderer, material, submesh, pass);
         buffer.Blit(frame, PostLensId);
         buffer.SetGlobalTexture(OtherId, PreLensId);
-        buffer.Blit(PostLensId, frame, _halves, 1);
+        buffer.Blit(PostLensId, frame, _halves, LensPass);
         buffer.SetRenderTarget(frame, depth);
         buffer.ReleaseTemporaryRT(PreLensId);
         buffer.ReleaseTemporaryRT(PostLensId);

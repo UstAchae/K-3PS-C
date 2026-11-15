@@ -45,5 +45,26 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 2: a sight's lens as the two eyes see it (SightLensHalves.cs): _MainTex the frame with the lens laid in, _Other
+  // without. Where the lens is (the two differ): the aiming eye's view, its picture, mixed by _OtherShare with the other
+  // eye's (what lay behind) while the aiming eye is bare; dark glass (an eye off the sight's exit pupil sees none of its
+  // picture) while it looks through an eyepiece. Elsewhere the frame as it is.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _Other;
+   float _OtherShare, _AimBare;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 laid = tex2D(_MainTex, i.uv), before = tex2D(_Other, i.uv);
+    float3 d = abs(laid.rgb - before.rgb);
+    if (max(d.r, max(d.g, d.b)) < 1e-4)
+     return laid;
+    return float4(_AimBare > 0.5 ? lerp(before.rgb, laid.rgb, _OtherShare) : float3(0, 0, 0), laid.a);
+   }
+   ENDCG
+  }
  }
 }
