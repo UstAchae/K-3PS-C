@@ -26,6 +26,9 @@ internal static class TwoRenderTest
     private static readonly int OtherId = Shader.PropertyToID("_Other"), OtherShareId = Shader.PropertyToID("_OtherShare");
     private static readonly int OtherDepthId = Shader.PropertyToID("_OtherDepth"), FarFillId = Shader.PropertyToID("_FarFill");
 
+    // TEMP DIAG: what of the two renders happened this frame, logged with the frame time.
+    private static int _diagPassRendered, _diagPassScene, _diagPassFinal, _diagOwnScene, _diagOwnFilled, _diagOwnMixed, _diagFrames;
+    private static float _diagFar;
     private static float _phaseStart = -1f;
     private static int _phaseFrame, _frames;
     private static double _seconds;
@@ -62,9 +65,11 @@ internal static class TwoRenderTest
         if (main == null || !main.isActiveAndEnabled)
             return;
         _pass = true;
+        _diagFrames++;
         try
         {
             main.Render();
+            _diagPassRendered++;
         }
         catch (System.Exception e)
         {
@@ -81,6 +86,7 @@ internal static class TwoRenderTest
             main.farClipPlane = FarFill;
             _farSet = true;
         }
+        _diagFar = main.farClipPlane;
     }
 
     // From NewCameraPlugin.EndOfFrame: the camera's own reach given back.
@@ -128,10 +134,13 @@ internal static class TwoRenderTest
             Graphics.Blit(scene, Kept(ref _firstScene, scene, scene.format, "Justachae right eye scene"));
             Graphics.Blit(scene, Kept(ref _firstDepth, scene, RenderTextureFormat.RFloat, "Justachae right eye depth"), material, DepthPass);
             _sceneDone = Time.frameCount;
+            _diagPassScene++;
             return;
         }
+        _diagOwnScene++;
         if (!Now || _sceneDone != Time.frameCount || !_farSet)
             return;
+        _diagOwnFilled++;
         if (!_farNoted)
         {
             _farNoted = true;
@@ -157,10 +166,12 @@ internal static class TwoRenderTest
         {
             Graphics.Blit(into, Kept(ref _firstFinal, into, into.format, "Justachae right eye frame"));
             _firstDone = Time.frameCount;
+            _diagPassFinal++;
             return;
         }
         if (!Now || _firstDone != Time.frameCount || _firstFinal == null)
             return;
+        _diagOwnMixed++;
         RenderTexture seen = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
         Graphics.Blit(into, seen);
         material.SetTexture(OtherId, _firstFinal);
@@ -191,6 +202,8 @@ internal static class TwoRenderTest
         {
             double ms = 1000.0 * _seconds / _frames;
             NewCameraPlugin.Log?.LogInfo($"Two render test (goggle down, the left eye out to {FarFill:F0} m): mean frame {ms:F2} ms ({1000.0 / ms:F1} FPS) over {_frames} frames");
+            NewCameraPlugin.Log?.LogInfo($"Two render test DIAG over {_diagFrames} frames: right eye rendered {_diagPassRendered}, its eyepiece stage reached {_diagPassScene} (scene) / {_diagPassFinal} (final); left eye's eyepiece stage reached {_diagOwnScene}, far filled {_diagOwnFilled}, mixed {_diagOwnMixed}; camera reach while the left eye renders {_diagFar:F0} m (before {_farBefore:F0} m)");
+            _diagFrames = _diagPassRendered = _diagPassScene = _diagPassFinal = _diagOwnScene = _diagOwnFilled = _diagOwnMixed = 0;
         }
         _phaseStart = now;
         _phaseFrame = Time.frameCount;
