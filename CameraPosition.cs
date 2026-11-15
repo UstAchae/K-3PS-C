@@ -19,10 +19,12 @@ internal static class CameraPosition
     // part of the camera's place from the head like the rest, so that what works from that place (the gun's carry,
     // which takes it off and puts it back at the body's own turn) moves it as it does them.
     internal static float ScopeAhead;
-    // EXPERIMENT (NightVisionOtherEye.cs): the camera moved across by this from where it would be (its place then the
-    // origin, (0, 0)), to one of the two eyes.
+    // EXPERIMENT (NightVisionOtherEye.cs): the camera across from the head's middle at this eye (± AimEye), whatever
+    // else would place it.
     internal static float? EyeOverride;
-    internal static float BaseHorizontal;   // where it would be
+    // The aiming side as it is now (1 right shoulder, -1 left) and whether aimed (more than half way in).
+    internal static float AimSide => _side;
+    internal static bool AimedNow => _aimed > 0.5f;
 
     private const float AimInSeconds = 0.2f;
     private const float AimOutSeconds = 0.35f;       // as long as the gun takes back to the hip (AimArms.LeaveSeconds)
@@ -47,8 +49,7 @@ internal static class CameraPosition
         float u = 0.5f * (_side + 1f);
         float side = 2f * u * u * (3f - 2f * u) - 1f;
         float pose = Mathf.Lerp(Across, side * AimEye, Smooth(_aimed));
-        BaseHorizontal = Mathf.Lerp(Across, side * AimEye, Smooth(_viewAimed));
-        Horizontal = BaseHorizontal + (EyeOverride ?? 0f);
+        Horizontal = EyeOverride ?? Mathf.Lerp(Across, side * AimEye, Smooth(_viewAimed));
         PoseAcross = pose - Horizontal;
     }
 

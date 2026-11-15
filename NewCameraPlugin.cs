@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.29";
+    public const string PluginVersion = "1.9.30";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -190,11 +190,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
                 new AcceptableValueRange<float>(0.00001f, 0.02f), new ConfigurationManagerAttributes { Order = 0 }));
         eyeNear.SettingChanged += (_, _) => NightVisionEyepieces.EyeNearPlane = eyeNear.Value;
         NightVisionEyepieces.EyeNearPlane = eyeNear.Value;
-        ConfigEntry<float> eyeX = SettingsLayout.Bind(Config, "头戴式成像装备", "实验：两个镜头的 x（毫米）", 32f,
-            new ConfigDescription("实验中：戴着夜视仪时，两个镜头各看一整幅画面，两幅各占一半叠在一起。以镜头原本的位置为 (0, 0)，两个镜头在 (±x, 0)，这一项就是 x，即两个镜头离原位置的横向距离（两个镜头之间相距 2x）。0 时两个镜头都在原位置。",
-                new AcceptableValueRange<float>(0f, 60f), new ConfigurationManagerAttributes { Order = 0 }));
-        eyeX.SettingChanged += (_, _) => NightVisionEyepieces.EyeX = eyeX.Value * 0.001f;
-        NightVisionEyepieces.EyeX = eyeX.Value * 0.001f;
         ConfigEntry<float> gameLensGain = SettingsLayout.Bind(Config, "头戴式成像装备", "原版夜视目镜增益", 1f,
             new ConfigDescription("目镜里用游戏原版夜视滤镜成像时（“夜视画面来源”是原版，或没装 Borkel's Realistic NVGs），画面的亮度乘以这个数，只作用于目镜里。原版夜视打开时会把整个场景的环境光换成更亮的一套；本模组让目镜以外保持肉眼看到的样子，这份提亮只加在目镜里，所以目镜里的亮度和原版一样，一般不用再放大。这一项是在这之上再放大，只能把有光的地方放大，原本全黑的地方还是黑的。亮处会不会过曝由下一项控制。1 是不放大。热成像和 Borkel's Realistic NVGs 的画面不受影响，Borkel's Realistic NVGs 用它自己的 F12 设置。",
                 new AcceptableValueRange<float>(1f, 8f), new ConfigurationManagerAttributes { Order = 2 }));
