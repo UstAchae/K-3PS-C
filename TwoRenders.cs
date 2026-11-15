@@ -309,7 +309,29 @@ internal static class TwoRenders
             if (r != null)
                 r.forceRenderingOff = hide;
         }
+        // The sight's lens too: the game lays it in at its upscaler whatever the camera draws, and with the gun kept out
+        // it hung there by itself, a dark disc going with the camera.
+        SSAAPropagator? propagator = Camera.main != null ? Camera.main.GetComponent<SSAAPropagator>() : null;
+        if (hide && propagator != null)
+        {
+            _lensKept = LensRenderer(propagator);
+            _collimatorKept = CollimatorRenderer(propagator);
+            _lensOf = propagator;
+            LensRenderer(propagator) = null!;
+            CollimatorRenderer(propagator) = null!;
+        }
+        else if (!hide && _lensOf != null)
+        {
+            if (LensRenderer(_lensOf) == null)
+                LensRenderer(_lensOf) = _lensKept!;
+            if (CollimatorRenderer(_lensOf) == null)
+                CollimatorRenderer(_lensOf) = _collimatorKept!;
+            _lensOf = null;
+            _lensKept = _collimatorKept = null;
+        }
     }
+    private static SSAAPropagator? _lensOf;
+    private static Renderer? _lensKept, _collimatorKept;
 
     // From NewCameraPlugin.EndOfFrame.
     internal static void EndOfFrame() => HideGun(false);
