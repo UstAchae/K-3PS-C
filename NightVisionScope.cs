@@ -8,8 +8,8 @@ using UnityEngine.Rendering;
 namespace EFTNewCamera;
 
 // A magnified sight looked through with the goggle down. The goggle's objective sits well in front of the eye, so the
-// head cannot come to the sight: the gun is held further out instead, its eye point brought to the objective. The camera
-// is the eye and stays where it is (NewCameraSwitch.EyePlace): only the pose the gun is placed from goes ahead.
+// head cannot come to the sight; the gun is not brought forward either (the user's wish, 2026-11-15): the camera and
+// the gun stay where the aim puts them.
 // The sight's picture is at infinity, as the goggle is focused, so it is sharp (no objective blur over the lens). Its
 // light leaves the eyepiece through the sight's exit pupil (objective diameter over magnification) and only what of it the
 // goggle's objective takes in reaches the tube: the sight's picture as bright as the overlap of the pupil's beam and the
@@ -29,9 +29,7 @@ namespace EFTNewCamera;
 // Whether the sight's own picture is a night-vision one follows from it too (OpticSeesNightVision, NightVisionIr.cs).
 internal static partial class NightVisionEyepieces
 {
-    internal static float ScopePullback;                 // how far the gun is brought forward now, to the goggle's objective (m)
-    private const float ScopePullbackSeconds = 0.15f;
-    private const float ThroughScopeFrom = 0.005f;       // the pull from which the goggle's picture is the sight's (m)
+    internal static float ScopePullback;                 // how far the camera is ahead of the eyes now (m): always 0 now
     private const float DefaultScopeObjective = 0.032f;  // a sight's objective when its name gives none (m)
     private static readonly Regex ObjectiveInName = new Regex(@"\d+(?:[.,]\d+)?[x×](\d+)", RegexOptions.Compiled);
 
@@ -66,37 +64,22 @@ internal static partial class NightVisionEyepieces
     // aiming a magnified sight with the goggle down.
     internal static float ScopePull(Player player, Vector3 cameraPlace, Quaternion cameraTurn)
     {
-        // The gun is no longer brought forward to the goggle's objective (the user's wish, 2026-11-15): it stays where the
-        // aim puts it. A magnified sight looked through with the goggle before the aiming eye: its picture leaves the
-        // eyepiece in parallel light, which the goggle's objective, focused far, takes in sharp; but only as much as its
-        // exit pupil (objective over magnification) overlaps the objective's aperture: the higher the power, the dimmer.
+        // Nothing is brought forward (the user's wish, 2026-11-15). A magnified sight looked through with the goggle before
+        // the aiming eye: its picture leaves the eyepiece in parallel light, which the goggle's objective, focused far,
+        // takes in sharp; but only as much as its exit pupil (objective over magnification) overlaps the objective's
+        // aperture: the higher the power, the dimmer.
         ScopePullback = 0f;
         _scope.Through = Active && !_device.Thermal && _body != null && player.HandsController != null && player.HandsController.IsAiming
             && Scopes.Current(player.ProceduralWeaponAnimation) is { IsOptic: true } && ChestStance.Weight <= 0f && GoggleBeforeAimingEye(cameraPlace, cameraTurn);
-        // TEMP DIAG: the sight through the goggle or bare, as it changes.
-        if (TwoEyesNow && (_scope.Through != _diagThrough || AimEyeBare != _diagBare))
-        {
-            _diagThrough = _scope.Through;
-            _diagBare = AimEyeBare;
-            NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG sight (frame {Time.frameCount}): through the goggle {_scope.Through}, aiming eye bare {AimEyeBare}, aim side {(CameraPosition.AimSide >= 0f ? "right" : "left")}, pods {PodAngle(CentreLensA):F0}/{(_lensPods.Length > CentreLensB ? PodAngle(CentreLensB) : 0f):F0} deg");
-        }
         return 0f;
     }
 
     // A monocular before the other eye: the aiming eye looks through the sight bare, as without the goggle. Taken for the goggle's, the
     // sight's beam missed its objective altogether and the sight was black.
-    private static bool _diagThrough, _diagBare;
-    internal static string PodAnglesNow => $"{PodAngle(CentreLensA):F0}/{(_lensPods.Length > CentreLensB ? PodAngle(CentreLensB) : 0f):F0} deg";
     private const float BeforeEyeWithin = 0.03f;   // m across, half the way to the other eye
 
     private static bool GoggleBeforeAimingEye(Vector3 cameraPlace, Quaternion cameraTurn)
     {
-        _headRight = cameraTurn * Vector3.right;
-        // The two-eye experiment: the aiming eye's own eyepiece swung away (or a monocular before the other eye), the
-        // aiming eye is bare: the sight's picture is its own, not the tube's (worked out for that eye, before the two
-        // eyes are mixed; NightVisionEyes.cs, AimEyeBare).
-        if (TwoEyesNow && AimEyeBare)
-            return false;
         if (!_device.Monocular || _lensNodes.Length == 0)
             return true;
         return Mathf.Abs(Vector3.Dot(_lensNodes[CentreLensA].position - cameraPlace, cameraTurn * Vector3.right)) <= BeforeEyeWithin;
@@ -142,8 +125,8 @@ internal static partial class NightVisionEyepieces
                 float magnification = MagnificationOf(scope.Mod, sight!, optic);
                 float objective = ObjectiveOf(scope.Mod);
                 _scope.ObjectiveRadius = 0.5f * objective;
-                // The aim brings the eye, and the goggle's objective before it, onto the sight's axis (the gun no longer brought
-                // forward, the objective is behind the eye point, not off it): the beam fills what of the aperture it can.
+                // The aim brings the eye, and the goggle's objective before it, onto the sight's axis: the beam fills what
+                // of the aperture it can.
                 float apart = 0f;
                 float aperture = 0.5f * Aperture;
                 _scope.Light = DiscsOverlap(0.5f * objective / magnification, aperture, apart) / (Mathf.PI * aperture * aperture);
@@ -161,32 +144,6 @@ internal static partial class NightVisionEyepieces
         }
         else if (!on)
             RemoveScopeBuffer();
-    }
-
-    // The share of a magnified sight's light that an eyepiece's objective takes in (its exit pupil over the objective's
-    // aperture), for the sight looked through now; 1 without one. Where it applies is the picture's to say (the aiming
-    // eye's line of sight through its own eyepiece's picture region and the sight's lens, SightLensHalves.cs).
-    internal static float SightLightThroughEyepiece()
-    {
-        if (_scope.Through)
-            return _scope.Light;
-        try
-        {
-            Camera? optic = CameraManager.Instance?.OpticCameraManager?.Camera;
-            OpticSight? sight = CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight;
-            Player? player = Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer;
-            var scope = Scopes.Current(player?.ProceduralWeaponAnimation);
-            if (optic == null || sight == null || scope?.Mod == null)
-                return 1f;
-            float magnification = MagnificationOf(scope.Mod, sight, optic);
-            float objective = ObjectiveOf(scope.Mod);
-            float aperture = 0.5f * Aperture;
-            return DiscsOverlap(0.5f * objective / magnification, aperture, 0f) / (Mathf.PI * aperture * aperture);
-        }
-        catch
-        {
-            return 1f;
-        }
     }
 
     // The area two discs of radius r and R, their centres d apart, have in common.

@@ -138,9 +138,7 @@ internal static partial class NightVisionEyepieces
     internal static void OnCameraPostRender(Camera camera)
     {
         if (camera == Camera.main)
-        {
             ShowDeviceAgain();
-        }
     }
 
     // Just before the main camera renders, when its pose for the frame is final: each eye, moved apart as far as the
@@ -202,7 +200,6 @@ internal static partial class NightVisionEyepieces
         float bare = lone >= 0 ? PodBare(raisedTube) * (1f - again) : 0f;
         int loneSide = lone >= 0 ? ((lone == CentreLensA) == (a <= b) ? 0 : 1) : -1;
         int monocular = !BinocularOn ? -1
-            : ExperimentOn ? -1
             : _device.Monocular ? (a + CameraPosition.Horizontal >= 0f ? 1 : 0)
             : going >= 1f ? loneSide : -1;
         if (lone < 0)
@@ -231,8 +228,7 @@ internal static partial class NightVisionEyepieces
         // that eye, its eyepiece straight ahead in the middle of the frame, the other off to its side. They stay back of the
         // camera when it has come forward to a sight (NightVisionScope.cs). Where the game draws the device, from the camera.
         // A monocular comes in none of the way once aimed: as the camera goes over to the aiming eye, and back as it returns.
-        // The camera is the eye even through a magnified sight (the gun brought forward instead): nothing to take back.
-        Vector3 back = Vector3.zero;
+        Vector3 back = view.forward * ScopePullback;
         float bothIn = EyeShift * _split, oneIn = bothIn * (1f - CameraPosition.ViewAimed);
         float comesIn = monocular >= 0 ? oneIn : bothIn;
         Vector3 EyeShiftOf(float lens) => _direct ? right * (lens * comesIn) - back : Vector3.zero;
@@ -268,43 +264,6 @@ internal static partial class NightVisionEyepieces
         // ...and the eye left taking the frame over, its half widening past the far edge.
         if (monocular < 0 && going > 0f)
             split = Mathf.Lerp(split, loneSide == 0 ? 1f + Overscan : -Overscan, going);
-        // The experiment (NightVisionOtherEye.cs): the scene rendered once, the device, the arms and the gun drawn into it
-        // from each eye, each eye's lenses mapped from it, the two laid over the whole frame half each. Each eye straight
-        // behind its own eyepiece, across: its eyecup's first lens (an eyecup with two lenses, the GPNVG-18's "8", its inner
-        // one); a monocular's bare eye as far the other side of the head's middle. The aiming eye is the
-        // one on the shouldered side (CameraPosition.EyesOverride), the gun placed for it.
-        bool mixed = ExperimentOn;
-        if (mixed)
-        {
-            float cupA = a, cupB = b;
-            float leftAcross = Mathf.Min(cupA, cupB), rightAcross = Mathf.Max(cupA, cupB);
-            float middle = -CameraPosition.Horizontal;   // the head's middle, across from the camera
-            if (_device.Monocular)
-            {
-                float other = 2f * middle - cupA;
-                leftAcross = Mathf.Min(cupA, other);
-                rightAcross = Mathf.Max(cupA, other);
-            }
-            // As the device comes down, the eyes go out from the head's middle to their eyepieces (back in as it goes up).
-            float apart = Mathf.SmoothStep(0f, 1f, _split);
-            leftShift = right * Mathf.Lerp(middle, leftAcross, apart);
-            rightShift = right * Mathf.Lerp(middle, rightAcross, apart);
-            CameraPosition.EyesOverride = new Vector2(leftAcross - middle, rightAcross - middle);
-            // Whether the aiming eye (the camera's) is bare: no eyepiece before it (its pod swung away, or a monocular before
-            // the other eye). Only then does it see a sight's own picture (SightLensHalves).
-            bool aimRight = CameraPosition.AimSide >= 0f;
-            int aimTube = (a >= b) == aimRight ? CentreLensA : CentreLensB;
-            float aimLensAcross = aimTube == CentreLensA ? a : b;
-            _monocularAimBare = _device.Monocular && Mathf.Abs(aimLensAcross) > BareEyeFrom;
-            _headRight = right;
-            if (!_mixedNoted)
-            {
-                _mixedNoted = true;
-                NewCameraPlugin.Log?.LogInfo($"NVG experiment: the eyes behind the eyepieces, {leftAcross * 1000f:F0} and {rightAcross * 1000f:F0} mm across from the camera.");
-            }
-        }
-        binocular.SetFloat(EyeMixId, mixed ? 0.5f : -1f);
-        DirectMix = mixed ? 0.5f : -1f;
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
@@ -364,26 +323,7 @@ internal static partial class NightVisionEyepieces
         }
         return shift + lens.forward * ((least - along) * Mathf.Clamp01(_split));
     }
-    private static bool _eyeHeldNoted, _mixedNoted;
-    // The experiment: the aiming eye has no eyepiece before it: its own eyepiece swung away on its pod (by where the
-    // eyepieces stand down, along the head's right: not by where the camera is, which moves with what is worked out
-    // from this, and made it flip from frame to frame), or a monocular before the other eye.
-    internal static bool AimEyeBare
-    {
-        get
-        {
-            if (_device.Monocular)
-                return _monocularAimBare;
-            if (_lensRest.Length <= CentreLensB || _lensRest[CentreLensA] == null || _lensRest[CentreLensB] == null)
-                return false;
-            float a = Vector3.Dot(_lensRest[CentreLensA].position, _headRight), b = Vector3.Dot(_lensRest[CentreLensB].position, _headRight);
-            int aimTube = (a >= b) == (CameraPosition.AimSide >= 0f) ? CentreLensA : CentreLensB;
-            return PodGone(aimTube) >= 1f;
-        }
-    }
-    private static bool _monocularAimBare;
-    internal static Vector3 _headRight = Vector3.right;
-    private const float BareEyeFrom = 0.02f;      // a monocular's lens this far across from the aiming eye is not before it (m)
+    private static bool _eyeHeldNoted;
 
     // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
     // The eyepiece's own glass (its rim, as the lens node stands), projected from where this file puts the eye: the
@@ -516,7 +456,6 @@ internal static partial class NightVisionEyepieces
     // Which tube each pixel looks into: the device's own opaque meshes drawn black, then a card over each eyecup's
     // opening, just above its rim, on which each line of sight is followed to the lenses (NvgLensMask.shader).
     // Everything as it stands from the eye (the eye at zero, its view turned but not moved; see NightVisionPrecise).
-    private static int _diagLensAt;
     private static void DrawLensMap(RenderTexture target, RenderTexture glass, Vector3 cameraPlace, Vector3 shift, Matrix4x4 view, Matrix4x4 projection)
     {
         _lensMapMaterial ??= new Material(_lensMaskShader) { name = "Justachae NVG lens map", hideFlags = HideFlags.DontSave };
@@ -528,21 +467,10 @@ internal static partial class NightVisionEyepieces
         {
             Matrix4x4 node = fromEye * FromCamera(_lensNodes[i], cameraPlace);
             Vector3 point = node.GetColumn(3), floor = node.MultiplyPoint3x4(_lensFloors[i]);
-            // An eyepiece swung away on its pod: its lens no picture region any more (no size: nothing is inside it).
-            // (In the two-eye experiment no such judging: where the eyepiece stands and faces, as the tube's field from
-            // the eye says, is all there is to where its picture is.)
-            bool gone = !TwoEyesNow && PodGone(i - i % 2) >= 1f;
-            _lensMapMaterial.SetVector(LensIds4[i], new Vector4(point.x, point.y, point.z, gone ? -1f : _lensFloors[i].w * scale));
-            // TEMP DIAG: where each lens is from this eye, and its pod's angle, as a pod comes up.
-            if (i % 2 == 0 && TwoEyesNow && Time.frameCount >= _diagLensAt)
-            {
-                NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG lens {i} from eye {shift.x * 1000f:F0}mm: at {point.x * 1000f:F0},{point.y * 1000f:F0},{point.z * 1000f:F0} mm, pod {PodAngle(i):F0} deg, gone {gone}");
-            }
+            _lensMapMaterial.SetVector(LensIds4[i], new Vector4(point.x, point.y, point.z, _lensFloors[i].w * scale));
             _lensMapMaterial.SetVector(LensFloorIds[i], floor);
             _lensMapMaterial.SetVector(AxisIds[i], _lensNodes[i].forward);
         }
-        if (Time.frameCount >= _diagLensAt && shift.x > 0f)
-            _diagLensAt = Time.frameCount + 300;
         _lensMapMaterial.SetVector(OpeningId, new Vector4(_device.OpeningRadius, _device.RimRadius, _device.RimHeight, 0f) * scale);
         _lensMapMaterial.SetVector(EyeId, eye);
         // A thermal goggles' display lit evenly to its edge (the game's T-7 has no falloff); an image tube's dims at its rim.
@@ -571,7 +499,7 @@ internal static partial class NightVisionEyepieces
         {
             // An eyepiece swung away on its pod, its tube off: no lens to look into there, only the device. With its card
             // still drawn, the composite and the device drawn into the main camera left a lens-shaped hole in it.
-            if (!TwoEyesNow && PodGone(centre) >= 1f)
+            if (PodGone(centre) >= 1f)
                 continue;
             Transform a = _lensNodes[centre], b = _lensNodes[centre + 1];
             Vector3 normal = (a.forward + b.forward).normalized;

@@ -15,19 +15,6 @@ Shader "Justachae/NVG/Binocular" {
  Properties { _MainTex ("scene", 2D) = "black" {} }
  CGINCLUDE
  #include "NvgEyes.cginc"
- // The experiment: each eye's own drawing of the device (NvgDirect.shader), and where its nearest is the player's own.
- UNITY_DECLARE_DEPTH_TEXTURE(_DirectLD);
- UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
- sampler2D _DirectNearL, _DirectNearR;
- float _DirectAimRight;   // the experiment's aiming eye: 1 the right, 0 the left
- float _ProbeEye;         // the experiment's probe: 0 the left eye's view alone, 1 the right's; below 0 both
- bool deviceAt (float raw, float near) {
-  #if defined(UNITY_REVERSED_Z)
-  return raw > 0 && near < 0.5;
-  #else
-  return raw < 1 && near < 0.5;
-  #endif
- }
  ENDCG
  SubShader {
   Cull Off ZWrite Off ZTest Always
@@ -40,19 +27,6 @@ Shader "Justachae/NVG/Binocular" {
    float4 frag (v2f_img i) : SV_Target {
     float4 scene = tex2D(_MainTex, i.uv);
     if (_Mode < 0.5) return scene;
-    // The experiment: each eye's own result over the whole frame (its lens's picture where it looks into it, the frame
-    // elsewhere), half each (_EyeMix of the right's).
-    if (_EyeMix >= 0) {
-     float4 eyeL, lightL, eyeR, lightR; float coverL, darkL, coverR, darkR;
-     eyeSide(i.uv, false, eyeL, lightL, coverL, darkL);
-     eyeSide(i.uv, true, eyeR, lightR, coverR, darkR);
-     float3 lit = tex2D(_Glow, i.uv).rgb * _Lamp.y;
-     float3 seenL = eyeL.rgb * (1 - saturate(coverL * _LensClear + (1 - _LensClear) * darkL)) + lightL.rgb * _Lamp.x + lit * (1 - lightL.w) + (1 - saturate(eyeL.a)) * (1 - coverL) * scene.rgb;
-     float3 seenR = eyeR.rgb * (1 - saturate(coverR * _LensClear + (1 - _LensClear) * darkR)) + lightR.rgb * _Lamp.x + lit * (1 - lightR.w) + (1 - saturate(eyeR.a)) * (1 - coverR) * scene.rgb;
-     // Half each (a probe: one eye's alone).
-     float share = _ProbeEye >= 0 ? _ProbeEye : 0.5;
-     return float4(lerp(seenL, seenR, share), scene.a);
-    }
     float4 eye; float4 light; float cover, dark;
     eyeAt(i.uv, eye, light, cover, dark);
     // The glow falls on the eyecups and the housing about the lenses, not on the lenses' own picture (over it, it

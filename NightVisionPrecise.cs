@@ -25,7 +25,7 @@ internal static partial class NightVisionEyepieces
         Vector3? fromHead = FromHead(head, root);
         if (fromHead == null)
             return false;
-        _rootsFromCamera[root] = Matrix4x4.TRS(fromHead.Value - NewCameraSwitch.PoseFromHead + NewCameraSwitch.EyeBehindPose - OtherEyeOffset(camera.transform.rotation), root.rotation, root.lossyScale);
+        _rootsFromCamera[root] = Matrix4x4.TRS(fromHead.Value - NewCameraSwitch.PoseFromHead, root.rotation, root.lossyScale);
         _precise = true;
         return true;
     }

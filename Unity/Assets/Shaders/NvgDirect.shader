@@ -11,22 +11,6 @@ Shader "Justachae/NVG/Direct" {
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
  UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
  float _DirectSplit, _DirectStrip, _DirectBehind;
- // The experiment (NightVisionOtherEye.cs): each eye's share of the whole frame, the same everywhere (0.5 half each);
- // below 0, the left eye's on the left and the right's on the right, eased across the strip, as ever.
- float _DirectMix;
- // The experiment: the right eye's weight where an eye's nearest is its gun or arm (the aiming eye's far the more, the other's
- // faint), in place of the share by where across the frame.
- float _DirectNearShare;
- float _DirectAimRight;    // the aiming eye: 1 the right, 0 the left
- float _DirectOtherNear;   // the other eye's gun and arms, as a share where they are
- float _DirectAimNear;     // the aiming eye's gun and arms, as a share where they are
- // Where each eye's nearest is the player's own (the gun, the arms: pass 13 on that eye's depth), not the device.
- sampler2D _DirectNearL, _DirectNearR;
- float toRightAt (float x) {
-  // The experiment: the right eye's share growing across the frame, none at its left edge, all at its right (half in the
-  // middle).
-  return _DirectMix >= 0 ? 0.5 : smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, x);
- }
  float4x4 _EyeInvVP0, _EyeInvVP1;
  float4 _TubeField, _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;
  float4 _DirectInset;    // how far past the lens's edge the device goes, as a share of the frame
@@ -100,25 +84,7 @@ Shader "Justachae/NVG/Direct" {
  // the left eye's on the left of the line, the right's on the right, each by its share across the strip about it, and through a
  // lens that eye has nothing of the device. All that goes past the line is gone.
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
-  // The experiment (NightVisionOtherEye.cs): the two eyes half each, everywhere. An eye looking into its own lens here
-  // has the lens's picture (the composite), unless its gun or arm is what it sees there; the frame is the others', each
-  // with what it drew here (half each where both did), or the scene.
-  if (_DirectMix >= 0) {
-   bool shL = shown(rawL), shR = shown(rawR);
-   bool nearL = shL && tex2Dlod(_DirectNearL, float4(uv, 0, 0)).r >= 0.5, nearR = shR && tex2Dlod(_DirectNearR, float4(uv, 0, 0)).r >= 0.5;
-   bool l = !(within(_DirectLens0, uv, _EyeInvVP0) && !nearL), r = !(within(_DirectLens1, uv, _EyeInvVP1) && !nearR);
-   bool sl = l && shL, sr = r && shR;
-   if (l && r) {
-    if (sl && sr) { toRight = 0.5; return 1; }
-    if (sl) { toRight = 0; return 0.5; }
-    if (sr) { toRight = 1; return 0.5; }
-    toRight = 0.5; return 0;
-   }
-   if (l) { toRight = 0; return sl ? 1 : 0; }
-   if (r) { toRight = 1; return sr ? 1 : 0; }
-   toRight = 0.5; return 0;
-  }
-  float t = toRightAt(uv.x);
+  float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
   toRight = t;
   // Through either eye's lens here, nothing of the device: the lenses' picture is made from this frame, and the composite shows the
   // lens there whole.
@@ -160,13 +126,6 @@ Shader "Justachae/NVG/Direct" {
  bool checker (float2 pixel) { return fmod(floor(pixel.x) + floor(pixel.y), 2) < 0.5; }
 
  bool pick (float2 pixel, float2 uv, float rawL, float rawR, out float toRight) {
-  // The experiment, the two eyes kept apart: each pixel one eye's, as on a chessboard (the left eye's on the white
-  // squares), its drawing whole (its own lens left open in it); split again once lit (pass 15), before anything blends
-  // pixels together.
-  if (_DirectMix >= 0) {
-   toRight = checker(pixel) ? 0 : 1;
-   return shown(toRight > 0.5 ? rawR : rawL);
-  }
   float c = coverage(uv, rawL, rawR, toRight);
   if (c <= 0)
    return false;
@@ -270,10 +229,8 @@ Shader "Justachae/NVG/Direct" {
     float2 uv = i.screen.xy / i.screen.w;
     float toRight;
     float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
-    if (_DirectMix >= 0)
-     discard;   // the experiment's chessboard is split, not evened (pass 15)
     float c = coverage(uv, rawL, rawR, toRight);
-    float t = toRightAt(uv.x);
+    float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
     bool strip = t > 0 && t < 1, fading = fadingAt(uv);
     if (c <= 0 || !strip && !fading || !notCovered(uv, rawL, rawR))
      discard;
@@ -287,7 +244,7 @@ Shader "Justachae/NVG/Direct" {
      static const float2 steps[4] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1) };
      [unroll] for (int k = 0; k < 4; k++) {
       float2 at = uv + steps[k] * _DirectTexel.xy;
-      float tn = toRightAt(at.x);
+      float tn = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, at.x);
       bool has = tn < 1 && shown(SAMPLE_DEPTH_TEXTURE_LOD(_DirectLD, float4(at, 0, 0)))
           || tn > 0 && shown(SAMPLE_DEPTH_TEXTURE_LOD(_DirectRD, float4(at, 0, 0)));
       float w = device || has ? 1 : 0;
@@ -489,121 +446,6 @@ Shader "Justachae/NVG/Direct" {
    #pragma fragment frag
    float4 raisedVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
    float4 frag () : SV_Target { return 1; }
-   ENDCG
-  }
-  // 14: the experiment, in an eye's own drawing: its device taken out where that eye looks into its own lens, for what
-  // lies past it (the gun, the arms) to be drawn there, and so be in the frame the lens's picture is made from.
-  Pass {
-   Cull Off ZWrite On ZTest Always
-   CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   #pragma target 3.5
-   float _DirectHalf, _DirectOpenBoth;
-   struct cleared { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; float4 g3 : SV_Target3; float depth : SV_Depth; };
-   cleared frag (v2f i) {
-    float2 uv = i.screen.xy / i.screen.w;
-    // Its own lens; with _DirectOpenBoth, either (the non-aiming eye's gun and arms, never in an eyepiece).
-    bool inLens = _DirectOpenBoth > 0.5 ? within(_DirectLens0, uv, _EyeInvVP0) || within(_DirectLens1, uv, _EyeInvVP1)
-        : _DirectHalf < 0.5 ? within(_DirectLens0, uv, _EyeInvVP0) : within(_DirectLens1, uv, _EyeInvVP1);
-    if (!inLens)
-     discard;
-    cleared o;
-    o.g0 = 0; o.g1 = 0; o.g2 = 0; o.g3 = 0;
-    #if defined(UNITY_REVERSED_Z)
-    o.depth = 0;
-    #else
-    o.depth = 1;
-    #endif
-    return o;
-   }
-   ENDCG
-  }
-  // 15: the experiment's lit frame (_DirectLitNow), its chessboard split: one eye's (_DirectHalf: 0 the left, on the white
-  // squares) whole, its pixels as they are, the other eye's filled from the four next to each (all of this eye's).
-  Pass {
-   Cull Off ZWrite Off ZTest Always
-   CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   #pragma target 3.5
-   // Drawn as the frame's quad (_directQuad), not blitted: this file's vertex shader takes the quad's corners as they are.
-   sampler2D _DirectLitNow;
-   float4 _DirectTexel;
-   float _DirectHalf;
-   float4 frag (v2f i) : SV_Target {
-    float2 uv = i.screen.xy / i.screen.w;
-    bool mine = checker(i.pos.xy) == (_DirectHalf < 0.5);
-    if (mine)
-     return float4(tex2D(_DirectLitNow, uv).rgb, 1);
-    float2 d = _DirectTexel.xy;
-    float3 around = tex2D(_DirectLitNow, uv + float2(d.x, 0)).rgb + tex2D(_DirectLitNow, uv - float2(d.x, 0)).rgb
-        + tex2D(_DirectLitNow, uv + float2(0, d.y)).rgb + tex2D(_DirectLitNow, uv - float2(0, d.y)).rgb;
-    return float4(around * 0.25, 1);
-   }
-   ENDCG
-  }
-  // 16: the two eyes' lit frames (_DirectEyeL, _DirectEyeR), half each; with _GunSolid, the aiming eye's alone where
-  // its own gun or arm is (the gun not see-through).
-  Pass {
-   Cull Off ZWrite Off ZTest Always
-   CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   #pragma target 3.5
-   sampler2D _DirectEyeL, _DirectEyeR;
-   float _GunSolid;
-   float4 frag (v2f i) : SV_Target {
-    float2 uv = i.screen.xy / i.screen.w;
-    float toRight = 0.5;
-    if (_GunSolid > 0.5) {
-     bool aimNear = (_DirectAimRight > 0.5 ? tex2D(_DirectNearR, uv).r : tex2D(_DirectNearL, uv).r) >= 0.5;
-     if (aimNear)
-      toRight = _DirectAimRight > 0.5 ? 1 : 0;
-    }
-    return float4(lerp(tex2D(_DirectEyeL, uv).rgb, tex2D(_DirectEyeR, uv).rgb, toRight), 1);
-   }
-   ENDCG
-  }
-  // 17: TEMP PROBE, one eye's source (_DirectHalf): what that eye's own drawing has (the device, the gun, the arms, by
-  // its own depth), lit, brightened to be seen (1 - exp(-40 x)); black where it has nothing; its own eyepiece's picture
-  // region (its own lens map, from where it stands) tinted green over it.
-  Pass {
-   Cull Off ZWrite Off ZTest Always
-   CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   #pragma target 3.5
-   sampler2D _DirectEyeL, _DirectEyeR;
-   float _DirectHalf;
-   float4 frag (v2f i) : SV_Target {
-    float2 uv = i.screen.xy / i.screen.w;
-    bool right = _DirectHalf > 0.5;
-    float raw = right ? SAMPLE_DEPTH_TEXTURE(_DirectRD, uv) : SAMPLE_DEPTH_TEXTURE(_DirectLD, uv);
-    float3 c = 0;
-    if (shown(raw))
-     c = 1 - exp(-40 * max(right ? tex2D(_DirectEyeR, uv).rgb : tex2D(_DirectEyeL, uv).rgb, 0));
-    bool region = right ? within(_DirectLens1, uv, _EyeInvVP1) : within(_DirectLens0, uv, _EyeInvVP0);
-    if (region)
-     c = lerp(c, float3(0.1, 0.8, 0.2), 0.35);
-    return float4(c, 1);
-   }
-   ENDCG
-  }
-  // 18: the experiment, the aiming eye's (_DirectHalf) own eyepiece's picture region, from where that eye stands: 1 in it.
-  // A sight's picture is made the tube's only there (SightLensHalves.cs, NvgTube pass 2).
-  Pass {
-   Cull Off ZWrite Off ZTest Always
-   CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   #pragma target 3.5
-   float _DirectHalf;
-   float4 frag (v2f i) : SV_Target {
-    float2 uv = i.screen.xy / i.screen.w;
-    bool region = _DirectHalf > 0.5 ? within(_DirectLens1, uv, _EyeInvVP1) : within(_DirectLens0, uv, _EyeInvVP0);
-    return region ? 1 : 0;
-   }
    ENDCG
   }
  }

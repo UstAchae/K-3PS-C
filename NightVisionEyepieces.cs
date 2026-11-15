@@ -345,7 +345,6 @@ internal static partial class NightVisionEyepieces
 
     internal static void Update(Player player)
     {
-        NearPlayer = player;
         if (!LoadShaders())
         {
             Release();
@@ -416,7 +415,6 @@ internal static partial class NightVisionEyepieces
         HoldMainThermal(cameras, thermal && worn);
         KeepThermalGlow(thermalDevice);
         Active = on;
-        PlaceExperimentEye();
         _split = _flip;
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
         KeepGlow(device);
@@ -485,7 +483,6 @@ internal static partial class NightVisionEyepieces
         _searchedFrame = -100;
         ReleaseEyes();
         ReleaseThermal();
-        ReleaseOtherEye();
         KeepEyepieceImage(null, false);
     }
 

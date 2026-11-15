@@ -12,7 +12,6 @@ float4 _Power;                    // z frame
 float4 _TubePower, _TubeMottle;   // each tube's output (0 off, 1 on), and how mottled while it settles
 float _Overscan;                  // how far past the split each eye's view reaches, as a share of the frame
 float _Split;                     // where across the frame the left eye's view gives way to the right's (0.5 with the camera between the eyes)
-float _EyeMix;                    // the experiment: the right eye's share of the whole frame, the same everywhere; below 0, by _Split
 float4 _EyeSpan;                  // x the left eye's view's share of the frame's width, y the right's (1: the whole frame)
 float4 _Monocular;                // x 1 for a monocular, whose one eye (y: 0 left, 1 right) sees the whole frame; the other half fades toward its edge, z as this power (0 not at all)
 float4 _Lamp;                     // x the lenses' brightness, y the glow's, z the eyepieces' distortion, w the field angle it is given at (rad)
@@ -88,7 +87,7 @@ void eyeSide (float2 uv, bool right, out float4 eye, out float4 light, out float
 // A monocular's one eye everywhere, fading over the other eye's half: that eye sees past the device, and the two
 // views are seen as one, the device the fainter the further out toward that eye's edge.
 void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover, out float dark) {
- float toRight = _EyeMix >= 0 ? 0.5 : smoothstep(_Split - _Overscan * 0.5, _Split + _Overscan * 0.5, uv.x);
+ float toRight = smoothstep(_Split - _Overscan * 0.5, _Split + _Overscan * 0.5, uv.x);
  if (_Monocular.x > 0.5) {
   bool right = _Monocular.y > 0.5;
   eyeSide(uv, right, eye, light, cover, dark);

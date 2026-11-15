@@ -152,9 +152,6 @@ internal static partial class NightVisionEyepieces
         else
         {
             RenderTexture? made = null, tubed = null, focused = null, fused = null, dimmed = null;
-            // The experiment (NightVisionOtherEye.cs): each eye's own frame, picture and eyepieces, then half each.
-            if (TwoEyesNow && _eyesLitFrame == Time.frameCount && ComposeEyesApart(camera, composite, glow, from, into))
-                goto composed;
             // The steps at the head of this file, in order.
             ScopeLensStep(camera, from);
             Texture picture = LensPicture(camera, ThroughObjective(camera, ForTube(from, ref tubed), ref focused), ref made);
@@ -162,7 +159,6 @@ internal static partial class NightVisionEyepieces
             picture = TubesGain(picture, ref dimmed);
             Texture? fusedPicture = Fused(picture, ref fused);
             ReleaseMask();
-            composite.SetFloat(ProbeEyeId, -1f);
             Compose(composite, glow, from, into, picture, fusedPicture);
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
@@ -175,7 +171,6 @@ internal static partial class NightVisionEyepieces
             if (dimmed != null)
                 RenderTexture.ReleaseTemporary(dimmed);
         }
-        composed:
         if (lensed != null)
         {
             Fisheye.Blit(lensed, to);
@@ -328,9 +323,7 @@ internal static partial class NightVisionEyepieces
         composite.SetVector(TubeFusedId, fusedPicture != null ? _fusedTubes : Vector4.zero);
         Vector4 field = Interop.EyepieceFusion.FieldInMainUv;
         Vector2 share = Interop.EyepieceFusion.FusedRect;
-        // The rectangle shown whole in both lenses (not cut at the eyes' seam) — but not in the two-eye experiment, where
-        // each eye looks through its own eyepiece and only the right tube has the other mod's picture.
-        composite.SetVector(FusedRectId, fusedPicture != null && field.w > 0f && !TwoEyesNow
+        composite.SetVector(FusedRectId, fusedPicture != null && field.w > 0f
             ? new Vector4(field.x, field.y, share.x * field.z / field.w, share.y * field.z) : Vector4.zero);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
