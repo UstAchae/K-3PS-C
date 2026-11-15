@@ -97,6 +97,9 @@ internal static partial class NightVisionEyepieces
     private const int InsertPass = 0, SurfacePass = 1, EvenPass = 2, MotionPass = 3, StencilBitsPass = 4, PlacesPass = 12, LensOpenPass = 14,
         SplitPass = 15, HalvesPass = 16, SourcePass = 17, AimRegionPass = 18;
     private static readonly RenderTexture?[] _aimRegion = new RenderTexture?[1];
+    // Each eye's own eyepiece's picture region (the left's, the right's), for the final blend (NvgTube pass 1).
+    private static readonly RenderTexture?[] _eyeRegions = new RenderTexture?[2];
+    private static readonly int EyeRegionLId = Shader.PropertyToID("_EyeRegionL"), EyeRegionRId = Shader.PropertyToID("_EyeRegionR");
     private static readonly int AimLensRegionId = Shader.PropertyToID("_AimLensRegion");
     // TEMP PROBES: each eye's source alone (its own drawing of the device, the gun, the arms), NightVisionOtherEye.cs.
     internal static readonly RenderTexture?[] _eyeSources = new RenderTexture?[2];
@@ -667,6 +670,7 @@ internal static partial class NightVisionEyepieces
                 buffer.SetGlobalFloat(DirectHalf, half);
                 buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, SplitPass);
             }
+            buffer.SetGlobalFloat(GunSolidId, GunSolid ? 1f : 0f);
             buffer.SetGlobalTexture(DirectEyeLId, _eyesLit[0]!);
             buffer.SetGlobalTexture(DirectEyeRId, _eyesLit[1]!);
             buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
@@ -677,6 +681,14 @@ internal static partial class NightVisionEyepieces
             buffer.SetGlobalFloat(DirectHalf, CameraPosition.AimSide >= 0f ? 1f : 0f);
             buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, AimRegionPass);
             buffer.SetGlobalTexture(AimLensRegionId, aimRegion);
+            for (int half = 0; half < 2; half++)
+            {
+                RenderTexture region = DirectTexture(_eyeRegions, half, width, height, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear, "Justachae NVG eye's eyepiece region " + half);
+                buffer.SetRenderTarget(region);
+                buffer.SetGlobalFloat(DirectHalf, half);
+                buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, AimRegionPass);
+                buffer.SetGlobalTexture(half == 0 ? EyeRegionLId : EyeRegionRId, region);
+            }
             if (EyeProbes)
             {
                 for (int half = 0; half < 2; half++)

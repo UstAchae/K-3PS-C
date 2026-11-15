@@ -88,7 +88,8 @@ internal static class SightLensHalves
             return;
         }
         _halves ??= new Material(tubeShader) { name = "Justachae sight lens halves", hideFlags = HideFlags.DontSave };
-        _halves.SetFloat(OtherShareId, 0.5f);
+        // The gun not see-through (NightVisionOtherEye.cs, GunSolid): its sight's lens the aiming eye's alone too.
+        _halves.SetFloat(OtherShareId, NightVisionEyepieces.GunSolid ? 1f : 0.5f);
         _halves.SetFloat(AimBareId, NightVisionEyepieces.AimEyeBare ? 1f : 0f);
         _halves.SetFloat(ScopeDimId, NightVisionEyepieces.ScopeLightNow);
         _halves.SetColor(PhosphorId, NightVisionEyepieces.PhosphorNow);

@@ -543,7 +543,8 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 16: the two eyes' lit frames (_DirectEyeL, _DirectEyeR), half each.
+  // 16: the two eyes' lit frames (_DirectEyeL, _DirectEyeR), half each; with _GunSolid, the aiming eye's alone where
+  // its own gun or arm is (the gun not see-through).
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM
@@ -551,9 +552,16 @@ Shader "Justachae/NVG/Direct" {
    #pragma fragment frag
    #pragma target 3.5
    sampler2D _DirectEyeL, _DirectEyeR;
+   float _GunSolid;
    float4 frag (v2f i) : SV_Target {
     float2 uv = i.screen.xy / i.screen.w;
-    return float4(0.5 * (tex2D(_DirectEyeL, uv).rgb + tex2D(_DirectEyeR, uv).rgb), 1);
+    float toRight = 0.5;
+    if (_GunSolid > 0.5) {
+     bool aimNear = (_DirectAimRight > 0.5 ? tex2D(_DirectNearR, uv).r : tex2D(_DirectNearL, uv).r) >= 0.5;
+     if (aimNear)
+      toRight = _DirectAimRight > 0.5 ? 1 : 0;
+    }
+    return float4(lerp(tex2D(_DirectEyeL, uv).rgb, tex2D(_DirectEyeR, uv).rgb, toRight), 1);
    }
    ENDCG
   }

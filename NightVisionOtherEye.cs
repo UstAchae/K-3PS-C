@@ -284,6 +284,10 @@ internal static partial class NightVisionEyepieces
     private static readonly int EyePreId = Shader.PropertyToID("_EyePre"), OtherPreId = Shader.PropertyToID("_OtherPre");
     private static readonly int OtherId = Shader.PropertyToID("_Other"), OtherShareId = Shader.PropertyToID("_OtherShare");
     private static Material? _eyesMaterial;
+    // The experiment, tried: the gun not see-through (the aiming eye's alone where its own gun, arms and sight are).
+    internal static bool GunSolid = true;
+    private static readonly int EyeSideId = Shader.PropertyToID("_EyeSide"), GunSolidHalvesId = Shader.PropertyToID("_GunSolidHalves");
+    internal static readonly int GunSolidId = Shader.PropertyToID("_GunSolid");
 
     private static bool ComposeEyesApart(Component camera, Material composite, Material glow, RenderTexture from, RenderTexture into)
     {
@@ -304,6 +308,7 @@ internal static partial class NightVisionEyepieces
         for (int side = 0; side < 2; side++)
         {
             RenderTexture own = Temporary();
+            eyes.SetFloat(EyeSideId, side);
             eyes.SetTexture(EyePreId, _eyesLit[side]);
             eyes.SetTexture(OtherPreId, _eyesLit[1 - side]);
             Graphics.Blit(from, own, eyes, EyeFromBlendPass);
@@ -330,7 +335,9 @@ internal static partial class NightVisionEyepieces
         composite.SetFloat(ProbeEyeId, -1f);
         eyes.SetTexture(OtherId, seen[1]);
         eyes.SetFloat(OtherShareId, 0.5f);
+        eyes.SetFloat(GunSolidHalvesId, GunSolid ? 1f : 0f);
         Graphics.Blit(seen[0], into, eyes, TubeHalves);
+        eyes.SetFloat(GunSolidHalvesId, 0f);
         if (EyeProbes && _eyeSources[0] != null && _eyeSources[1] != null)
             DrawEyeProbes(into, _eyeSources[0]!, _eyeSources[1]!);
         if (fusedMade != null)

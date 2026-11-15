@@ -36,11 +36,26 @@ Shader "Justachae/NVG/Tube" {
    #pragma vertex vert_img
    #pragma fragment frag
    #include "UnityCG.cginc"
-   sampler2D _MainTex, _Other;
-   float _OtherShare;
+   sampler2D _MainTex, _Other, _DirectNearL, _DirectNearR, _EyeRegionL, _EyeRegionR;
+   float _OtherShare, _GunSolidHalves, _DirectAimRight;
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
-    c.rgb = lerp(c.rgb, tex2D(_Other, i.uv).rgb, _OtherShare);
+    float share = _OtherShare;
+    // The experiment's two eyes (_MainTex the left's, _Other the right's), the gun not see-through: the aiming eye's
+    // alone where its own gun or arm is.
+    // And the goggle's picture not see-through either: where one eye's own eyepiece's picture is, that eye's alone;
+    // where both eyes' are, the aiming eye's (the two pictures never laid over each other).
+    if (_GunSolidHalves > 0.5) {
+     float aim = _DirectAimRight > 0.5 ? 1 : 0;
+     bool inL = tex2D(_EyeRegionL, i.uv).r > 0.5, inR = tex2D(_EyeRegionR, i.uv).r > 0.5;
+     if ((_DirectAimRight > 0.5 ? tex2D(_DirectNearR, i.uv).r : tex2D(_DirectNearL, i.uv).r) >= 0.5 || inL && inR)
+      share = aim;
+     else if (inL)
+      share = 0;
+     else if (inR)
+      share = 1;
+    }
+    c.rgb = lerp(c.rgb, tex2D(_Other, i.uv).rgb, share);
     return c;
    }
    ENDCG
@@ -83,14 +98,18 @@ Shader "Justachae/NVG/Tube" {
    #pragma vertex vert_img
    #pragma fragment frag
    #include "UnityCG.cginc"
-   sampler2D _MainTex, _EyePre, _OtherPre;
+   sampler2D _MainTex, _EyePre, _OtherPre, _DirectNearL, _DirectNearR;
+   float _EyeSide, _GunSolid, _DirectAimRight;
    float4 frag (v2f_img i) : SV_Target {
     float4 blend = tex2D(_MainTex, i.uv);
     float3 eye = tex2D(_EyePre, i.uv).rgb, other = tex2D(_OtherPre, i.uv).rgb;
-    float3 mean = 0.5 * (eye + other);
-    // No fixed floor: a night scene's lit frame lies far below any (a floor of 0.002 made the ratio 1 there, and each
-    // eye kept the two eyes' frame half and half, both guns in it). Where the two are both black, black.
-    float3 ratio = mean > 1e-9 ? saturate(eye / max(mean, 1e-9) * 0.5) * 2 : float3(0, 0, 0);
+    // This eye's share of the blend, as NvgDirect pass 16 made it.
+    float share = 0.5;
+    if (_GunSolid > 0.5 && (_DirectAimRight > 0.5 ? tex2D(_DirectNearR, i.uv).r : tex2D(_DirectNearL, i.uv).r) >= 0.5)
+     share = (_EyeSide > 0.5) == (_DirectAimRight > 0.5) ? 1 : 0;
+    float3 mean = share * eye + (1 - share) * other;
+    // No fixed floor: a night scene's lit frame lies far below any. Where the two are both black, black.
+    float3 ratio = mean > 1e-9 ? clamp(eye / max(mean, 1e-9), 0, 8) : float3(0, 0, 0);
     return float4(blend.rgb * ratio, blend.a);
    }
    ENDCG
