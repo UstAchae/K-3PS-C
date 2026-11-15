@@ -74,9 +74,6 @@ internal static partial class NightVisionEyepieces
             return false;
         if ((!BinocularOn && !Active) || _eyepieceImage == null || !_eyepieceImage.enabled)
             return false;
-        // The experiment: a monocular's eyepieces stood down, both eyes rendered bare (NightVisionOtherEye.cs).
-        if (BothEyesBare)
-            return false;
         // Both eyepieces swung all the way away on their pods: the eyes are bare, the device the game's to draw again,
         // as with it flipped up (the eyes eased back to the camera on the way, below).
         if (_lensPods.Length > 0 && PodBare(CentreLensA) >= 1f && PodBare(CentreLensB) >= 1f)
@@ -90,12 +87,12 @@ internal static partial class NightVisionEyepieces
         LightFace(camera);
         if (camera != Camera.main)
             return;
-        HoldMainView(camera);
         HideIrLaserLights(camera);
         if (_body != null)
             AdjustMount(camera);
         // Once the device's mount is set for this frame: the camera has been placed by now.
-        _direct = _directShader != null && LensesOn(camera) && PrepareRelative(camera);
+        // The experiment draws nothing of the two eyes: the device the game's (NightVisionOtherEye.cs).
+        _direct = _directShader != null && !BothEyesBare && LensesOn(camera) && PrepareRelative(camera);
         if (_direct)
             HideDevice(camera);
         ClaimFusion(camera);
@@ -144,7 +141,6 @@ internal static partial class NightVisionEyepieces
         if (camera == Camera.main)
         {
             ShowDeviceAgain();
-            GiveMainViewBack(camera);
         }
     }
 
@@ -209,11 +205,14 @@ internal static partial class NightVisionEyepieces
         float bare = lone >= 0 ? PodBare(raisedTube) * (1f - again) : 0f;
         int loneSide = lone >= 0 ? ((lone == CentreLensA) == (a <= b) ? 0 : 1) : -1;
         int monocular = !BinocularOn ? -1
+            : BothEyesBare ? -1
             : _device.Monocular ? (a + CameraPosition.Horizontal >= 0f ? 1 : 0)
             : going >= 1f ? loneSide : -1;
         if (lone < 0)
             lone = CentreLensA;
         float loneAcross = lone == CentreLensA ? a : b;
+        if (_device.Monocular)
+            _eyepieceSide = a + CameraPosition.Horizontal >= 0f ? 1f : -1f;
         // The one swung up, for the device drawn into the main camera (NightVisionDirect.OnRaisedPod).
         RaisedPod = RaisedCupPod = null;
         if (monocular >= 0 && !_device.Monocular)

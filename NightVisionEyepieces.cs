@@ -415,6 +415,7 @@ internal static partial class NightVisionEyepieces
         HoldMainThermal(cameras, thermal && worn);
         KeepThermalGlow(thermalDevice);
         Active = on;
+        PlaceExperimentEye();
         _split = _flip;
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
         KeepGlow(device);
