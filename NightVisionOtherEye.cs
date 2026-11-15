@@ -14,6 +14,8 @@ internal static partial class NightVisionEyepieces
     // For SightLensHalves: the experiment on this frame, and the shader its mixing pass is in.
     internal static bool TwoEyesNow => ExperimentOn;
     internal static Shader? TubeShader => _tubeShader;
+    internal static float ScopeLightNow => _scope.Through ? _scope.Light : 1f;
+    internal static Color PhosphorNow => PhosphorColor();
 
     // The experiment is on for this device: one with eyepieces, down, flipping or switched on.
     private static bool ExperimentOn => MonocularBothEyes && _body != null && _lensNodes.Length > 0 && (Active || _flip > 0.001f);

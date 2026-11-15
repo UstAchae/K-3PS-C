@@ -13,8 +13,9 @@ namespace EFTNewCamera;
 // scaled to the screen), whole, over what lies behind it. Its call is taken over here: the frame copied just before,
 // the lens drawn as ever, then, where the lens is: the sight's picture only to the aiming eye, and only while no eyepiece
 // is before it (the picture is seen only from the sight's exit pupil, on its axis): half its picture, half what lay
-// behind (the other eye's view); with an eyepiece before it, whole, for that eyepiece's picture to take it in (dimmed by
-// the sight's exit pupil, NightVisionScope.cs).
+// behind (the other eye's view); with an eyepiece before it, as that eyepiece's tube shows it (its colour, dimmed by the
+// sight's exit pupil, NightVisionScope.cs), half too. The game lays the lens in after the eyepieces' picture is made, so it
+// is made the tube's here.
 // Outside the experiment the call is the game's, unchanged.
 internal static class SightLensHalves
 {
@@ -31,6 +32,7 @@ internal static class SightLensHalves
     private static readonly int OtherId = Shader.PropertyToID("_Other");
     private static readonly int OtherShareId = Shader.PropertyToID("_OtherShare");
     private static readonly int AimBareId = Shader.PropertyToID("_AimBare");
+    private static readonly int ScopeDimId = Shader.PropertyToID("_ScopeDim"), PhosphorId = Shader.PropertyToID("_Phosphor");
     private const int LensPass = 2;   // NvgTube.shader: the lens as the two eyes see it
     private static Material? _halves;
     private static int _taken;
@@ -87,6 +89,8 @@ internal static class SightLensHalves
         _halves ??= new Material(tubeShader) { name = "Justachae sight lens halves", hideFlags = HideFlags.DontSave };
         _halves.SetFloat(OtherShareId, 0.5f);
         _halves.SetFloat(AimBareId, NightVisionEyepieces.AimEyeBare ? 1f : 0f);
+        _halves.SetFloat(ScopeDimId, NightVisionEyepieces.ScopeLightNow);
+        _halves.SetColor(PhosphorId, NightVisionEyepieces.PhosphorNow);
         buffer.GetTemporaryRT(PreLensId, frame.width, frame.height, 0, FilterMode.Point, frame.format);
         buffer.GetTemporaryRT(PostLensId, frame.width, frame.height, 0, FilterMode.Point, frame.format);
         buffer.Blit(frame, PreLensId);
