@@ -558,7 +558,8 @@ Shader "Justachae/NVG/Direct" {
    ENDCG
   }
   // 17: TEMP PROBE, one eye's source (_DirectHalf): what that eye's own drawing has (the device, the gun, the arms, by
-  // its own depth), lit, brightened to be seen (1 - exp(-40 x)); black where it has nothing.
+  // its own depth), lit, brightened to be seen (1 - exp(-40 x)); black where it has nothing; its own eyepiece's picture
+  // region (its own lens map, from where it stands) tinted green over it.
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM
@@ -571,10 +572,29 @@ Shader "Justachae/NVG/Direct" {
     float2 uv = i.screen.xy / i.screen.w;
     bool right = _DirectHalf > 0.5;
     float raw = right ? SAMPLE_DEPTH_TEXTURE(_DirectRD, uv) : SAMPLE_DEPTH_TEXTURE(_DirectLD, uv);
-    if (!shown(raw))
-     return float4(0, 0, 0, 1);
-    float3 lit = right ? tex2D(_DirectEyeR, uv).rgb : tex2D(_DirectEyeL, uv).rgb;
-    return float4(1 - exp(-40 * max(lit, 0)), 1);
+    float3 c = 0;
+    if (shown(raw))
+     c = 1 - exp(-40 * max(right ? tex2D(_DirectEyeR, uv).rgb : tex2D(_DirectEyeL, uv).rgb, 0));
+    bool region = right ? within(_DirectLens1, uv, _EyeInvVP1) : within(_DirectLens0, uv, _EyeInvVP0);
+    if (region)
+     c = lerp(c, float3(0.1, 0.8, 0.2), 0.35);
+    return float4(c, 1);
+   }
+   ENDCG
+  }
+  // 18: the experiment, the aiming eye's (_DirectHalf) own eyepiece's picture region, from where that eye stands: 1 in it.
+  // A sight's picture is made the tube's only there (SightLensHalves.cs, NvgTube pass 2).
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   float _DirectHalf;
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    bool region = _DirectHalf > 0.5 ? within(_DirectLens1, uv, _EyeInvVP1) : within(_DirectLens0, uv, _EyeInvVP0);
+    return region ? 1 : 0;
    }
    ENDCG
   }

@@ -95,7 +95,9 @@ internal static partial class NightVisionEyepieces
     private static int _arrangedCount = -1;
     private static bool _direct;
     private const int InsertPass = 0, SurfacePass = 1, EvenPass = 2, MotionPass = 3, StencilBitsPass = 4, PlacesPass = 12, LensOpenPass = 14,
-        SplitPass = 15, HalvesPass = 16, SourcePass = 17;
+        SplitPass = 15, HalvesPass = 16, SourcePass = 17, AimRegionPass = 18;
+    private static readonly RenderTexture?[] _aimRegion = new RenderTexture?[1];
+    private static readonly int AimLensRegionId = Shader.PropertyToID("_AimLensRegion");
     // TEMP PROBES: each eye's source alone (its own drawing of the device, the gun, the arms), NightVisionOtherEye.cs.
     internal static readonly RenderTexture?[] _eyeSources = new RenderTexture?[2];
     // The experiment: each eye's lit frame, split from the chessboard before the post-processing (the frame it is made
@@ -669,6 +671,12 @@ internal static partial class NightVisionEyepieces
             buffer.SetGlobalTexture(DirectEyeRId, _eyesLit[1]!);
             buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
             buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, HalvesPass);
+            // The aiming eye's own eyepiece's picture region, for a sight's picture laid in later (SightLensHalves.cs).
+            RenderTexture aimRegion = DirectTexture(_aimRegion, 0, width, height, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear, "Justachae NVG aiming eye's eyepiece region");
+            buffer.SetRenderTarget(aimRegion);
+            buffer.SetGlobalFloat(DirectHalf, CameraPosition.AimSide >= 0f ? 1f : 0f);
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, AimRegionPass);
+            buffer.SetGlobalTexture(AimLensRegionId, aimRegion);
             if (EyeProbes)
             {
                 for (int half = 0; half < 2; half++)

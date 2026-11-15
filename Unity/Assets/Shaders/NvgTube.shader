@@ -55,7 +55,7 @@ Shader "Justachae/NVG/Tube" {
    #pragma vertex vert_img
    #pragma fragment frag
    #include "UnityCG.cginc"
-   sampler2D _MainTex, _Other;
+   sampler2D _MainTex, _Other, _AimLensRegion;
    float _OtherShare, _AimBare, _ScopeDim;
    float4 _Phosphor;
    float4 frag (v2f_img i) : SV_Target {
@@ -66,7 +66,10 @@ Shader "Justachae/NVG/Tube" {
     // The aiming eye's view of it: bare, as the game draws it; through its eyepiece, the tube's picture of it (the
     // light in the tube's colour, dimmed by the sight's exit pupil on the goggle's objective). Half each with the other
     // eye's view (what lay behind), as everywhere.
-    float3 seen = _AimBare > 0.5 ? laid.rgb : dot(laid.rgb, float3(0.2126, 0.7152, 0.0722)) * _ScopeDim * _Phosphor.rgb;
+    // Only inside the aiming eye's own eyepiece's picture region (from where that eye stands): outside it the eye
+    // looks past the eyepiece and sees the sight as it is.
+    bool tubed = _AimBare < 0.5 && tex2D(_AimLensRegion, i.uv).r > 0.5;
+    float3 seen = tubed ? dot(laid.rgb, float3(0.2126, 0.7152, 0.0722)) * _ScopeDim * _Phosphor.rgb : laid.rgb;
     return float4(lerp(before.rgb, seen, _OtherShare), laid.a);
    }
    ENDCG
