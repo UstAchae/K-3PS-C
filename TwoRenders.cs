@@ -63,8 +63,11 @@ internal static class TwoRenders
     private static float _shareGoggle = 1f, _shareBare;
     // How far the bare eye's gun is seen through (F12 单筒：裸眼瞄准时枪的透明度): 0 solid, 1 not seen; at half, as the two
     // eyes' frames laid together did.
-    internal static float BareGunSeeThrough = 0.5f;
-    private static float GunOpacity => 1f - Mathf.Clamp01(BareGunSeeThrough);
+    // How far each eye's gun is seen through (F12): 0 solid, 1 not seen. The goggle eye's laid in first, the bare eye's
+    // over it.
+    internal static float BareGunSeeThrough = 0.3f, GoggleGunSeeThrough = 0.7f;
+    private static float BareOpacity => 1f - Mathf.Clamp01(BareGunSeeThrough);
+    private static float GoggleOpacity => 1f - Mathf.Clamp01(GoggleGunSeeThrough);
     // The goggle is never seen through: nothing laid over what the camera has nearer than this (m; the gun is further).
     private const float DeviceReach = 0.12f;
     private static readonly int ShareGId = Shader.PropertyToID("_ShareG"), ShareBId = Shader.PropertyToID("_ShareB"), DeviceReachId = Shader.PropertyToID("_DeviceReach");
@@ -180,12 +183,9 @@ internal static class TwoRenders
         float toward = CameraPosition.AimingEyeAcross / Mathf.Max(CameraPosition.AimEye, 1e-4f) * Mathf.Sign(BareEye);
         _shareBare = Mathf.Clamp01(0.5f + 0.5f * toward);
         _shareGoggle = 1f - _shareBare;
-        // Aimed with the goggle's eye: its gun solid, as the frame's own render draws it (the user's, 2026-11-15).
-        if (_shareBare <= 0.001f)
-            return;
+        // Both eyes' guns, each seen through as set (F12); which aims decides only which has the sight's picture.
         RenderGun(main, GunPass.Bare, gunLayers);
-        if (_shareGoggle > 0.001f)
-            RenderGun(main, GunPass.Goggle, gunLayers);
+        RenderGun(main, GunPass.Goggle, gunLayers);
         if (_bareDone == Time.frameCount || _goggleDone == Time.frameCount)
             HideGun(true);
     }
@@ -384,8 +384,8 @@ internal static class TwoRenders
         bool bareGun = _bareDone == Time.frameCount && _bareGun != null;
         RenderTexture laid = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
         material.SetTexture(GunGId, goggleGun ? _goggleGun : Texture2D.blackTexture);
-        material.SetFloat(ShareGId, goggleGun ? _shareGoggle : 0f);   // the goggle eye's gun solid
-        material.SetFloat(ShareBId, bareGun ? GunOpacity * _shareBare : 0f);
+        material.SetFloat(ShareGId, goggleGun ? GoggleOpacity : 0f);
+        material.SetFloat(ShareBId, 0f);
         material.SetFloat(DeviceReachId, DeviceReach);
         material.SetTexture(GunBId, bareGun ? _bareGun : Texture2D.blackTexture);
         Graphics.Blit(scene, laid, material, GunsInPass);
@@ -431,7 +431,7 @@ internal static class TwoRenders
         RenderTexture goggle = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
         Graphics.Blit(into, goggle);
         material.SetTexture(OtherId, _bareGun);
-        material.SetFloat(OtherShareId, GunOpacity * _shareBare);
+        material.SetFloat(OtherShareId, BareOpacity);
         material.SetFloat(DeviceReachId, DeviceReach);
         Graphics.Blit(goggle, into, material, HalvesPass);
         if (Probes)
