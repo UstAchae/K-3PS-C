@@ -47,7 +47,7 @@ internal static class CameraPosition
         float pose = Mathf.Lerp(Across, side * AimEye, Smooth(_aimed));
         AimingEyeAcross = side * AimEye;
         // The experiment (TwoRenders.cs): at the goggle's eye while a monocular is seen from each eye.
-        Horizontal = TwoRenders.EyeOverride ?? Mathf.Lerp(Across, side * AimEye, Smooth(_viewAimed));
+        Horizontal = TwoRenders.Place(Mathf.Lerp(Across, side * AimEye, Smooth(_viewAimed)));
         PoseAcross = pose - Horizontal;
     }
 

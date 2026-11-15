@@ -42,6 +42,7 @@ internal static partial class NightVisionEyepieces
     // A device with eyepieces down, or on its way down or up (TwoRenders.cs: the frame rendered from each eye then).
     internal static bool DownOrFlipping => _body != null && _lensNodes.Length > 0 && (Active || _flip > 0.001f);
     internal static bool MonocularWorn => _body != null && _device.Monocular;
+    internal static float Flip => _flip;
 
     private struct Tube
     {

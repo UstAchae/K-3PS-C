@@ -97,10 +97,13 @@ internal static class TwoRenders
     internal static bool Now => On && !_failed && NightVisionEyepieces.DownOrFlipping && NightVisionEyepieces.MonocularWorn;
 
     // The camera across from the head's middle while on: at the goggle's eye (the bare eye's render placed from there).
-    internal static float? EyeOverride => Now ? _goggleEye : (float?)null;
+    // As the goggle flips down the eyes go out to their places from where the camera would be, and back as it flips up
+    // (the user's, 2026-11-15: no jump into the two views).
+    private static float Apart => Mathf.SmoothStep(0f, 1f, NightVisionEyepieces.Flip);
+    internal static float Place(float across) => Now ? Mathf.Lerp(across, _goggleEye, Apart) : across;
 
     // Where the camera is placed from its place this frame: over at the bare eye during the bare eye's render.
-    internal static Vector3 OtherEyeOffset(Quaternion turn) => _gun == GunPass.Bare ? turn * new Vector3(BareEye - _goggleEye, 0f, 0f) : Vector3.zero;
+    internal static Vector3 OtherEyeOffset(Quaternion turn) => _gun == GunPass.Bare ? turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f) : Vector3.zero;
 
     // From NightVisionEyes.RenderLenses in the goggle eye's own render: its lens across from the head's middle.
     internal static void SeeLens(float across)
