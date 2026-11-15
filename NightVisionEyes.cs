@@ -275,7 +275,7 @@ internal static partial class NightVisionEyepieces
         // eye's lens map from where it is (the composite then made once for each, all one side's).
         // The device drawn into the main camera from its eye alone (all the frame that eye's side), its lenses left open
         // there for their picture, made from that frame (drawn by the game, it filled the lenses' picture with itself).
-        if (BothEyesBare && CameraPosition.EyeOverride is float mainEye)
+        if (ExperimentOn && CameraPosition.EyeOverride is float mainEye)
         {
             Vector3 otherEye = right * (-2f * mainEye);
             leftShift = mainEye >= 0f ? otherEye : Vector3.zero;

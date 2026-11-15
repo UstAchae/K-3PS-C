@@ -22,9 +22,6 @@ internal static class CameraPosition
     // EXPERIMENT (NightVisionOtherEye.cs): the camera across from the head's middle at this eye (± AimEye), whatever
     // else would place it.
     internal static float? EyeOverride;
-    // The aiming side as it is now (1 right shoulder, -1 left) and whether aimed (more than half way in).
-    internal static float AimSide => _side;
-    internal static bool AimedNow => _aimed > 0.5f;
 
     private const float AimInSeconds = 0.2f;
     private const float AimOutSeconds = 0.35f;       // as long as the gun takes back to the hip (AimArms.LeaveSeconds)

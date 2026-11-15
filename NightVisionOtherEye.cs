@@ -24,16 +24,20 @@ internal static partial class NightVisionEyepieces
     private static readonly int OtherId = Shader.PropertyToID("_Other");
     private static readonly int OtherShareId = Shader.PropertyToID("_OtherShare");
 
+    // The experiment is on for this device: with it down, flipping or switched on.
+    private static bool ExperimentOn => BothEyesBare && (Active || _flip > 0.001f);
+
     // Whether the experiment takes this device: any with eyepieces.
     private static bool BothEyesBare => MonocularBothEyes && _body != null && _lensNodes.Length > 0;
 
     // Each frame, before the camera is placed: the camera at the eye behind the eyepiece while the experiment is on.
     private static void PlaceExperimentEye()
     {
-        // Aimed, the camera at the aiming eye (the sight before it); otherwise a monocular's at the eye behind it, a
-        // binocular's at the right eye.
-        float side = CameraPosition.AimedNow ? (CameraPosition.AimSide >= 0f ? 1f : -1f) : _device.Monocular ? _eyepieceSide : 1f;
-        CameraPosition.EyeOverride = BothEyesBare && Active ? side * CameraPosition.AimEye : (float?)null;
+        // A monocular's camera at the eye behind it, a binocular's at the right eye; aimed or not (the camera not moved
+        // over to the aiming eye). From the moment the device starts down until it is all the way up: the eyes stay where
+        // they are as it flips, not brought together toward the eyepieces.
+        float side = _device.Monocular ? _eyepieceSide : 1f;
+        CameraPosition.EyeOverride = ExperimentOn ? side * CameraPosition.AimEye : (float?)null;
     }
 
     private static Camera? BareEye(int side, Camera main)
@@ -98,7 +102,7 @@ internal static partial class NightVisionEyepieces
     // The other camera's view this frame, as the main camera is about to render: at the other aiming eye.
     private static void RenderBareEyes(Camera main)
     {
-        if (!BothEyesBare || !Active || CameraPosition.EyeOverride == null)
+        if (!ExperimentOn || CameraPosition.EyeOverride == null)
             return;
         SSAA? ssaa = main.GetComponent<SSAA>();
         int width = Mathf.Max(ssaa != null ? ssaa.GetInputWidth() : Screen.width, 1), height = Mathf.Max(ssaa != null ? ssaa.GetInputHeight() : Screen.height, 1);
