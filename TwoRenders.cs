@@ -181,9 +181,9 @@ internal static class TwoRenders
             LensRenderer(propagator) = null!;
             CollimatorRenderer(propagator) = null!;
         }
-        float far = main.farClipPlane;
+        // The camera's reach left as it is (the sight's lens works its picture out from the camera's projection: with
+        // the reach cut to a couple of metres it found none); what is past NearReach is left out when laid in.
         int mask = main.cullingMask;
-        main.farClipPlane = NearReach;
         main.cullingMask = gunLayers;
         _gun = which;
         try
@@ -198,7 +198,6 @@ internal static class TwoRenders
         finally
         {
             _gun = GunPass.None;
-            main.farClipPlane = far;
             main.cullingMask = mask;
             if (!aims && propagator != null)
             {
