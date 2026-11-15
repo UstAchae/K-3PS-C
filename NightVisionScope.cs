@@ -162,6 +162,32 @@ internal static partial class NightVisionEyepieces
             RemoveScopeBuffer();
     }
 
+    // The share of a magnified sight's light that an eyepiece's objective takes in (its exit pupil over the objective's
+    // aperture), for the sight looked through now; 1 without one. Where it applies is the picture's to say (the aiming
+    // eye's line of sight through its own eyepiece's picture region and the sight's lens, SightLensHalves.cs).
+    internal static float SightLightThroughEyepiece()
+    {
+        if (_scope.Through)
+            return _scope.Light;
+        try
+        {
+            Camera? optic = CameraManager.Instance?.OpticCameraManager?.Camera;
+            OpticSight? sight = CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight;
+            Player? player = Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer;
+            var scope = Scopes.Current(player?.ProceduralWeaponAnimation);
+            if (optic == null || sight == null || scope?.Mod == null)
+                return 1f;
+            float magnification = MagnificationOf(scope.Mod, sight, optic);
+            float objective = ObjectiveOf(scope.Mod);
+            float aperture = 0.5f * Aperture;
+            return DiscsOverlap(0.5f * objective / magnification, aperture, 0f) / (Mathf.PI * aperture * aperture);
+        }
+        catch
+        {
+            return 1f;
+        }
+    }
+
     // The area two discs of radius r and R, their centres d apart, have in common.
     private static float DiscsOverlap(float r, float R, float d)
     {

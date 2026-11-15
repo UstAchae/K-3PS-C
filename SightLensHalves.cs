@@ -76,6 +76,47 @@ internal static class SightLensHalves
         return codes;
     }
 
+    // TEMP DIAG: every few seconds, the sight's lens as the game lays it: how many pixels it changed, and how bright
+    // they were before and after (to find where a black lens comes from).
+    private static int _diagAt;
+    private static RenderTexture? _diagPre, _diagPost;
+    private static void DiagLens(CommandBuffer buffer, int width, int height)
+    {
+        if (Time.frameCount < _diagAt)
+            return;
+        _diagAt = Time.frameCount + 300;
+        float[]? pre = null, post = null;
+        void Both()
+        {
+            if (pre == null || post == null)
+                return;
+            int changed = 0;
+            double before = 0, after = 0;
+            for (int p = 0; p < pre.Length / 4; p++)
+            {
+                float yb = 0.2126f * pre[p * 4] + 0.7152f * pre[p * 4 + 1] + 0.0722f * pre[p * 4 + 2];
+                float ya = 0.2126f * post[p * 4] + 0.7152f * post[p * 4 + 1] + 0.0722f * post[p * 4 + 2];
+                if (Mathf.Abs(ya - yb) > 1e-4f)
+                {
+                    changed++;
+                    before += yb;
+                    after += ya;
+                }
+            }
+            NewCameraPlugin.Log?.LogInfo($"Sight lens DIAG: the lens changed {changed} of {pre.Length / 4} pixels; there, mean light before {(changed > 0 ? before / changed : 0):G3}, after {(changed > 0 ? after / changed : 0):G3}; aiming eye bare {NightVisionEyepieces.AimEyeBare}, sight light {NightVisionEyepieces.SightLightThroughEyepiece():F3}");
+        }
+        int w = Mathf.Max(width / 4, 1), h = Mathf.Max(height / 4, 1);
+        if (_diagPre == null || _diagPre.width != w || _diagPre.height != h)
+        {
+            _diagPre = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBHalf) { hideFlags = HideFlags.DontSave };
+            _diagPost = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBHalf) { hideFlags = HideFlags.DontSave };
+        }
+        buffer.Blit(PreLensId, _diagPre);
+        buffer.Blit(PostLensId, _diagPost);
+        buffer.RequestAsyncReadback(_diagPre, 0, TextureFormat.RGBAFloat, r => { if (!r.hasError) { pre = r.GetData<float>().ToArray(); Both(); } });
+        buffer.RequestAsyncReadback(_diagPost, 0, TextureFormat.RGBAFloat, r => { if (!r.hasError) { post = r.GetData<float>().ToArray(); Both(); } });
+    }
+
     private static void Draw(CommandBuffer buffer, Renderer renderer, Material material, SSAAPropagator propagator)
     {
         RenderTexture[]? targets = HdrTargets(propagator);
@@ -90,8 +131,10 @@ internal static class SightLensHalves
         _halves ??= new Material(tubeShader) { name = "Justachae sight lens halves", hideFlags = HideFlags.DontSave };
         // The gun not see-through (NightVisionOtherEye.cs, GunSolid): its sight's lens the aiming eye's alone too.
         _halves.SetFloat(OtherShareId, NightVisionEyepieces.GunSolid ? 1f : 0.5f);
-        _halves.SetFloat(AimBareId, NightVisionEyepieces.AimEyeBare ? 1f : 0f);
-        _halves.SetFloat(ScopeDimId, NightVisionEyepieces.ScopeLightNow);
+        // No judging whether an eyepiece is before the aiming eye: the aiming eye's own eyepiece's picture region (from
+        // where that eye stands, NvgTube pass 2) says where its line of sight goes through it.
+        _halves.SetFloat(AimBareId, 0f);
+        _halves.SetFloat(ScopeDimId, NightVisionEyepieces.SightLightThroughEyepiece());
         _halves.SetColor(PhosphorId, NightVisionEyepieces.PhosphorNow);
         buffer.GetTemporaryRT(PreLensId, frame.width, frame.height, 0, FilterMode.Point, frame.format);
         buffer.GetTemporaryRT(PostLensId, frame.width, frame.height, 0, FilterMode.Point, frame.format);
@@ -99,6 +142,7 @@ internal static class SightLensHalves
         buffer.SetRenderTarget(frame, depth);
         buffer.DrawRenderer(renderer, material);
         buffer.Blit(frame, PostLensId);
+        DiagLens(buffer, frame.width, frame.height);
         buffer.SetGlobalTexture(OtherId, PreLensId);
         buffer.Blit(PostLensId, frame, _halves, LensPass);
         buffer.SetRenderTarget(frame, depth);
