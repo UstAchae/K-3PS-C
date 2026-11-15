@@ -483,6 +483,7 @@ internal static partial class NightVisionEyepieces
         _searchedFrame = -100;
         ReleaseEyes();
         ReleaseThermal();
+        ReleaseOtherEye();
         KeepEyepieceImage(null, false);
     }
 

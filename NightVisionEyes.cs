@@ -172,6 +172,9 @@ internal static partial class NightVisionEyepieces
         // Thermal goggles' picture, for the lenses (LensPicture).
         if (_device.Thermal && Active)
             RenderThermal(camera);
+        // The experiment: the bare eye's view too, beside a monocular (NightVisionOtherEye.cs).
+        if (_device.Monocular && BinocularOn)
+            RenderOtherEye(camera);
     }
 
     private static void RenderLenses(Camera camera, Material binocular, Transform view, Vector3 position)
@@ -205,6 +208,8 @@ internal static partial class NightVisionEyepieces
         if (lone < 0)
             lone = CentreLensA;
         float loneAcross = lone == CentreLensA ? a : b;
+        // A monocular's bare eye: as far the other side of the head's middle as its eyepiece is this side.
+        _otherEyeAcross = -(a + CameraPosition.Horizontal) - CameraPosition.Horizontal;
         // The one swung up, for the device drawn into the main camera (NightVisionDirect.OnRaisedPod).
         RaisedPod = RaisedCupPod = null;
         if (monocular >= 0 && !_device.Monocular)

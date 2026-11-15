@@ -160,6 +160,7 @@ internal static partial class NightVisionEyepieces
             Texture? fusedPicture = Fused(picture, ref fused);
             ReleaseMask();
             Compose(composite, glow, from, into, picture, fusedPicture);
+            LayOtherEye(into);
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
             if (tubed != null)

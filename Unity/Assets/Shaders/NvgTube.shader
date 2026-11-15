@@ -29,5 +29,21 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 1: the frame and another (_Other, the bare eye's view: NightVisionOtherEye.cs), mixed by _OtherShare.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _Other;
+   float _OtherShare;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2D(_MainTex, i.uv);
+    c.rgb = lerp(c.rgb, tex2D(_Other, i.uv).rgb, _OtherShare);
+    return c;
+   }
+   ENDCG
+  }
  }
 }
