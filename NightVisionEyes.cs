@@ -90,6 +90,7 @@ internal static partial class NightVisionEyepieces
         LightFace(camera);
         if (camera != Camera.main)
             return;
+        HoldMainView(camera);
         HideIrLaserLights(camera);
         if (_body != null)
             AdjustMount(camera);
@@ -141,7 +142,10 @@ internal static partial class NightVisionEyepieces
     internal static void OnCameraPostRender(Camera camera)
     {
         if (camera == Camera.main)
+        {
             ShowDeviceAgain();
+            GiveMainViewBack(camera);
+        }
     }
 
     // Just before the main camera renders, when its pose for the frame is final: each eye, moved apart as far as the

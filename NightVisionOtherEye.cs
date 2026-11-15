@@ -26,7 +26,29 @@ internal static partial class NightVisionEyepieces
     // Whether the experiment takes this device: a monocular, worn down and on.
     private static bool BothEyesBare => MonocularBothEyes && _body != null && _lensNodes.Length > 0 && _device.Monocular;
 
-    private static Camera? BareEye(int side)
+    // The main camera draws nothing while the eyes do (its frame is replaced): its culling mask emptied as it culls, given
+    // back once it has rendered; the eyes draw what it would have.
+    private static int _mainMask;
+    private static bool _mainMaskHeld;
+
+    internal static void HoldMainView(Camera main)
+    {
+        if (_mainMaskHeld || !BothEyesBare || !Active)
+            return;
+        _mainMask = main.cullingMask;
+        _mainMaskHeld = true;
+        main.cullingMask = 0;
+    }
+
+    internal static void GiveMainViewBack(Camera main)
+    {
+        if (!_mainMaskHeld)
+            return;
+        _mainMaskHeld = false;
+        main.cullingMask = _mainMask;
+    }
+
+    private static Camera? BareEye(int side, Camera main)
     {
         if (_bareEyes[side] != null)
             return _bareEyes[side];
@@ -52,15 +74,35 @@ internal static partial class NightVisionEyepieces
             return null;
         }
         camera.enabled = false;
-        // A bare eye: no night vision, no thermal, none of a scope's lens.
+        // A bare eye: only what the main camera itself has on (a scope's lens, its blur and vignette, night vision and
+        // thermal all off), with the main camera's post-processing volumes, not a scope's, and no temporal smearing.
+        var kept = new System.Collections.Generic.List<string>();
+        var off = new System.Collections.Generic.List<string>();
         foreach (MonoBehaviour behaviour in made.GetComponents<MonoBehaviour>())
         {
-            string kind = behaviour != null ? behaviour.GetType().Name : "";
-            if (kind == "Fisheye" || kind == "CC_FastVignette" || kind == "OpticCullingMask" || kind == "NightVision" || kind == "ThermalVision")
-                behaviour!.enabled = false;
+            if (behaviour == null)
+                continue;
+            string kind = behaviour.GetType().Name;
+            bool mainHas = false;
+            foreach (MonoBehaviour own in main.GetComponents<MonoBehaviour>())
+            {
+                if (own != null && own.enabled && own.GetType() == behaviour.GetType())
+                    mainHas = true;
+            }
+            bool keep = mainHas && kind != "NightVision" && kind != "ThermalVision";
+            if (behaviour.enabled != keep)
+                behaviour.enabled = keep;
+            (keep ? kept : off).Add(kind);
         }
         if (made.TryGetComponent(out PostProcessLayer layer))
+        {
             layer.computeAutoExposure = false;
+            layer.antialiasingMode = PostProcessLayer.Antialiasing.None;
+            if (main.TryGetComponent(out PostProcessLayer mainLayer))
+                layer.volumeLayer = mainLayer.volumeLayer;
+            layer.volumeTrigger = made.transform;
+        }
+        NewCameraPlugin.Log?.LogInfo($"NVG experiment: bare eye camera kept {string.Join(", ", kept)}; off {string.Join(", ", off)}.");
         _bareEyes[side] = camera;
         return camera;
     }
@@ -77,7 +119,7 @@ internal static partial class NightVisionEyepieces
         Vector3 middle = view.position - view.right * CameraPosition.Horizontal;
         for (int side = 0; side < 2; side++)
         {
-            Camera? camera = BareEye(side);
+            Camera? camera = BareEye(side, main);
             if (camera == null)
                 return;
             RenderTexture? picture = _bareEyePictures[side];
@@ -97,6 +139,8 @@ internal static partial class NightVisionEyepieces
                 _bareEyePictures[side] = picture;
             }
             camera.CopyFrom(main);
+            if (_mainMaskHeld)
+                camera.cullingMask = _mainMask;
             camera.transform.SetPositionAndRotation(middle + view.right * ((side == 0 ? -0.5f : 0.5f) * EyesApart), view.rotation);
             camera.rect = new Rect(0f, 0f, 1f, 1f);
             camera.projectionMatrix = main.nonJitteredProjectionMatrix;
