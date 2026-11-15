@@ -14,6 +14,9 @@ Shader "Justachae/NVG/Direct" {
  // The experiment (NightVisionOtherEye.cs): each eye's share of the whole frame, the same everywhere (0.5 half each);
  // below 0, the left eye's on the left and the right's on the right, eased across the strip, as ever.
  float _DirectMix;
+ // The experiment: the right eye's weight where an eye's nearest is its gun or arm (the aiming eye's far the more, the other's
+ // faint), in place of the share by where across the frame.
+ float _DirectNearShare;
  // Where each eye's nearest is the player's own (the gun, the arms: pass 13 on that eye's depth), not the device.
  sampler2D _DirectNearL, _DirectNearR;
  float toRightAt (float x) {
@@ -110,6 +113,9 @@ Shader "Justachae/NVG/Direct" {
    // Where one eye looks into its lens, the other's device is not seen there (the bright picture wins over the dark
    // housing, as the two eyes' views are seen as one); its gun or arm still is.
    bool sl = l && shown(rawL) && (r || nearL), sr = r && shown(rawR) && (l || nearR);
+   // Each eye's weight here: its gun or arm by whether it aims, anything else by where across the frame.
+   float wl = nearL && sl ? 1 - _DirectNearShare : 1 - m, wr = nearR && sr ? _DirectNearShare : m;
+   m = wr / max(wl + wr, 1e-4);
    if (l && r) {
     if (sl && sr) { toRight = m; return 1; }
     if (sl) { toRight = 0; return 1 - m; }
