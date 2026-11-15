@@ -58,8 +58,9 @@ internal static class TwoRenders
     }
     private static readonly int NearReachId = Shader.PropertyToID("_NearReach");
     private static readonly int GunGId = Shader.PropertyToID("_GunG"), GunBId = Shader.PropertyToID("_GunB");
-    // Each eye's gun, how much of it is seen: the aiming eye's far more than the other's (the user's, 2026-11-15).
-    private const float AimShare = 0.8f, OtherShare = 0.2f;
+    // Only the aiming eye's gun is seen (the user's, 2026-11-15); as the gun goes over to the other shoulder, the one
+    // fades out as the other fades in: how much of each this frame (they add up to one).
+    private static float _shareGoggle = 1f, _shareBare;
     // The goggle is never seen through: nothing laid over what the camera has nearer than this (m; the gun is further).
     private const float DeviceReach = 0.12f;
     private static readonly int ShareGId = Shader.PropertyToID("_ShareG"), ShareBId = Shader.PropertyToID("_ShareB"), DeviceReachId = Shader.PropertyToID("_DeviceReach");
@@ -88,7 +89,6 @@ internal static class TwoRenders
     // lens is seen, the aiming eye's distance.
     private static float _goggleEye = 0.03f;
     private static float BareEye => -_goggleEye;
-    private static bool GoggleEyeAims => (_goggleEye >= 0f) == (CameraPosition.AimingEyeAcross >= 0f);
 
     internal static bool Now => On && !_failed && NightVisionEyepieces.DownOrFlipping && NightVisionEyepieces.MonocularWorn;
 
@@ -169,9 +169,17 @@ internal static class TwoRenders
         catch
         {
         }
+        // Over to the bare eye as the aiming eye goes over to it (CameraPosition: eased as the gun changes shoulders).
+        float toward = CameraPosition.AimingEyeAcross / Mathf.Max(CameraPosition.AimEye, 1e-4f) * Mathf.Sign(BareEye);
+        _shareBare = Mathf.Clamp01(0.5f + 0.5f * toward);
+        _shareGoggle = 1f - _shareBare;
+        // Aimed with the goggle's eye: its gun as the frame's own render draws it, nothing else to do.
+        if (_shareBare <= 0.001f)
+            return;
         RenderGun(main, GunPass.Bare, gunLayers);
-        RenderGun(main, GunPass.Goggle, gunLayers);
-        if (_bareDone == Time.frameCount && _goggleDone == Time.frameCount)
+        if (_shareGoggle > 0.001f)
+            RenderGun(main, GunPass.Goggle, gunLayers);
+        if (_bareDone == Time.frameCount)
             HideGun(true);
     }
 
@@ -180,7 +188,8 @@ internal static class TwoRenders
         if (_failed)
             return;
         SSAAPropagator? propagator = main.GetComponent<SSAAPropagator>();
-        bool aims = (which == GunPass.Goggle) == GoggleEyeAims;
+        // Only the aiming eye's gun has the sight's picture (on the way over, the one more seen).
+        bool aims = which == GunPass.Bare ? _shareBare >= 0.5f : _shareGoggle > 0.5f;
         Renderer? lens = null, collimator = null;
         if (!aims && propagator != null)
         {
@@ -302,12 +311,13 @@ internal static class TwoRenders
             _goggleDone = Time.frameCount;
             return;
         }
-        if (!Now || !_gunHidden || _bareGun == null || _goggleGun == null)
+        if (!Now || !_gunHidden || _bareGun == null)
             return;
+        bool goggleGun = _goggleDone == Time.frameCount && _goggleGun != null;
         RenderTexture laid = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
-        material.SetTexture(GunGId, _goggleGun);
-        material.SetFloat(ShareGId, GoggleEyeAims ? AimShare : OtherShare);
-        material.SetFloat(ShareBId, GoggleEyeAims ? OtherShare : AimShare);
+        material.SetTexture(GunGId, goggleGun ? _goggleGun : Texture2D.blackTexture);
+        material.SetFloat(ShareGId, goggleGun ? _shareGoggle : 0f);
+        material.SetFloat(ShareBId, _shareBare);
         material.SetFloat(DeviceReachId, DeviceReach);
         material.SetTexture(GunBId, _bareGun);
         Graphics.Blit(scene, laid, material, GunsInPass);
@@ -315,7 +325,7 @@ internal static class TwoRenders
         RenderTexture.ReleaseTemporary(laid);
         // The depth the eyepieces' steps go by (the objective's blur above all): the gun's where it is nearer, until
         // the eyepieces are done (TakeEye gives the camera's own back).
-        if (_goggleDepth != null && Shader.GetGlobalTexture(CameraDepthId) is Texture own && own.width == _goggleDepth.width && own.height == _goggleDepth.height)
+        if (goggleGun && _goggleDepth != null && Shader.GetGlobalTexture(CameraDepthId) is Texture own && own.width == _goggleDepth.width && own.height == _goggleDepth.height)
         {
             material.SetTexture(GunDepthId, _goggleDepth);
             Graphics.Blit(null, KeptDepth(ref _bothDepth, own.width, own.height, "Justachae depth with the gun"), material, DepthBothPass);
@@ -353,7 +363,7 @@ internal static class TwoRenders
         RenderTexture goggle = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
         Graphics.Blit(into, goggle);
         material.SetTexture(OtherId, _bareGun);
-        material.SetFloat(OtherShareId, GoggleEyeAims ? OtherShare : AimShare);
+        material.SetFloat(OtherShareId, _shareBare);
         material.SetFloat(DeviceReachId, DeviceReach);
         Graphics.Blit(goggle, into, material, HalvesPass);
         if (Probes)
