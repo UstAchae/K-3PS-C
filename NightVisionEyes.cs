@@ -272,6 +272,14 @@ internal static partial class NightVisionEyepieces
         // ...and the eye left taking the frame over, its half widening past the far edge.
         if (monocular < 0 && going > 0f)
             split = Mathf.Lerp(split, loneSide == 0 ? 1f + Overscan : -Overscan, going);
+        // The experiment (NightVisionOtherEye.cs): the camera is one eye, the other the eyes' distance from it; each
+        // eye's lens map from where it is (the composite then made once for each, all one side's).
+        if (BothEyesBare && CameraPosition.EyeOverride is float mainEye)
+        {
+            Vector3 otherEye = right * (-2f * mainEye);
+            leftShift = mainEye >= 0f ? otherEye : Vector3.zero;
+            rightShift = mainEye >= 0f ? Vector3.zero : otherEye;
+        }
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);

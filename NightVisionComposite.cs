@@ -159,9 +159,19 @@ internal static partial class NightVisionEyepieces
             picture = TubesGain(picture, ref dimmed);
             Texture? fusedPicture = Fused(picture, ref fused);
             ReleaseMask();
-            Compose(composite, glow, from, into, picture, fusedPicture);
-            // The experiment: the bare eye's view over it, half each (NightVisionOtherEye.cs).
-            LayBareEyes(into);
+            // The experiment (NightVisionOtherEye.cs): each eye's whole frame with its own eyepieces, half each.
+            if (ExperimentSplits(out float mainSplit, out float otherSplit, out RenderTexture? otherFrom))
+            {
+                composite.SetFloat(SplitId, mainSplit);
+                Compose(composite, glow, from, into, picture, fusedPicture);
+                RenderTexture other = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
+                composite.SetFloat(SplitId, otherSplit);
+                Compose(composite, glow, otherFrom!, other, picture, fusedPicture);
+                LayBareEyes(into, other);
+                RenderTexture.ReleaseTemporary(other);
+            }
+            else
+                Compose(composite, glow, from, into, picture, fusedPicture);
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
             if (tubed != null)

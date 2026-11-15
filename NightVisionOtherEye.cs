@@ -4,7 +4,7 @@ using UnityEngine.Rendering.PostProcessing;
 
 namespace EFTNewCamera;
 
-// EXPERIMENT (the user's, 2026-11-15): a monocular (the PVS-14) seen with both eyes, half each. The two eyes stand half
+// EXPERIMENT (the user's, 2026-11-15; every device since 1.9.26): a device seen with both eyes, half each. The two eyes stand half
 // the eyes' distance either side of the head's middle. The main camera is the eye behind the eyepiece, put there
 // (CameraPosition.EyeOverride), the eyepiece's picture as ever, but nothing of the two-eye drawing: the device the game's to
 // draw, the eyes not moved from the camera, no monocular fade. The other, bare eye's whole view is rendered by a camera
@@ -24,13 +24,14 @@ internal static partial class NightVisionEyepieces
     private static readonly int OtherId = Shader.PropertyToID("_Other");
     private static readonly int OtherShareId = Shader.PropertyToID("_OtherShare");
 
-    // Whether the experiment takes this device: a monocular.
-    private static bool BothEyesBare => MonocularBothEyes && _body != null && _lensNodes.Length > 0 && _device.Monocular;
+    // Whether the experiment takes this device: any with eyepieces.
+    private static bool BothEyesBare => MonocularBothEyes && _body != null && _lensNodes.Length > 0;
 
     // Each frame, before the camera is placed: the camera at the eye behind the eyepiece while the experiment is on.
     private static void PlaceExperimentEye()
     {
-        CameraPosition.EyeOverride = BothEyesBare && Active ? _eyepieceSide * EyesApart * 0.5f : (float?)null;
+        // A monocular's camera at the eye behind it; a binocular's at the right eye.
+        CameraPosition.EyeOverride = BothEyesBare && Active ? (_device.Monocular ? _eyepieceSide : 1f) * EyesApart * 0.5f : (float?)null;
     }
 
     private static Camera? BareEye(int side, Camera main)
@@ -123,7 +124,7 @@ internal static partial class NightVisionEyepieces
             _bareEyePictures[side] = picture;
         }
         camera.CopyFrom(main);
-        camera.transform.SetPositionAndRotation(middle - view.right * (_eyepieceSide * EyesApart * 0.5f), view.rotation);
+        camera.transform.SetPositionAndRotation(middle - view.right * CameraPosition.EyeOverride.Value, view.rotation);
         camera.rect = new Rect(0f, 0f, 1f, 1f);
         camera.projectionMatrix = main.nonJitteredProjectionMatrix;
         camera.targetTexture = picture;
@@ -149,15 +150,24 @@ internal static partial class NightVisionEyepieces
         }
     }
 
-    // The frame (the eyepiece's eye, finished) and the bare eye's view, half each.
-    private static void LayBareEyes(RenderTexture into)
+    // Whether the other eye's view was made this frame; if so, each eye's split (the composite all one side's: the
+    // main camera's eye, then the other's) and the other eye's frame.
+    private static bool ExperimentSplits(out float mainSplit, out float otherSplit, out RenderTexture? otherFrom)
     {
-        if (_bareEyesFrame != Time.frameCount || _bareEyePictures[0] == null || _tubeShader == null)
-            return;
+        bool mainRight = (CameraPosition.EyeOverride ?? 1f) >= 0f;
+        mainSplit = mainRight ? -1f : 2f;
+        otherSplit = mainRight ? 2f : -1f;
+        otherFrom = _bareEyePictures[0];
+        return _bareEyesFrame == Time.frameCount && otherFrom != null && _tubeShader != null;
+    }
+
+    // The main camera's eye's finished frame (into) and the other eye's (other), half each.
+    private static void LayBareEyes(RenderTexture into, RenderTexture other)
+    {
         Material halves = _tubeMaterial ??= new Material(_tubeShader) { name = "Justachae NVG tube", hideFlags = HideFlags.DontSave };
         RenderTexture seen = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
         Graphics.Blit(into, seen);
-        halves.SetTexture(OtherId, _bareEyePictures[0]);
+        halves.SetTexture(OtherId, other);
         halves.SetFloat(OtherShareId, 0.5f);
         Graphics.Blit(seen, into, halves, TubeHalvesPass);
         halves.SetTexture(OtherId, Texture2D.blackTexture);
