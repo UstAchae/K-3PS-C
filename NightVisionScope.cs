@@ -8,9 +8,8 @@ using UnityEngine.Rendering;
 namespace EFTNewCamera;
 
 // A magnified sight looked through with the goggle down. The goggle's objective sits well in front of the eye, so the
-// head cannot come to the sight: it stays back, and the objective comes to where the eye would be (the sight's own
-// eye point, where the game puts the camera). The camera, which makes the goggle's picture, goes there with it, the
-// eyes and the device a hand's breadth behind (NightVisionEyes: each eye's shift).
+// head cannot come to the sight; the gun is not brought forward either (the user's wish, 2026-11-15): the camera and
+// the gun stay where the aim puts them.
 // The sight's picture is at infinity, as the goggle is focused, so it is sharp (no objective blur over the lens). Its
 // light leaves the eyepiece through the sight's exit pupil (objective diameter over magnification) and only what of it the
 // goggle's objective takes in reaches the tube: the sight's picture as bright as the overlap of the pupil's beam and the
@@ -30,9 +29,7 @@ namespace EFTNewCamera;
 // Whether the sight's own picture is a night-vision one follows from it too (OpticSeesNightVision, NightVisionIr.cs).
 internal static partial class NightVisionEyepieces
 {
-    internal static float ScopePullback;                 // how far the camera is ahead of the eyes now (m)
-    private const float ScopePullbackSeconds = 0.15f;
-    private const float ThroughScopeFrom = 0.005f;       // the pull from which the goggle's picture is the sight's (m)
+    internal static float ScopePullback;                 // how far the camera is ahead of the eyes now (m): always 0 now
     private const float DefaultScopeObjective = 0.032f;  // a sight's objective when its name gives none (m)
     private static readonly Regex ObjectiveInName = new Regex(@"\d+(?:[.,]\d+)?[x×](\d+)", RegexOptions.Compiled);
 
@@ -67,15 +64,14 @@ internal static partial class NightVisionEyepieces
     // aiming a magnified sight with the goggle down.
     internal static float ScopePull(Player player, Vector3 cameraPlace, Quaternion cameraTurn)
     {
-        float target = 0f;
-        if (Active && !_device.Thermal && _body != null && player.HandsController != null && player.HandsController.IsAiming
-            && Scopes.Current(player.ProceduralWeaponAnimation) is { IsOptic: true } && ChestStance.Weight <= 0f && GoggleBeforeAimingEye(cameraPlace, cameraTurn))
-            target =Mathf.Clamp(Vector3.Dot(_body.TransformPoint(_objectiveFront) - cameraPlace, cameraTurn * Vector3.forward), 0f, MaxEyeDistance);
-        ScopePullback = Mathf.Lerp(target, ScopePullback, Mathf.Exp(-Time.deltaTime / ScopePullbackSeconds));
-        if (ScopePullback < 1e-4f)
-            ScopePullback = 0f;
-        _scope.Through = ScopePullback > ThroughScopeFrom;
-        return ScopePullback;
+        // Nothing is brought forward (the user's wish, 2026-11-15). A magnified sight looked through with the goggle before
+        // the aiming eye: its picture leaves the eyepiece in parallel light, which the goggle's objective, focused far,
+        // takes in sharp; but only as much as its exit pupil (objective over magnification) overlaps the objective's
+        // aperture: the higher the power, the dimmer.
+        ScopePullback = 0f;
+        _scope.Through = Active && !_device.Thermal && _body != null && player.HandsController != null && player.HandsController.IsAiming
+            && Scopes.Current(player.ProceduralWeaponAnimation) is { IsOptic: true } && ChestStance.Weight <= 0f && GoggleBeforeAimingEye(cameraPlace, cameraTurn);
+        return 0f;
     }
 
     // A monocular before the other eye: the aiming eye looks through the sight bare, as without the goggle. Taken for the goggle's, the
@@ -122,12 +118,16 @@ internal static partial class NightVisionEyepieces
                 Transform view = optic.transform;
                 Vector3 lensCentre = _scope.LensMatrix.MultiplyPoint3x4(mesh.bounds.center);
                 Vector3 axis = view.forward;
-                float relief = Vector3.Dot(lensCentre - _renderedFrom, axis);
-                Vector3 off = _renderedFrom - (lensCentre - axis * relief);
+                // The goggle's objective, where it is (ahead of the eye).
+                Vector3 objectiveAt = _body != null ? _body.TransformPoint(_objectiveFront) : _renderedFrom;
+                float relief = Vector3.Dot(lensCentre - objectiveAt, axis);
+                Vector3 off = objectiveAt - (lensCentre - axis * relief);
                 float magnification = MagnificationOf(scope.Mod, sight!, optic);
                 float objective = ObjectiveOf(scope.Mod);
                 _scope.ObjectiveRadius = 0.5f * objective;
-                float apart = new Vector2(Vector3.Dot(off, view.right), Vector3.Dot(off, view.up)).magnitude;
+                // The aim brings the eye, and the goggle's objective before it, onto the sight's axis: the beam fills what
+                // of the aperture it can.
+                float apart = 0f;
                 float aperture = 0.5f * Aperture;
                 _scope.Light = DiscsOverlap(0.5f * objective / magnification, aperture, apart) / (Mathf.PI * aperture * aperture);
             }
