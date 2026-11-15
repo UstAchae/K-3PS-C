@@ -172,12 +172,46 @@ internal static class TwoRenderTest
         if (!Now || _firstDone != Time.frameCount || _firstFinal == null)
             return;
         _diagOwnMixed++;
+        SaveEyes(_firstFinal, into);
         RenderTexture seen = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
         Graphics.Blit(into, seen);
         material.SetTexture(OtherId, _firstFinal);
         material.SetFloat(OtherShareId, 0.5f);
         Graphics.Blit(seen, into, material, HalvesPass);
         RenderTexture.ReleaseTemporary(seen);
+    }
+
+    // TEMP DIAG: once a while after the test starts (and again every few minutes), each eye's finished frame saved
+    // apart, before they are mixed: .codex-work/eyeshots/<time> right.png, left.png.
+    private static int _shotAt = -1;
+    private static void SaveEyes(RenderTexture right, RenderTexture left)
+    {
+        if (_shotAt < 0)
+            _shotAt = Time.frameCount + 300;
+        if (Time.frameCount < _shotAt)
+            return;
+        _shotAt = Time.frameCount + 18000;
+        string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "eyeshots");
+        System.IO.Directory.CreateDirectory(folder);
+        string stamp = System.DateTime.Now.ToString("HHmmss");
+        Save(right, System.IO.Path.Combine(folder, stamp + " right.png"));
+        Save(left, System.IO.Path.Combine(folder, stamp + " left.png"));
+        NewCameraPlugin.Log?.LogInfo($"Two render test DIAG: each eye's frame saved to {folder} ({stamp})");
+    }
+
+    private static void Save(RenderTexture frame, string path)
+    {
+        RenderTexture plain = RenderTexture.GetTemporary(frame.width, frame.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+        Graphics.Blit(frame, plain);
+        RenderTexture? active = RenderTexture.active;
+        RenderTexture.active = plain;
+        var picture = new Texture2D(frame.width, frame.height, TextureFormat.RGB24, false);
+        picture.ReadPixels(new Rect(0, 0, frame.width, frame.height), 0, 0);
+        picture.Apply();
+        RenderTexture.active = active;
+        RenderTexture.ReleaseTemporary(plain);
+        System.IO.File.WriteAllBytes(path, picture.EncodeToPNG());
+        Object.Destroy(picture);
     }
 
     private static void Measure()
