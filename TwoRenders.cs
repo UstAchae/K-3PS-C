@@ -129,6 +129,51 @@ internal static class TwoRenders
     private static int _preLensFrame = -1;
     private static readonly int PreLensId = Shader.PropertyToID("_PreLens");
 
+    // The sight's lens of the bare eye's gun, drawn here from that eye with the game's own lens material (its picture is
+    // the sight camera's, _CamTex), laid over at the gun's see-through: the game lays it in from the camera, which is at
+    // the goggle's eye, and in solid. Its mask drawn too (pass 11), the lens laid only there (pass 12).
+    private const int LensSolidPass = 11, LensLayPass = 12;   // NvgTube.shader
+    private static RenderTexture? _lensLayer, _lensSolid;
+    private static UnityEngine.Rendering.CommandBuffer? _lensBuffer;
+    private static readonly int NonJitteredProjId = Shader.PropertyToID("NonJitteredProj"), CameraPlaceId = Shader.PropertyToID("_WorldSpaceCameraPos");
+
+    private static void DrawLensLayer(RenderTexture into, Material material, float shown)
+    {
+        Camera? camera = Camera.main;
+        if (camera == null || _lensKept == null || _lensMaterialKept == null || !_lensKept.enabled || !_lensKept.gameObject.activeInHierarchy || shown <= 0f)
+            return;
+        Vector3 shift = camera.transform.rotation * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
+        Vector3 eye = camera.transform.position + shift, place = camera.transform.position;
+        Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
+        RenderTexture layer = Kept(ref _lensLayer, into, "Justachae bare eye's sight lens");
+        RenderTexture solid = Kept(ref _lensSolid, into.width, into.height);
+        var buffer = _lensBuffer ??= new UnityEngine.Rendering.CommandBuffer { name = "Justachae bare eye's sight lens" };
+        buffer.Clear();
+        buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix * Matrix4x4.Translate(-shift), projection);
+        buffer.SetGlobalVector(CameraPlaceId, new Vector4(eye.x, eye.y, eye.z, 1f));
+        buffer.EnableShaderKeyword("TAA");
+        buffer.EnableShaderKeyword("NON_JITTERED");
+        buffer.SetGlobalMatrix(NonJitteredProjId, GL.GetGPUProjectionMatrix(projection, true));
+        buffer.SetRenderTarget(layer);
+        buffer.ClearRenderTarget(false, true, Color.clear);
+        buffer.DrawRenderer(_lensKept, _lensMaterialKept);
+        buffer.DisableShaderKeyword("NON_JITTERED");
+        buffer.DisableShaderKeyword("TAA");
+        buffer.SetRenderTarget(solid);
+        buffer.ClearRenderTarget(false, true, Color.clear);
+        buffer.DrawRenderer(_lensKept, material, 0, LensSolidPass);
+        buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
+        buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
+        Graphics.ExecuteCommandBuffer(buffer);
+        RenderTexture frame = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
+        Graphics.Blit(into, frame);
+        material.SetTexture(OtherId, layer);
+        material.SetTexture(LensMaskId, solid);
+        material.SetFloat(OtherShareId, shown);
+        Graphics.Blit(frame, into, material, LensLayPass);
+        RenderTexture.ReleaseTemporary(frame);
+    }
+
     // For SightAtBareEye: where the frame from before the lens is kept, this frame.
     internal static RenderTexture PreLensFor(RenderTexture frame)
     {
@@ -456,19 +501,48 @@ internal static class TwoRenders
         if (hide == _gunHidden)
             return;
         _gunHidden = hide;
-        foreach (Renderer r in _gunRenderers)
+        // Drawn into the frame, kept to its shadow as the device is (switched off whole, its shadow went too, and the
+        // light about the player changed as the bare eye took the aim); otherwise not drawn at all.
+        if (DrawnIntoFrame)
         {
-            if (r != null)
-                r.forceRenderingOff = hide;
+            if (hide)
+            {
+                _castings.Clear();
+                foreach (Renderer r in _gunRenderers)
+                {
+                    if (r == null)
+                        continue;
+                    _castings.Add((r, r.shadowCastingMode));
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
+                }
+            }
+            else
+            {
+                foreach ((Renderer r, UnityEngine.Rendering.ShadowCastingMode casting) in _castings)
+                {
+                    if (r != null)
+                        r.shadowCastingMode = casting;
+                }
+                _castings.Clear();
+            }
+        }
+        else
+        {
+            foreach (Renderer r in _gunRenderers)
+            {
+                if (r != null)
+                    r.forceRenderingOff = hide;
+            }
         }
         // The sight's lens too: the game lays it in at its upscaler whatever the camera draws, and with the gun kept out
         // it hung there by itself, a dark disc going with the camera.
         SSAAPropagator? propagator = Camera.main != null ? Camera.main.GetComponent<SSAAPropagator>() : null;
         // (Drawn into the frame, the bare eye's gun keeps its lens: laid in from that eye, SightAtBareEye.cs.)
-        if (hide && propagator != null && !DrawnIntoFrame)
+        if (hide && propagator != null)
         {
             _lensKept = LensRenderer(propagator);
             _collimatorKept = CollimatorRenderer(propagator);
+            _lensMaterialKept = LensMaterial(propagator);
             _lensOf = propagator;
             LensRenderer(propagator) = null!;
             CollimatorRenderer(propagator) = null!;
@@ -484,7 +558,11 @@ internal static class TwoRenders
         }
     }
     private static SSAAPropagator? _lensOf;
+    private static readonly System.Collections.Generic.List<(Renderer, UnityEngine.Rendering.ShadowCastingMode)> _castings = new System.Collections.Generic.List<(Renderer, UnityEngine.Rendering.ShadowCastingMode)>();
     private static Renderer? _lensKept, _collimatorKept;
+    private static Material? _lensMaterialKept;
+    private static readonly HarmonyLib.AccessTools.FieldRef<SSAAPropagator, Material> LensMaterial =
+        HarmonyLib.AccessTools.FieldRefAccess<SSAAPropagator, Material>("_opticLensMaterial");
 
     // From NewCameraPlugin.EndOfFrame.
     internal static void EndOfFrame() => HideGun(false);
@@ -545,7 +623,7 @@ internal static class TwoRenders
         {
             // The sight's lens laid in this frame from the bare eye (SightAtBareEye.cs): the frame from before it, where
             // it differs the lens, the gun's too.
-            bool lens = _preLensFrame == Time.frameCount && _preLens != null && _preLens.width == scene.width && _preLens.height == scene.height;
+            bool lens = false;   // (the lens is no longer laid in by the game for the bare eye's gun: DrawLensLayer)
             material.SetTexture(PreLensId, lens ? _preLens : scene);
             RenderTexture gunAlone = Kept(ref _gunApart, scene, "Justachae bare eye's gun apart");
             Graphics.Blit(scene, gunAlone, material, GunAlonePass);
@@ -648,6 +726,7 @@ internal static class TwoRenders
             laying.SetFloat(DeviceReachId, 0f);
             Graphics.Blit(frame, into, laying, HalvesPass);
             RenderTexture.ReleaseTemporary(frame);
+            DrawLensLayer(into, laying, GunOpacity * _shareBare);
             return;
         }
         Material? material = MaterialFor(tubeShader);

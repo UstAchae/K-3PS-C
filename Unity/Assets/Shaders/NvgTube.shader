@@ -330,5 +330,33 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 11: a lens's mesh, solid (TwoRenders.cs: where the bare eye's sight lens is).
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   float4 vert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 1; }
+   ENDCG
+  }
+  // 12: the frame with the bare eye's sight lens (_Other) laid over by _OtherShare where its mask (_LensMask) is.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _Other, _LensMask;
+   float _OtherShare;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2D(_MainTex, i.uv);
+    if (tex2D(_LensMask, i.uv).r > 0.5)
+     c.rgb = lerp(c.rgb, tex2D(_Other, i.uv).rgb, _OtherShare);
+    return c;
+   }
+   ENDCG
+  }
  }
 }
