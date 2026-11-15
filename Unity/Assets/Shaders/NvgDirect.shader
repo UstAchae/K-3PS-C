@@ -17,6 +17,8 @@ Shader "Justachae/NVG/Direct" {
  // The experiment: the right eye's weight where an eye's nearest is its gun or arm (the aiming eye's far the more, the other's
  // faint), in place of the share by where across the frame.
  float _DirectNearShare;
+ float _DirectAimRight;    // the aiming eye: 1 the right, 0 the left
+ float _DirectOtherNear;   // the other eye's gun and arms, as a share where they are
  // Where each eye's nearest is the player's own (the gun, the arms: pass 13 on that eye's depth), not the device.
  sampler2D _DirectNearL, _DirectNearR;
  float toRightAt (float x) {
@@ -97,35 +99,28 @@ Shader "Justachae/NVG/Direct" {
  // the left eye's on the left of the line, the right's on the right, each by its share across the strip about it, and through a
  // lens that eye has nothing of the device. All that goes past the line is gone.
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
-  // The experiment, the two eyes over the whole frame (_DirectMix of the right's): an eye looking into its own lens here has
-  // the lens's picture (the composite), unless its gun or arm is what it sees there, before the lens's view; the frame is
-  // the others', each with its device (or gun) if it has it here, half each, or the scene.
+  // The experiment (NightVisionOtherEye.cs), by its agreed rules: the aiming eye's gun and arms whole, everywhere (the
+  // night-vision picture is made from this frame, so theirs is the gun in it); within either eye's lens nothing else
+  // (the lens's picture is the composite's); elsewhere the other eye's gun and arms faint over the aiming eye's view, and
+  // the device by where across the frame.
   if (_DirectMix >= 0) {
    float m = saturate(uv.x);
-   bool nearL = tex2Dlod(_DirectNearL, float4(uv, 0, 0)).r >= 0.5, nearR = tex2Dlod(_DirectNearR, float4(uv, 0, 0)).r >= 0.5;
-   bool inL = within(_DirectLens0, uv, _EyeInvVP0), inR = within(_DirectLens1, uv, _EyeInvVP1);
-   // Within an eye's own lens, where it sees its gun or arm past the lens: the frame there is that eye's alone, as
-   // the lens's picture is made from it (the other eye's copy mixed in, two guns showed in the picture).
-   if (inR && nearR && !inL) { toRight = 1; return shown(rawR) ? 1 : 0; }
-   if (inL && nearL && !inR) { toRight = 0; return shown(rawL) ? 1 : 0; }
-   bool l = !(inL && !nearL);
-   bool r = !(inR && !nearR);
-   // Where one eye looks into its lens, the other's device is not seen there (the bright picture wins over the dark
-   // housing, as the two eyes' views are seen as one); its gun or arm still is.
-   bool sl = l && shown(rawL) && (r || nearL), sr = r && shown(rawR) && (l || nearR);
-   // Each eye's weight here: its gun or arm by whether it aims, anything else by where across the frame.
-   float wl = nearL && sl ? 1 - _DirectNearShare : 1 - m, wr = nearR && sr ? _DirectNearShare : m;
-   m = wr / max(wl + wr, 1e-4);
-   if (l && r) {
-    if (sl && sr) { toRight = m; return 1; }
-    if (sl) { toRight = 0; return 1 - m; }
-    if (sr) { toRight = 1; return m; }
-    toRight = m; return 0;
+   bool aimRight = _DirectAimRight > 0.5;
+   float aimSide = aimRight ? 1 : 0;
+   bool shL = shown(rawL), shR = shown(rawR);
+   bool nearL = shL && tex2Dlod(_DirectNearL, float4(uv, 0, 0)).r >= 0.5, nearR = shR && tex2Dlod(_DirectNearR, float4(uv, 0, 0)).r >= 0.5;
+   bool aimNear = aimRight ? nearR : nearL, otherNear = aimRight ? nearL : nearR;
+   bool aimShown = aimRight ? shR : shL;
+   if (aimNear) { toRight = aimSide; return 1; }
+   if (within(_DirectLens0, uv, _EyeInvVP0) || within(_DirectLens1, uv, _EyeInvVP1)) { toRight = aimSide; return 0; }
+   if (otherNear) {
+    // Over the aiming eye's device where it has it there (each pixel one or the other, evened after), else the scene.
+    if (aimShown) { toRight = aimRight ? 1 - _DirectOtherNear : _DirectOtherNear; return 1; }
+    toRight = 1 - aimSide; return _DirectOtherNear;
    }
-   // The other eye looking into its lens here: this eye's gun or arm only by its weight (the aiming eye's much, the
-   // other's little), the rest the scene the lens's picture is made from.
-   if (l) { toRight = 0; return sl ? 1 - _DirectNearShare : 0; }
-   if (r) { toRight = 1; return sr ? _DirectNearShare : 0; }
+   if (shL && shR) { toRight = m; return 1; }
+   if (shL) { toRight = 0; return 1 - m; }
+   if (shR) { toRight = 1; return m; }
    toRight = m; return 0;
   }
   float t = toRightAt(uv.x);

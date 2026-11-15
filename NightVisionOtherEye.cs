@@ -2,12 +2,12 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// EXPERIMENT (the user's, 2026-11-15): a device seen with both eyes, half each, over the whole frame. The eyes stand at
-// the two aiming eyes, AimEye either side of the head's middle (F12 「镜头位置」 瞄准眼离中线). The main camera renders
-// the scene once, from where it is set (not moved over to the aiming eye while aimed); the device is drawn into it from
-// each eye, and each eye's lenses are mapped from that eye (NightVisionEyes.RenderLenses), and the two eyes are laid
-// over the whole frame half each (_EyeMix, _DirectMix) instead of the left eye's on the left and the right's on the
-// right. The scene itself is one view for both (the gun among it). To be kept or taken out once seen.
+// EXPERIMENT (the user's, 2026-11-15): a device seen with both eyes. The scene is rendered once, by the main camera at
+// the aiming eye; the device, the arms and the gun are drawn into it from each eye (behind its eyepiece's inner lens),
+// and each eye's lenses mapped from it. Agreed rules (1.9.58): the aiming eye (the shouldered side's) first, nothing
+// covers what it sees; the other eye's gun and arms only outside the eyepieces, faint, never in an eyepiece, the
+// night-vision picture or the thermal; in an eyepiece its picture whole; outside, the device and scene by where across
+// the frame; the eyes slide out from the middle as the device flips down (NvgDirect.shader, NvgBinocular.shader).
 internal static partial class NightVisionEyepieces
 {
     internal static bool MonocularBothEyes = true;
