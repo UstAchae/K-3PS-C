@@ -66,10 +66,9 @@ internal static partial class NightVisionEyepieces
     // aiming a magnified sight with the goggle down.
     internal static float ScopePull(Player player, Vector3 cameraPlace, Quaternion cameraTurn)
     {
-        float target = 0f;
-        if (Active && !_device.Thermal && _body != null && player.HandsController != null && player.HandsController.IsAiming
-            && Scopes.Current(player.ProceduralWeaponAnimation) is { IsOptic: true } && ChestStance.Weight <= 0f && GoggleBeforeAimingEye(cameraPlace, cameraTurn))
-            target =Mathf.Clamp(Vector3.Dot(_body.TransformPoint(_objectiveFront) - cameraPlace, cameraTurn * Vector3.forward), 0f, MaxEyeDistance);
+        // The gun is no longer brought forward to the goggle's objective (the user's wish, 2026-11-15): it stays where the
+        // aim puts it, and the goggle's picture is never the sight's own (Through stays off).
+        const float target = 0f;
         ScopePullback = Mathf.Lerp(target, ScopePullback, Mathf.Exp(-Time.deltaTime / ScopePullbackSeconds));
         if (ScopePullback < 1e-4f)
             ScopePullback = 0f;
