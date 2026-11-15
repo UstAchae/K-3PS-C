@@ -98,10 +98,18 @@ Shader "Justachae/NVG/Tube" {
    #pragma vertex vert_img
    #pragma fragment frag
    #include "UnityCG.cginc"
-   sampler2D _MainTex, _EyePre, _OtherPre, _DirectNearL, _DirectNearR;
-   float _EyeSide, _GunSolid, _DirectAimRight;
+   sampler2D _MainTex, _EyePre, _OtherPre, _DirectNearL, _DirectNearR, _SightLensMask, _SightBefore;
+   float _EyeSide, _GunSolid, _DirectAimRight, _SightOn;
    float4 frag (v2f_img i) : SV_Target {
     float4 blend = tex2D(_MainTex, i.uv);
+    // A sight's lens, laid in by the game after the lit frames were split (SightLensHalves.cs): the aiming eye sees it
+    // as laid; the other eye, what lay there before it (worked out below like everything else). Without this the lit
+    // frames, black inside the sight's tube, made the lens black in both eyes.
+    if (_SightOn > 0.5 && tex2D(_SightLensMask, i.uv).r > 0.5) {
+     if ((_EyeSide > 0.5) == (_DirectAimRight > 0.5))
+      return blend;
+     blend.rgb = tex2D(_SightBefore, i.uv).rgb;
+    }
     float3 eye = tex2D(_EyePre, i.uv).rgb, other = tex2D(_OtherPre, i.uv).rgb;
     // This eye's share of the blend, as NvgDirect pass 16 made it.
     float share = 0.5;
@@ -123,6 +131,20 @@ Shader "Justachae/NVG/Tube" {
    #include "UnityCG.cginc"
    sampler2D _MainTex;
    float4 frag (v2f_img i) : SV_Target { return float4(tex2D(_MainTex, i.uv).rgb, 1); }
+   ENDCG
+  }
+  // 5: where a sight's lens was laid in (SightLensHalves.cs): _MainTex the frame with it, _Other without; 1 there.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _Other;
+   float4 frag (v2f_img i) : SV_Target {
+    float3 d = abs(tex2D(_MainTex, i.uv).rgb - tex2D(_Other, i.uv).rgb);
+    return max(d.r, max(d.g, d.b)) > 1e-4 ? 1 : 0;
+   }
    ENDCG
   }
  }

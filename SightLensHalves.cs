@@ -34,7 +34,10 @@ internal static class SightLensHalves
     private static readonly int OtherShareId = Shader.PropertyToID("_OtherShare");
     private static readonly int AimBareId = Shader.PropertyToID("_AimBare");
     private static readonly int ScopeDimId = Shader.PropertyToID("_ScopeDim"), PhosphorId = Shader.PropertyToID("_Phosphor");
-    private const int LensPass = 2;   // NvgTube.shader: the lens as the two eyes see it
+    private const int LensPass = 2;   // NvgTube.shader: the lens as the two eyes see it (no longer used)
+    private const int MaskPass = 5;   // NvgTube.shader: where the lens was laid in
+    internal static RenderTexture? _sightBefore, _sightMask;
+    internal static int LensFrame = -1;
     private static Material? _halves;
     private static int _taken;
 
@@ -265,7 +268,22 @@ internal static class SightLensHalves
         buffer.Blit(frame, PostLensId);
         DiagLens(buffer, frame.width, frame.height);
         buffer.SetGlobalTexture(OtherId, PreLensId);
-        buffer.Blit(PostLensId, frame, _halves, LensPass);
+        // The lens stays as the game laid it: which eye sees it is worked out at the eyepieces' stage, which comes
+        // after this (NvgTube pass 3): kept for it, where the lens is and what lay there before.
+        if (_sightBefore == null || _sightBefore.width != frame.width || _sightBefore.height != frame.height || _sightBefore.format != frame.format)
+        {
+            if (_sightBefore != null)
+            {
+                Object.Destroy(_sightBefore);
+                Object.Destroy(_sightMask);
+            }
+            _sightBefore = new RenderTexture(frame.width, frame.height, 0, frame.format) { name = "Justachae sight before its lens", hideFlags = HideFlags.DontSave };
+            _sightMask = new RenderTexture(frame.width, frame.height, 0, RenderTextureFormat.R8) { name = "Justachae sight lens mask", hideFlags = HideFlags.DontSave };
+        }
+        buffer.Blit(PreLensId, _sightBefore);
+        buffer.SetGlobalTexture(OtherId, PreLensId);
+        buffer.Blit(PostLensId, _sightMask, _halves, MaskPass);
+        LensFrame = Time.frameCount;
         DiagAfter(buffer, frame);
         buffer.SetRenderTarget(frame, depth);
         buffer.ReleaseTemporaryRT(PreLensId);

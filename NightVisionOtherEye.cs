@@ -286,6 +286,7 @@ internal static partial class NightVisionEyepieces
     private static Material? _eyesMaterial;
     // The experiment, tried: the gun not see-through (the aiming eye's alone where its own gun, arms and sight are).
     internal static bool GunSolid = true;
+    private static readonly int SightOnId = Shader.PropertyToID("_SightOn"), SightLensMaskId = Shader.PropertyToID("_SightLensMask"), SightBeforeId = Shader.PropertyToID("_SightBefore");
     private static readonly int EyeSideId = Shader.PropertyToID("_EyeSide"), GunSolidHalvesId = Shader.PropertyToID("_GunSolidHalves");
     internal static readonly int GunSolidId = Shader.PropertyToID("_GunSolid");
 
@@ -309,6 +310,13 @@ internal static partial class NightVisionEyepieces
         {
             RenderTexture own = Temporary();
             eyes.SetFloat(EyeSideId, side);
+            bool sight = SightLensHalves.LensFrame == Time.frameCount && SightLensHalves._sightMask != null;
+            eyes.SetFloat(SightOnId, sight ? 1f : 0f);
+            if (sight)
+            {
+                eyes.SetTexture(SightLensMaskId, SightLensHalves._sightMask);
+                eyes.SetTexture(SightBeforeId, SightLensHalves._sightBefore);
+            }
             eyes.SetTexture(EyePreId, _eyesLit[side]);
             eyes.SetTexture(OtherPreId, _eyesLit[1 - side]);
             Graphics.Blit(from, own, eyes, EyeFromBlendPass);
