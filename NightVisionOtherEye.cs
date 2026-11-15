@@ -11,6 +11,9 @@ namespace EFTNewCamera;
 internal static partial class NightVisionEyepieces
 {
     internal static bool MonocularBothEyes = true;
+    // For SightLensHalves: the experiment on this frame, and the shader its mixing pass is in.
+    internal static bool TwoEyesNow => ExperimentOn;
+    internal static Shader? TubeShader => _tubeShader;
 
     // The experiment is on for this device: one with eyepieces, down, flipping or switched on.
     private static bool ExperimentOn => MonocularBothEyes && _body != null && _lensNodes.Length > 0 && (Active || _flip > 0.001f);
