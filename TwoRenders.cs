@@ -17,6 +17,41 @@ internal static class TwoRenders
     internal static bool Probes = true;
     private const int HalvesPass = 1, OpaquePass = 2, NearPass = 3;   // NvgTube.shader
     private const float NearReach = 2f;   // m: the bare eye's render goes no further
+
+    // The layers the gun in hand is drawn on, found again only when the gun changes.
+    private static Transform? _gunRoot;
+    private static int _gunLayers;
+    private static System.Type? _handsType;
+    private static System.Reflection.PropertyInfo? _weaponRoot;
+    private static readonly System.Collections.Generic.List<Renderer> _gunRenderers = new System.Collections.Generic.List<Renderer>();
+
+    private static int GunLayers()
+    {
+        object? hands = Comfort.Common.Singleton<EFT.GameWorld>.Instance?.MainPlayer?.HandsController;
+        if (hands == null)
+            return 0;
+        if (_handsType != hands.GetType())
+        {
+            _handsType = hands.GetType();
+            _weaponRoot = HarmonyLib.AccessTools.Property(_handsType, "WeaponRoot");
+        }
+        Transform? root = (_weaponRoot?.GetValue(hands) as Transform)?.root;
+        if (root == null)
+            return 0;
+        if (root != _gunRoot)
+        {
+            _gunRoot = root;
+            _gunLayers = 0;
+            root.GetComponentsInChildren(false, _gunRenderers);
+            foreach (Renderer r in _gunRenderers)
+            {
+                if (r is MeshRenderer || r is SkinnedMeshRenderer)
+                    _gunLayers |= 1 << r.gameObject.layer;
+            }
+            _gunRenderers.Clear();
+        }
+        return _gunLayers;
+    }
     private static readonly int NearReachId = Shader.PropertyToID("_NearReach");
 
     private static bool _pass, _hooked, _failed;
@@ -61,11 +96,17 @@ internal static class TwoRenders
         Camera? main = Camera.main;
         if (main == null || !main.isActiveAndEnabled)
             return;
+        int gunLayers = GunLayers();
+        if (gunLayers == 0)
+            return;
         _pass = true;
-        // Only what is near: the bare eye differs from the goggle's eye only there (its gun, its sight and what the
-        // sight shows, its hands, the goggle seen from aside); past it the two see alike.
+        // Only the gun: what the bare eye sees of it, its sight and what the sight shows (the game lays the sight's
+        // picture on its lens whatever the camera draws); the rest the two eyes see alike enough. Its layers only, and
+        // no further than NearReach (anything else on those layers, other players, is far off).
         float far = main.farClipPlane;
+        int mask = main.cullingMask;
         main.farClipPlane = NearReach;
+        main.cullingMask = gunLayers;
         try
         {
             main.Render();
@@ -78,6 +119,7 @@ internal static class TwoRenders
         finally
         {
             main.farClipPlane = far;
+            main.cullingMask = mask;
             _pass = false;
         }
     }
