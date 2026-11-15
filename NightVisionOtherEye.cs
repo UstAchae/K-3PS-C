@@ -147,13 +147,16 @@ internal static partial class NightVisionEyepieces
                 source = (materials, passes, anyForward ? forward : null);
                 _nearSources[r] = source;
             }
-            if (System.Array.TrueForAll(source.passes, pass => pass < 0) && source.forward == null)
+            // Wholly see-through (a sight's lens or glass alone): left to the game.
+            if (System.Array.TrueForAll(source.passes, pass => pass < 0))
                 continue;
             _hidden.Add((r, r.shadowCastingMode));
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
             _pieces.Add(new Piece
             {
-                Renderer = r, Mesh = mesh, Materials = source.materials, Passes = source.passes, Near = true, Forward = source.forward,
+                // Its see-through parts (a sight's glass, its lens) not drawn again from each eye: drawn there, a sight's lens
+                // had no picture (that is laid in at the upscaler, SightLensHalves) and showed as a black disc.
+                Renderer = r, Mesh = mesh, Materials = source.materials, Passes = source.passes, Near = true, Forward = null,
                 FromCamera = FromCamera(r.transform, camera.transform.position),
             });
             _nearCount++;
