@@ -122,8 +122,10 @@ Shader "Justachae/NVG/Direct" {
     if (sr) { toRight = 1; return m; }
     toRight = m; return 0;
    }
-   if (l) { toRight = 0; return sl ? 1 : 0; }
-   if (r) { toRight = 1; return sr ? 1 : 0; }
+   // The other eye looking into its lens here: this eye's gun or arm only by its weight (the aiming eye's much, the
+   // other's little), the rest the scene the lens's picture is made from.
+   if (l) { toRight = 0; return sl ? 1 - _DirectNearShare : 0; }
+   if (r) { toRight = 1; return sr ? _DirectNearShare : 0; }
    toRight = m; return 0;
   }
   float t = toRightAt(uv.x);

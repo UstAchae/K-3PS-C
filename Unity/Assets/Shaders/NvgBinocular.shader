@@ -54,9 +54,10 @@ Shader "Justachae/NVG/Binocular" {
      float share = saturate(i.uv.x);
      bool lensL = lightL.w > 0.01, lensR = lightR.w > 0.01;
      bool nearL = tex2D(_DirectNearL, i.uv).r >= 0.5, nearR = tex2D(_DirectNearR, i.uv).r >= 0.5;
-     if (lensL && !lensR && !nearR)
+     // (The other eye's gun or arm is already in the frame the lens's picture is made from, by its weight.)
+     if (lensL && !lensR)
       share = 0;
-     else if (lensR && !lensL && !nearL)
+     else if (lensR && !lensL)
       share = 1;
      return float4(lerp(seenL, seenR, share), scene.a);
     }
