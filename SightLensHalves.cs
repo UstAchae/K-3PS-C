@@ -12,8 +12,9 @@ namespace EFTNewCamera;
 // (SSAAPropagator.FillCommandBuffer / OnRenderImage: DrawRenderer of the lens with its own material, after the frame is
 // scaled to the screen), whole, over what lies behind it. Its call is taken over here: the frame copied just before,
 // the lens drawn as ever, then, where the lens is: the sight's picture only to the aiming eye, and only while no eyepiece
-// is before it (the picture is seen only from the sight's exit pupil, on its axis, and the goggle's objective is not
-// there): half its picture, half what lay behind (the other eye's view); with an eyepiece before it, dark glass.
+// is before it (the picture is seen only from the sight's exit pupil, on its axis): half its picture, half what lay
+// behind (the other eye's view); with an eyepiece before it, whole, for that eyepiece's picture to take it in (dimmed by
+// the sight's exit pupil, NightVisionScope.cs).
 // Outside the experiment the call is the game's, unchanged.
 internal static class SightLensHalves
 {

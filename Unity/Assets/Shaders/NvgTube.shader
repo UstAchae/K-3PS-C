@@ -47,8 +47,9 @@ Shader "Justachae/NVG/Tube" {
   }
   // 2: a sight's lens as the two eyes see it (SightLensHalves.cs): _MainTex the frame with the lens laid in, _Other
   // without. Where the lens is (the two differ): the aiming eye's view, its picture, mixed by _OtherShare with the other
-  // eye's (what lay behind) while the aiming eye is bare; dark glass (an eye off the sight's exit pupil sees none of its
-  // picture) while it looks through an eyepiece. Elsewhere the frame as it is.
+  // eye's (what lay behind) while the aiming eye is bare; whole while it looks through its eyepiece (the frame is what
+  // that eyepiece's picture is made from, the sight's picture taken in through it, dimmed by its exit pupil). Elsewhere
+  // the frame as it is.
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM
@@ -62,7 +63,7 @@ Shader "Justachae/NVG/Tube" {
     float3 d = abs(laid.rgb - before.rgb);
     if (max(d.r, max(d.g, d.b)) < 1e-4)
      return laid;
-    return float4(_AimBare > 0.5 ? lerp(before.rgb, laid.rgb, _OtherShare) : float3(0, 0, 0), laid.a);
+    return _AimBare > 0.5 ? float4(lerp(before.rgb, laid.rgb, _OtherShare), laid.a) : laid;
    }
    ENDCG
   }
