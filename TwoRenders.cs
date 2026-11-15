@@ -61,6 +61,7 @@ internal static class TwoRenders
     // Only the aiming eye's gun is seen (the user's, 2026-11-15); as the gun goes over to the other shoulder, the one
     // fades out as the other fades in: how much of each this frame (they add up to one).
     private static float _shareGoggle = 1f, _shareBare;
+    private const float GunOpacity = 0.5f;   // the gun seen through at half, as the two eyes' frames laid together did
     // The goggle is never seen through: nothing laid over what the camera has nearer than this (m; the gun is further).
     private const float DeviceReach = 0.12f;
     private static readonly int ShareGId = Shader.PropertyToID("_ShareG"), ShareBId = Shader.PropertyToID("_ShareB"), DeviceReachId = Shader.PropertyToID("_DeviceReach");
@@ -173,13 +174,11 @@ internal static class TwoRenders
         float toward = CameraPosition.AimingEyeAcross / Mathf.Max(CameraPosition.AimEye, 1e-4f) * Mathf.Sign(BareEye);
         _shareBare = Mathf.Clamp01(0.5f + 0.5f * toward);
         _shareGoggle = 1f - _shareBare;
-        // Aimed with the goggle's eye: its gun as the frame's own render draws it, nothing else to do.
-        if (_shareBare <= 0.001f)
-            return;
-        RenderGun(main, GunPass.Bare, gunLayers);
+        if (_shareBare > 0.001f)
+            RenderGun(main, GunPass.Bare, gunLayers);
         if (_shareGoggle > 0.001f)
             RenderGun(main, GunPass.Goggle, gunLayers);
-        if (_bareDone == Time.frameCount)
+        if (_bareDone == Time.frameCount || _goggleDone == Time.frameCount)
             HideGun(true);
     }
 
@@ -208,6 +207,17 @@ internal static class TwoRenders
         bool dofOn = dof != null && dof.enabled;
         if (dofOn)
             dof!.enabled = false;
+        // Nor any motion blur: from one eye's render to the other's the camera moves the eyes' distance in no time, and
+        // the near gun was smeared by it.
+        _blurOff.Clear();
+        foreach (Behaviour b in MotionBlursOf(main))
+        {
+            if (b != null && b.enabled)
+            {
+                b.enabled = false;
+                _blurOff.Add(b);
+            }
+        }
         _gun = which;
         try
         {
@@ -224,6 +234,12 @@ internal static class TwoRenders
             main.cullingMask = mask;
             if (dofOn)
                 dof!.enabled = true;
+            foreach (Behaviour b in _blurOff)
+            {
+                if (b != null)
+                    b.enabled = true;
+            }
+            _blurOff.Clear();
             if (!aims && propagator != null)
             {
                 LensRenderer(propagator) = lens!;
@@ -234,6 +250,27 @@ internal static class TwoRenders
 
     private static Camera? _dofOf;
     private static Behaviour? _dof;
+
+    private static readonly System.Collections.Generic.List<Behaviour> _blurs = new System.Collections.Generic.List<Behaviour>(), _blurOff = new System.Collections.Generic.List<Behaviour>();
+    private static Camera? _blursOf;
+
+    // The FPS camera's motion blurs (AmplifyMotion's, the game's own), found once for it.
+    private static System.Collections.Generic.List<Behaviour> MotionBlursOf(Camera camera)
+    {
+        if (_blursOf != camera)
+        {
+            _blursOf = camera;
+            _blurs.Clear();
+            foreach (Behaviour b in camera.GetComponents<Behaviour>())
+            {
+                string name = b != null ? b.GetType().Name : "";
+                if (name.IndexOf("Motion", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    _blurs.Add(b!);
+            }
+            NewCameraPlugin.Log?.LogInfo("Two renders: motion blurs off in the gun renders: " + (_blurs.Count > 0 ? string.Join(", ", _blurs.ConvertAll(x => x.GetType().Name)) : "none found"));
+        }
+        return _blurs;
+    }
 
     private static Behaviour? DepthOfFieldOf(Camera camera)
     {
@@ -311,15 +348,16 @@ internal static class TwoRenders
             _goggleDone = Time.frameCount;
             return;
         }
-        if (!Now || !_gunHidden || _bareGun == null)
+        if (!Now || !_gunHidden)
             return;
         bool goggleGun = _goggleDone == Time.frameCount && _goggleGun != null;
+        bool bareGun = _bareDone == Time.frameCount && _bareGun != null;
         RenderTexture laid = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
         material.SetTexture(GunGId, goggleGun ? _goggleGun : Texture2D.blackTexture);
-        material.SetFloat(ShareGId, goggleGun ? _shareGoggle : 0f);
-        material.SetFloat(ShareBId, _shareBare);
+        material.SetFloat(ShareGId, goggleGun ? GunOpacity * _shareGoggle : 0f);
+        material.SetFloat(ShareBId, bareGun ? GunOpacity * _shareBare : 0f);
         material.SetFloat(DeviceReachId, DeviceReach);
-        material.SetTexture(GunBId, _bareGun);
+        material.SetTexture(GunBId, bareGun ? _bareGun : Texture2D.blackTexture);
         Graphics.Blit(scene, laid, material, GunsInPass);
         Graphics.Blit(laid, scene);
         RenderTexture.ReleaseTemporary(laid);
@@ -358,12 +396,12 @@ internal static class TwoRenders
             _ownDepth = null;
         }
         Material? material = MaterialFor(tubeShader);
-        if (material == null || _pass || !Now || !_gunHidden || _bareGun == null)
+        if (material == null || _pass || !Now || !_gunHidden || _bareGun == null || _bareDone != Time.frameCount)
             return;
         RenderTexture goggle = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
         Graphics.Blit(into, goggle);
         material.SetTexture(OtherId, _bareGun);
-        material.SetFloat(OtherShareId, _shareBare);
+        material.SetFloat(OtherShareId, GunOpacity * _shareBare);
         material.SetFloat(DeviceReachId, DeviceReach);
         Graphics.Blit(goggle, into, material, HalvesPass);
         if (Probes)
