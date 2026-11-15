@@ -11,6 +11,12 @@ Shader "Justachae/NVG/Direct" {
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
  UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
  float _DirectSplit, _DirectStrip, _DirectBehind;
+ // The experiment (NightVisionOtherEye.cs): each eye's share of the whole frame, the same everywhere (0.5 half each);
+ // below 0, the left eye's on the left and the right's on the right, eased across the strip, as ever.
+ float _DirectMix;
+ float toRightAt (float x) {
+  return _DirectMix >= 0 ? _DirectMix : smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, x);
+ }
  float4x4 _EyeInvVP0, _EyeInvVP1;
  float4 _TubeField, _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;
  float4 _DirectInset;    // how far past the lens's edge the device goes, as a share of the frame
@@ -84,7 +90,7 @@ Shader "Justachae/NVG/Direct" {
  // the left eye's on the left of the line, the right's on the right, each by its share across the strip about it, and through a
  // lens that eye has nothing of the device. All that goes past the line is gone.
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
-  float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
+  float t = toRightAt(uv.x);
   toRight = t;
   // Through either eye's lens here, nothing of the device: the lenses' picture is made from this frame, and the composite shows the
   // lens there whole.
@@ -230,7 +236,7 @@ Shader "Justachae/NVG/Direct" {
     float toRight;
     float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
     float c = coverage(uv, rawL, rawR, toRight);
-    float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
+    float t = toRightAt(uv.x);
     bool strip = t > 0 && t < 1, fading = fadingAt(uv);
     if (c <= 0 || !strip && !fading || !notCovered(uv, rawL, rawR))
      discard;
@@ -244,7 +250,7 @@ Shader "Justachae/NVG/Direct" {
      static const float2 steps[4] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1) };
      [unroll] for (int k = 0; k < 4; k++) {
       float2 at = uv + steps[k] * _DirectTexel.xy;
-      float tn = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, at.x);
+      float tn = toRightAt(at.x);
       bool has = tn < 1 && shown(SAMPLE_DEPTH_TEXTURE_LOD(_DirectLD, float4(at, 0, 0)))
           || tn > 0 && shown(SAMPLE_DEPTH_TEXTURE_LOD(_DirectRD, float4(at, 0, 0)));
       float w = device || has ? 1 : 0;

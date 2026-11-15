@@ -367,6 +367,9 @@ internal static partial class NightVisionEyepieces
     }
 
     private static readonly int DirectMonocularId = Shader.PropertyToID("_DirectMonocular");
+    private static readonly int DirectMixId = Shader.PropertyToID("_DirectMix");
+    private static readonly int EyeMixId = Shader.PropertyToID("_EyeMix");
+    private static float DirectMix = -1f;   // the experiment's mix of the two eyes over the whole frame (below 0 none)
     private static readonly int DirectRaisedId = Shader.PropertyToID("_DirectRaised");
     private const int DirectRaisedPass = 13;
     private static RenderTexture? _directRaised;
@@ -505,6 +508,7 @@ internal static partial class NightVisionEyepieces
 
         buffer.SetGlobalFloat(DirectSplit, split);
         buffer.SetGlobalVector(DirectMonocularId, monocular);
+        buffer.SetGlobalFloat(DirectMixId, DirectMix);
         buffer.SetGlobalFloat(DirectStrip, Overscan);
         buffer.SetGlobalVector(DirectInset, new Vector4(DirectInsetPixels / Mathf.Max(Screen.width, 1), DirectInsetPixels / Mathf.Max(Screen.height, 1), 0f, 0f));
         for (int side = 0; side < 2; side++)

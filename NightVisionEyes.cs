@@ -161,8 +161,6 @@ internal static partial class NightVisionEyepieces
         float half = _device.FieldDegrees * 0.5f;
         binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((half + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(half * Mathf.Deg2Rad), 0f, 0f));
 
-        // The experiment: both eyes' bare views, before the main camera renders (NightVisionOtherEye.cs).
-        RenderBareEyes(camera);
         ShadeMain(camera, !_direct);
         if (!_direct)
             ProbeStencil(camera);
@@ -204,14 +202,12 @@ internal static partial class NightVisionEyepieces
         float bare = lone >= 0 ? PodBare(raisedTube) * (1f - again) : 0f;
         int loneSide = lone >= 0 ? ((lone == CentreLensA) == (a <= b) ? 0 : 1) : -1;
         int monocular = !BinocularOn ? -1
-            : BothEyesBare ? -1
+            : ExperimentOn ? -1
             : _device.Monocular ? (a + CameraPosition.Horizontal >= 0f ? 1 : 0)
             : going >= 1f ? loneSide : -1;
         if (lone < 0)
             lone = CentreLensA;
         float loneAcross = lone == CentreLensA ? a : b;
-        if (_device.Monocular)
-            _eyepieceSide = a + CameraPosition.Horizontal >= 0f ? 1f : -1f;
         // The one swung up, for the device drawn into the main camera (NightVisionDirect.OnRaisedPod).
         RaisedPod = RaisedCupPod = null;
         if (monocular >= 0 && !_device.Monocular)
@@ -273,15 +269,18 @@ internal static partial class NightVisionEyepieces
             split = Mathf.Lerp(split, loneSide == 0 ? 1f + Overscan : -Overscan, going);
         // The experiment (NightVisionOtherEye.cs): the camera is one eye, the other the eyes' distance from it; each
         // eye's lens map from where it is (the composite then made once for each, all one side's).
-        // The device drawn into the main camera from its eye alone (all the frame that eye's side), its lenses left open
-        // there for their picture, made from that frame (drawn by the game, it filled the lenses' picture with itself).
-        if (ExperimentOn && CameraPosition.EyeOverride is float mainEye)
+        // The experiment (NightVisionOtherEye.cs): the eyes at the two aiming eyes, AimEye either side of the head's
+        // middle, the camera between them where it is set; the device drawn into the main camera from each, and each
+        // eye's lenses mapped from it, the two laid over the whole frame half each.
+        bool mixed = ExperimentOn;
+        if (mixed)
         {
-            Vector3 otherEye = right * (-2f * mainEye);
-            leftShift = mainEye >= 0f ? otherEye : Vector3.zero;
-            rightShift = mainEye >= 0f ? Vector3.zero : otherEye;
-            split = mainEye >= 0f ? -1f : 2f;
+            float middle = -CameraPosition.Horizontal;   // the head's middle, across from the camera
+            leftShift = right * (middle - CameraPosition.AimEye);
+            rightShift = right * (middle + CameraPosition.AimEye);
         }
+        binocular.SetFloat(EyeMixId, mixed ? 0.5f : -1f);
+        DirectMix = mixed ? 0.5f : -1f;
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
