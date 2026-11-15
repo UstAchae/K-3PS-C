@@ -152,6 +152,9 @@ internal static partial class NightVisionEyepieces
         else
         {
             RenderTexture? made = null, tubed = null, focused = null, fused = null, dimmed = null;
+            // The experiment (NightVisionOtherEye.cs): each eye's own frame, picture and eyepieces, then half each.
+            if (TwoEyesNow && _eyesLitFrame == Time.frameCount && ComposeEyesApart(camera, composite, glow, from, into))
+                goto composed;
             // The steps at the head of this file, in order.
             ScopeLensStep(camera, from);
             Texture picture = LensPicture(camera, ThroughObjective(camera, ForTube(from, ref tubed), ref focused), ref made);
@@ -161,9 +164,6 @@ internal static partial class NightVisionEyepieces
             ReleaseMask();
             composite.SetFloat(ProbeEyeId, -1f);
             Compose(composite, glow, from, into, picture, fusedPicture);
-            // The experiment's probes (NightVisionOtherEye.cs): each eye's view alone, small, in the lower corners.
-            if (EyeProbes && TwoEyesNow)
-                DrawEyeProbes(composite, glow, from, into, picture, fusedPicture);
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
             if (tubed != null)
@@ -175,6 +175,7 @@ internal static partial class NightVisionEyepieces
             if (dimmed != null)
                 RenderTexture.ReleaseTemporary(dimmed);
         }
+        composed:
         if (lensed != null)
         {
             Fisheye.Blit(lensed, to);

@@ -160,6 +160,13 @@ Shader "Justachae/NVG/Direct" {
  bool checker (float2 pixel) { return fmod(floor(pixel.x) + floor(pixel.y), 2) < 0.5; }
 
  bool pick (float2 pixel, float2 uv, float rawL, float rawR, out float toRight) {
+  // The experiment, the two eyes kept apart: each pixel one eye's, as on a chessboard (the left eye's on the white
+  // squares), its drawing whole (its own lens left open in it); split again once lit (pass 15), before anything blends
+  // pixels together.
+  if (_DirectMix >= 0) {
+   toRight = checker(pixel) ? 0 : 1;
+   return shown(toRight > 0.5 ? rawR : rawL);
+  }
   float c = coverage(uv, rawL, rawR, toRight);
   if (c <= 0)
    return false;
@@ -263,6 +270,8 @@ Shader "Justachae/NVG/Direct" {
     float2 uv = i.screen.xy / i.screen.w;
     float toRight;
     float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv);
+    if (_DirectMix >= 0)
+     discard;   // the experiment's chessboard is split, not evened (pass 15)
     float c = coverage(uv, rawL, rawR, toRight);
     float t = toRightAt(uv.x);
     bool strip = t > 0 && t < 1, fading = fadingAt(uv);
@@ -505,6 +514,43 @@ Shader "Justachae/NVG/Direct" {
     o.depth = 1;
     #endif
     return o;
+   }
+   ENDCG
+  }
+  // 15: the experiment's lit frame (_MainTex), its chessboard split: one eye's (_DirectHalf: 0 the left, on the white
+  // squares) whole, its pixels as they are, the other eye's filled from the four next to each (all of this eye's).
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   sampler2D _MainTex;
+   float4 _MainTex_TexelSize;
+   float _DirectHalf;
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    bool mine = checker(i.pos.xy) == (_DirectHalf < 0.5);
+    if (mine)
+     return float4(tex2D(_MainTex, uv).rgb, 1);
+    float2 d = _MainTex_TexelSize.xy;
+    float3 around = tex2D(_MainTex, uv + float2(d.x, 0)).rgb + tex2D(_MainTex, uv - float2(d.x, 0)).rgb
+        + tex2D(_MainTex, uv + float2(0, d.y)).rgb + tex2D(_MainTex, uv - float2(0, d.y)).rgb;
+    return float4(around * 0.25, 1);
+   }
+   ENDCG
+  }
+  // 16: two pictures (_MainTex, _Other), half each.
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   sampler2D _MainTex, _Other;
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    return float4(0.5 * (tex2D(_MainTex, uv).rgb + tex2D(_Other, uv).rgb), 1);
    }
    ENDCG
   }

@@ -643,6 +643,9 @@ internal static partial class NightVisionEyepieces
     // frame just before.
     private static Texture HoldIr(RenderTexture layer, Material material)
     {
+        // Asked again in the same frame (the experiment makes each eye's picture): this frame's, as it was held.
+        if (_irResolvedFrame == Time.frameCount && _irHistory[_irHistoryIndex] != null)
+            return _irHistory[_irHistoryIndex]!;
         for (int i = 0; i < 2; i++)
         {
             if (_irHistory[i] != null && _irHistory[i]!.width == layer.width && _irHistory[i]!.height == layer.height)

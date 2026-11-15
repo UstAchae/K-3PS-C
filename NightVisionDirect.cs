@@ -94,7 +94,13 @@ internal static partial class NightVisionEyepieces
     private static Camera? _directCamera;
     private static int _arrangedCount = -1;
     private static bool _direct;
-    private const int InsertPass = 0, SurfacePass = 1, EvenPass = 2, MotionPass = 3, StencilBitsPass = 4, PlacesPass = 12, LensOpenPass = 14;
+    private const int InsertPass = 0, SurfacePass = 1, EvenPass = 2, MotionPass = 3, StencilBitsPass = 4, PlacesPass = 12, LensOpenPass = 14,
+        SplitPass = 15, HalvesPass = 16;
+    // The experiment: each eye's lit frame, split from the chessboard before the post-processing (the frame it is made
+    // of is the two half each), and the frame it was made for.
+    internal static readonly RenderTexture?[] _eyesLit = new RenderTexture?[2];
+    internal static int _eyesLitFrame = -100;
+    private static readonly int OtherTexId = Shader.PropertyToID("_Other");
     private static readonly int ShadeLeftCupId = Shader.PropertyToID("_ShadeLeftCup");
     private static readonly List<Renderer> _slotRenderers = new List<Renderer>();
     private static readonly List<(Renderer renderer, ShadowCastingMode casting)> _hidden = new List<(Renderer, ShadowCastingMode)>();
@@ -496,7 +502,7 @@ internal static partial class NightVisionEyepieces
             {
                 if (stage == 1)
                 {
-                    if (_nearCount <= 0)
+                    if (_nearCount <= 0 && DirectMix < 0f)
                         break;
                     buffer.SetGlobalFloat(DirectHalf, half);
                     buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, LensOpenPass);
@@ -629,14 +635,30 @@ internal static partial class NightVisionEyepieces
         // carried from frame to frame by the motion (the reflections, the upscaler) drifted over it like mist.
         if ((main.depthTextureMode & DepthTextureMode.MotionVectors) != 0)
             DrawMotion(_directMotion, main, turned, projection, leftShift, rightShift);
-        // Once all is lit: the fade.
+        // Once all is lit: the fade; in the experiment, the chessboard split into each eye's lit frame (kept for the
+        // eyepieces' stage, NightVisionOtherEye.cs), and the frame the game goes on with made of the two, half each.
         buffer = _directEnd;
         buffer.SetGlobalVector(DirectTexel, new Vector4(1f / Mathf.Max(width, 1), 1f / Mathf.Max(height, 1), 0f, 0f));
         buffer.GetTemporaryRT(DirectLitNow, width, height, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
         buffer.Blit(BuiltinRenderTextureType.CameraTarget, DirectLitNow);
-        buffer.SetGlobalTexture(DirectLitNow, DirectLitNow);
-        buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-        buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, EvenPass);
+        if (DirectMix >= 0f)
+        {
+            for (int half = 0; half < 2; half++)
+            {
+                RenderTexture eye = DirectTexture(_eyesLit, half, width, height, 0, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Linear, "Justachae NVG eye lit " + half);
+                buffer.SetGlobalFloat(DirectHalf, half);
+                buffer.Blit(DirectLitNow, eye, _directMaterial, SplitPass);
+            }
+            buffer.SetGlobalTexture(OtherTexId, _eyesLit[1]!);
+            buffer.Blit(_eyesLit[0]!, BuiltinRenderTextureType.CameraTarget, _directMaterial, HalvesPass);
+            _eyesLitFrame = Time.frameCount;
+        }
+        else
+        {
+            buffer.SetGlobalTexture(DirectLitNow, DirectLitNow);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, EvenPass);
+        }
         buffer.ReleaseTemporaryRT(DirectLitNow);
 
         // The experiment: the see-through parts of the player's own (a sight's lens and its reticle), kept from the main

@@ -277,20 +277,81 @@ internal static partial class NightVisionEyepieces
         NewCameraPlugin.Log?.LogInfo($"NVG experiment DIAG sight lens material {material.name}, shader {material.shader.name}, queue {material.renderQueue}, passes {material.passCount}; properties {string.Join(", ", properties)}");
     }
 
-    // TEMP PROBES (the user's, to see each eye's view): the left eye's view alone in the lower left corner, the right's in
-    // the lower right, a quarter of the frame across, as the eyepieces make them (before the game lays a sight's lens in).
+    // The experiment at the eyepieces' stage: each eye's own frame (the frame of the two half each, as the game finished
+    // it, scaled at each pixel by how that eye's lit frame stands to the two's mean, NvgTube pass 3), its own picture made
+    // from it, its own eyepieces (only the right tube with the other mod's), and the two eyes' results half each.
+    private const int EyeFromBlendPass = 3, TubeHalves = 1;
+    private static readonly int EyePreId = Shader.PropertyToID("_EyePre"), OtherPreId = Shader.PropertyToID("_OtherPre");
+    private static readonly int OtherId = Shader.PropertyToID("_Other"), OtherShareId = Shader.PropertyToID("_OtherShare");
+    private static Material? _eyesMaterial;
+
+    private static bool ComposeEyesApart(Component camera, Material composite, Material glow, RenderTexture from, RenderTexture into)
+    {
+        if (_tubeShader == null || _eyesLit[0] == null || _eyesLit[1] == null)
+            return false;
+        Material eyes = _eyesMaterial ??= new Material(_tubeShader) { name = "Justachae NVG two eyes", hideFlags = HideFlags.DontSave };
+        var temporaries = new System.Collections.Generic.List<RenderTexture>();
+        RenderTexture Temporary()
+        {
+            RenderTexture texture = RenderTexture.GetTemporary(from.width, from.height, 0, from.format);
+            temporaries.Add(texture);
+            return texture;
+        }
+        ScopeLensStep(camera, from);
+        var seen = new RenderTexture[2];
+        RenderTexture? fusedMade = null;
+        for (int side = 0; side < 2; side++)
+        {
+            RenderTexture own = Temporary();
+            eyes.SetTexture(EyePreId, _eyesLit[side]);
+            eyes.SetTexture(OtherPreId, _eyesLit[1 - side]);
+            Graphics.Blit(from, own, eyes, EyeFromBlendPass);
+            RenderTexture? made = null, tubed = null, focused = null, dimmed = null;
+            Texture picture = LensPicture(camera, ThroughObjective(camera, ForTube(own, ref tubed), ref focused), ref made);
+            picture = EaseGrain(picture, ref made);
+            picture = TubesGain(picture, ref dimmed);
+            ReleaseMask();
+            // The other mod's picture goes into the right tube only: the right eye's.
+            Texture? fusedPicture = side == 1 ? Fused(picture, ref fusedMade) : null;
+            seen[side] = Temporary();
+            composite.SetFloat(ProbeEyeId, side);
+            Compose(composite, glow, own, seen[side], picture, fusedPicture);
+            foreach (RenderTexture? texture in new[] { made, tubed, focused, dimmed })
+            {
+                if (texture != null)
+                    RenderTexture.ReleaseTemporary(texture);
+            }
+        }
+        composite.SetFloat(ProbeEyeId, -1f);
+        eyes.SetTexture(OtherId, seen[1]);
+        eyes.SetFloat(OtherShareId, 0.5f);
+        Graphics.Blit(seen[0], into, eyes, TubeHalves);
+        if (EyeProbes)
+            DrawEyeProbes(into, seen[0], seen[1]);
+        if (fusedMade != null)
+            RenderTexture.ReleaseTemporary(fusedMade);
+        foreach (RenderTexture texture in temporaries)
+            RenderTexture.ReleaseTemporary(texture);
+        if (!_apartNoted)
+        {
+            _apartNoted = true;
+            NewCameraPlugin.Log?.LogInfo("NVG experiment: the two eyes composed apart (each its own frame, picture and eyepieces), half each.");
+        }
+        return true;
+    }
+    private static bool _apartNoted;
+
+    // TEMP PROBES (the user's, to see each eye's view): the left eye's alone in the lower left corner, the right's in the
+    // lower right, a quarter of the frame across (before the game lays a sight's lens in).
     internal static bool EyeProbes = true;
     private static readonly int ProbeEyeId = Shader.PropertyToID("_ProbeEye");
-    private static void DrawEyeProbes(Material composite, Material glow, RenderTexture from, RenderTexture into, Texture picture, Texture? fused)
+    private static void DrawEyeProbes(RenderTexture into, RenderTexture left, RenderTexture right)
     {
         int width = into.width / 4, height = into.height / 4, margin = into.height / 40;
         for (int side = 0; side < 2; side++)
         {
-            RenderTexture whole = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
             RenderTexture small = RenderTexture.GetTemporary(width, height, 0, into.format);
-            composite.SetFloat(ProbeEyeId, side);
-            Compose(composite, glow, from, whole, picture, fused);
-            Graphics.Blit(whole, small);
+            Graphics.Blit(side == 0 ? left : right, small);
             RenderTexture? active = RenderTexture.active;
             RenderTexture.active = into;
             GL.PushMatrix();
@@ -301,10 +362,8 @@ internal static partial class NightVisionEyepieces
             Graphics.DrawTexture(new Rect(x, y, width, height), small);
             GL.PopMatrix();
             RenderTexture.active = active;
-            RenderTexture.ReleaseTemporary(whole);
             RenderTexture.ReleaseTemporary(small);
         }
-        composite.SetFloat(ProbeEyeId, -1f);
     }
 
     private static void ReleaseOtherEye()

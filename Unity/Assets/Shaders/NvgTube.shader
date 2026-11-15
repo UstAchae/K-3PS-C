@@ -71,5 +71,24 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 3: the experiment: one eye's frame after the game's post-processing, from the frame made of the two eyes half each
+  // (_MainTex) and both eyes' lit frames before it (_EyePre this eye's, _OtherPre the other's): the blend scaled, at each
+  // pixel, by how this eye's stands to the two's mean (the same where they agree: the scene).
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _EyePre, _OtherPre;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 blend = tex2D(_MainTex, i.uv);
+    float3 eye = tex2D(_EyePre, i.uv).rgb, other = tex2D(_OtherPre, i.uv).rgb;
+    float3 mean = 0.5 * (eye + other);
+    float3 ratio = clamp((eye + 0.002) / (mean + 0.002), 0, 8);
+    return float4(blend.rgb * ratio, blend.a);
+   }
+   ENDCG
+  }
  }
 }
