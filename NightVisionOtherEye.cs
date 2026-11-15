@@ -81,7 +81,9 @@ internal static partial class NightVisionEyepieces
                 if (own != null && own.enabled && own.GetType() == behaviour.GetType())
                     mainHas = true;
             }
-            bool keep = mainHas && kind != "NightVision" && kind != "ThermalVision";
+            // Its own post-processing volume is a scope's (its vignette, the oval mask round the frame, and blur): the
+            // main camera's volumes are reached through its layer below.
+            bool keep = mainHas && kind != "NightVision" && kind != "ThermalVision" && kind != "PostProcessVolume";
             if (behaviour.enabled != keep)
                 behaviour.enabled = keep;
             (keep ? kept : off).Add(kind);
@@ -95,6 +97,20 @@ internal static partial class NightVisionEyepieces
             layer.volumeTrigger = made.transform;
         }
         NewCameraPlugin.Log?.LogInfo($"NVG experiment: bare eye camera kept {string.Join(", ", kept)}; off {string.Join(", ", off)}.");
+        // What each volume would lay on, the scope's (now off) and the main camera's, to tell a mask that stays.
+        static string VolumeOf(Component owner)
+        {
+            if (!owner.TryGetComponent(out PostProcessVolume volume) || volume.sharedProfile == null)
+                return "none";
+            var settings = new System.Collections.Generic.List<string>();
+            foreach (PostProcessEffectSettings effect in volume.sharedProfile.settings)
+            {
+                if (effect != null && effect.enabled.value)
+                    settings.Add(effect.GetType().Name);
+            }
+            return $"{(volume.isGlobal ? "global" : "local")} layer {LayerMask.LayerToName(volume.gameObject.layer)} weight {volume.weight:F2}: {string.Join(", ", settings)}";
+        }
+        NewCameraPlugin.Log?.LogInfo($"NVG experiment: the scope camera's own volume {VolumeOf(camera)}; the main camera's {VolumeOf(main)}.");
         _bareEyes[side] = camera;
         return camera;
     }
