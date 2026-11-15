@@ -10,6 +10,9 @@ namespace EFTNewCamera;
 // (NightVisionComposite.cs, before the interface): the goggle and its picture seen whole, the bare eye's view (its gun
 // among it) through it at half. Each render is one eye, the camera itself: the device drawn into it and its lens mapped
 // from there. A binocular is drawn as ever, its two halves in one frame.
+// Since 1.8.14 the frame's own render is the goggle eye's without its gun; the gun is rendered alone from each eye,
+// half each (the goggle eye's laid in before its eyepiece, the bare eye's over after); only the aiming eye's gun has
+// the sight's picture on its lens.
 // TEMP PROBES: each eye's own frame, before the two are mixed, in the lower corners (the left eye's on the left).
 internal static class TwoRenders
 {
@@ -38,32 +41,46 @@ internal static class TwoRenders
         Transform? root = (_weaponRoot?.GetValue(hands) as Transform)?.root;
         if (root == null)
             return 0;
-        if (root != _gunRoot)
+        if (root != _gunRoot || _gunRenderers.Exists(r => r == null))
         {
+            HideGun(false);
             _gunRoot = root;
             _gunLayers = 0;
             root.GetComponentsInChildren(false, _gunRenderers);
+            _gunRenderers.RemoveAll(r => r is not MeshRenderer && r is not SkinnedMeshRenderer);
             foreach (Renderer r in _gunRenderers)
             {
                 if (r is MeshRenderer || r is SkinnedMeshRenderer)
                     _gunLayers |= 1 << r.gameObject.layer;
             }
-            _gunRenderers.Clear();
         }
         return _gunLayers;
     }
     private static readonly int NearReachId = Shader.PropertyToID("_NearReach");
+    private static readonly int GunGId = Shader.PropertyToID("_GunG"), GunBId = Shader.PropertyToID("_GunB");
+    private const int GunsInPass = 4;   // NvgTube.shader: the goggle eye's gun laid into its scene, ahead of the bare eye's
 
-    private static bool _pass, _hooked, _failed;
-    private static int _leftDone = -100;
-    private static RenderTexture? _left;
+    // The renders of a frame: the gun alone from the bare eye, then from the goggle's eye; then the frame's own, from the
+    // goggle's eye, without the gun.
+    private enum GunPass { None, Bare, Goggle }
+    private static GunPass _gun = GunPass.None;
+    private static bool _pass => _gun != GunPass.None;
+    internal static bool GunOnly => _gun != GunPass.None;
+    private static bool _hooked, _failed, _gunHidden;
+    private static int _bareDone = -100, _goggleDone = -100;
+    private static RenderTexture? _bareGun, _goggleGun;
     private static Material? _material;
     private static readonly int OtherId = Shader.PropertyToID("_Other"), OtherShareId = Shader.PropertyToID("_OtherShare");
+    private static readonly HarmonyLib.AccessTools.FieldRef<SSAAPropagator, Renderer> LensRenderer =
+        HarmonyLib.AccessTools.FieldRefAccess<SSAAPropagator, Renderer>("_opticLensRenderer");
+    private static readonly HarmonyLib.AccessTools.FieldRef<SSAAPropagator, Renderer> CollimatorRenderer =
+        HarmonyLib.AccessTools.FieldRefAccess<SSAAPropagator, Renderer>("_collimatorRenderer");
 
     // The goggle's eye across from the head's middle (m), from where its lens is; the bare eye the other side. Until the
     // lens is seen, the aiming eye's distance.
     private static float _goggleEye = 0.03f;
     private static float BareEye => -_goggleEye;
+    private static bool GoggleEyeAims => (_goggleEye >= 0f) == (CameraPosition.AimingEyeAcross >= 0f);
 
     internal static bool Now => On && !_failed && NightVisionEyepieces.DownOrFlipping && NightVisionEyepieces.MonocularWorn;
 
@@ -71,9 +88,9 @@ internal static class TwoRenders
     internal static float? EyeOverride => Now ? _goggleEye : (float?)null;
 
     // Where the camera is placed from its place this frame: over at the bare eye during the bare eye's render.
-    internal static Vector3 OtherEyeOffset(Quaternion turn) => _pass ? turn * new Vector3(BareEye - _goggleEye, 0f, 0f) : Vector3.zero;
+    internal static Vector3 OtherEyeOffset(Quaternion turn) => _gun == GunPass.Bare ? turn * new Vector3(BareEye - _goggleEye, 0f, 0f) : Vector3.zero;
 
-    // From NightVisionEyes.RenderLenses in the goggle eye's render: its lens across from the head's middle.
+    // From NightVisionEyes.RenderLenses in the goggle eye's own render: its lens across from the head's middle.
     internal static void SeeLens(float across)
     {
         if (_pass || !Now || Mathf.Abs(across) < 0.01f)
@@ -90,9 +107,9 @@ internal static class TwoRenders
         Camera.onPostRender += AfterOptic;
     }
 
-    // A sight's camera at work this frame: the bare eye rendered once it has (its picture is what the game lays on the
+    // A sight's camera at work this frame: the guns rendered once it has (its picture is what the game lays on the
     // sight's lens; rendered before it, the lens showed nothing but the reticle). Otherwise as rendering begins.
-    private static int _bareFrame = -1;
+    private static int _gunsFrame = -1;
 
     private static bool OpticAtWork()
     {
@@ -110,34 +127,54 @@ internal static class TwoRenders
     private static void BeforeRender()
     {
         if (!OpticAtWork())
-            RenderLeftEye();
+            RenderGuns();
     }
 
     private static void AfterOptic(Camera camera)
     {
         if (!_pass && OpticPicture.IsCamera(camera))
-            RenderLeftEye();
+            RenderGuns();
     }
 
-    private static void RenderLeftEye()
+    // The gun alone from each eye (its layers only, no further than NearReach: anything else on those layers, other
+    // players, is far off; the goggle not drawn, NightVisionEyes.cs), the sight's picture on its lens only for the aiming
+    // eye's; then the gun hidden from the frame's own render.
+    private static void RenderGuns()
     {
-        if (!Now || _bareFrame == Time.frameCount)
+        if (!Now || _gunsFrame == Time.frameCount)
             return;
-        _bareFrame = Time.frameCount;
+        _gunsFrame = Time.frameCount;
         Camera? main = Camera.main;
         if (main == null || !main.isActiveAndEnabled)
             return;
         int gunLayers = GunLayers();
         if (gunLayers == 0)
             return;
-        _pass = true;
-        // Only the gun: what the bare eye sees of it, its sight and what the sight shows (the game lays the sight's
-        // picture on its lens whatever the camera draws); the rest the two eyes see alike enough. Its layers only, and
-        // no further than NearReach (anything else on those layers, other players, is far off).
+        RenderGun(main, GunPass.Bare, gunLayers);
+        RenderGun(main, GunPass.Goggle, gunLayers);
+        if (_bareDone == Time.frameCount && _goggleDone == Time.frameCount)
+            HideGun(true);
+    }
+
+    private static void RenderGun(Camera main, GunPass which, int gunLayers)
+    {
+        if (_failed)
+            return;
+        SSAAPropagator? propagator = main.GetComponent<SSAAPropagator>();
+        bool aims = (which == GunPass.Goggle) == GoggleEyeAims;
+        Renderer? lens = null, collimator = null;
+        if (!aims && propagator != null)
+        {
+            lens = LensRenderer(propagator);
+            collimator = CollimatorRenderer(propagator);
+            LensRenderer(propagator) = null!;
+            CollimatorRenderer(propagator) = null!;
+        }
         float far = main.farClipPlane;
         int mask = main.cullingMask;
         main.farClipPlane = NearReach;
         main.cullingMask = gunLayers;
+        _gun = which;
         try
         {
             main.Render();
@@ -145,53 +182,103 @@ internal static class TwoRenders
         catch (System.Exception e)
         {
             _failed = true;
-            NewCameraPlugin.Log?.LogError("Two renders: the bare eye's render failed, not tried again: " + e);
+            NewCameraPlugin.Log?.LogError("Two renders: a gun's render failed, not tried again: " + e);
         }
         finally
         {
+            _gun = GunPass.None;
             main.farClipPlane = far;
             main.cullingMask = mask;
-            _pass = false;
+            if (!aims && propagator != null)
+            {
+                LensRenderer(propagator) = lens!;
+                CollimatorRenderer(propagator) = collimator!;
+            }
         }
     }
 
-    // In the eyepieces' image effect, the frame done: the bare eye's kept; the goggle eye's mixed half and half with it.
-    internal static void TakeEye(RenderTexture into, Shader? tubeShader)
+    // The gun kept from the frame's own render (its two eyes' pictures laid in instead); back once the frame is done.
+    private static void HideGun(bool hide)
     {
-        if (tubeShader == null)
+        if (hide == _gunHidden)
             return;
-        Material material = _material ??= new Material(tubeShader) { name = "Justachae two eyes", hideFlags = HideFlags.DontSave };
-        if (_pass)
+        _gunHidden = hide;
+        foreach (Renderer r in _gunRenderers)
         {
-            if (_left == null || _left.width != into.width || _left.height != into.height)
+            if (r != null)
+                r.forceRenderingOff = hide;
+        }
+    }
+
+    // From NewCameraPlugin.EndOfFrame.
+    internal static void EndOfFrame() => HideGun(false);
+
+    private static RenderTexture Kept(ref RenderTexture? kept, RenderTexture like, string name)
+    {
+        if (kept == null || kept.width != like.width || kept.height != like.height)
+        {
+            if (kept != null)
             {
-                if (_left != null)
-                {
-                    _left.Release();
-                    Object.Destroy(_left);
-                }
-                _left = new RenderTexture(into.width, into.height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae bare eye's near", hideFlags = HideFlags.DontSave };
-                _left.Create();
+                kept.Release();
+                Object.Destroy(kept);
             }
-            // Its picture, and where it has something (its depth short of its reach) in alpha.
-            material.SetFloat(NearReachId, NearReach);
-            Graphics.Blit(into, _left, material, NearPass);
-            _leftDone = Time.frameCount;
+            kept = new RenderTexture(like.width, like.height, 0, RenderTextureFormat.ARGBHalf) { name = name, hideFlags = HideFlags.DontSave };
+            kept.Create();
+        }
+        return kept;
+    }
+
+    private static Material? MaterialFor(Shader? tubeShader) =>
+        tubeShader == null ? null : _material ??= new Material(tubeShader) { name = "Justachae two eyes", hideFlags = HideFlags.DontSave };
+
+    // At the eyepieces' image effect, before the eyepieces: a gun's render kept (its picture, and where it has something
+    // in alpha); in the frame's own, the goggle eye's gun laid into its scene at half (so its eyepiece shows it as it
+    // shows anything), weighted for the bare eye's laid over after.
+    internal static void BeforeEyepieces(RenderTexture scene, Shader? tubeShader)
+    {
+        Material? material = MaterialFor(tubeShader);
+        if (material == null)
+            return;
+        material.SetFloat(NearReachId, NearReach);
+        if (_gun == GunPass.Bare)
+        {
+            Graphics.Blit(scene, Kept(ref _bareGun, scene, "Justachae bare eye's gun"), material, NearPass);
+            _bareDone = Time.frameCount;
             return;
         }
-        if (!Now || _leftDone != Time.frameCount || _left == null)
+        if (_gun == GunPass.Goggle)
+        {
+            Graphics.Blit(scene, Kept(ref _goggleGun, scene, "Justachae goggle eye's gun"), material, NearPass);
+            _goggleDone = Time.frameCount;
             return;
-        RenderTexture right = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
-        Graphics.Blit(into, right);
-        material.SetTexture(OtherId, _left);
+        }
+        if (!Now || !_gunHidden || _bareGun == null || _goggleGun == null)
+            return;
+        RenderTexture laid = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
+        material.SetTexture(GunGId, _goggleGun);
+        material.SetTexture(GunBId, _bareGun);
+        Graphics.Blit(scene, laid, material, GunsInPass);
+        Graphics.Blit(laid, scene);
+        RenderTexture.ReleaseTemporary(laid);
+    }
+
+    // In the eyepieces' image effect, the frame done: the bare eye's gun laid over at half where it is.
+    internal static void TakeEye(RenderTexture into, Shader? tubeShader)
+    {
+        Material? material = MaterialFor(tubeShader);
+        if (material == null || _pass || !Now || !_gunHidden || _bareGun == null)
+            return;
+        RenderTexture goggle = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
+        Graphics.Blit(into, goggle);
+        material.SetTexture(OtherId, _bareGun);
         material.SetFloat(OtherShareId, 0.5f);
-        Graphics.Blit(right, into, material, HalvesPass);
+        Graphics.Blit(goggle, into, material, HalvesPass);
         if (Probes)
         {
             bool goggleLeft = _goggleEye < 0f;
-            DrawProbes(into, goggleLeft ? right : _left, goggleLeft ? _left : right, material);
+            DrawProbes(into, goggleLeft ? goggle : _bareGun, goggleLeft ? _bareGun : goggle, material);
         }
-        RenderTexture.ReleaseTemporary(right);
+        RenderTexture.ReleaseTemporary(goggle);
     }
 
     // Each eye's frame a quarter of the frame across, opaque in a thin white frame: the left eye's in the lower left

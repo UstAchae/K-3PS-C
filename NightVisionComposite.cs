@@ -140,6 +140,8 @@ internal static partial class NightVisionEyepieces
             from = source;
             to = destination;
         }
+        // The experiment (TwoRenders.cs): a gun's render kept, or the goggle eye's gun laid into the scene.
+        TwoRenders.BeforeEyepieces(from, _tubeShader);
 
         RenderTexture? lensed = lens ? RenderTexture.GetTemporary(from.width, from.height, 0, from.format) : null;
         RenderTexture into = lensed != null ? lensed : to;
@@ -162,7 +164,7 @@ internal static partial class NightVisionEyepieces
             if (focused != null)
                 RenderTexture.ReleaseTemporary(focused);
         }
-        // The experiment (TwoRenders.cs): the left eye's whole frame kept, or this eye's mixed with it.
+        // The experiment (TwoRenders.cs): the bare eye's gun laid over at half.
         TwoRenders.TakeEye(into, _tubeShader);
         if (lensed != null)
         {

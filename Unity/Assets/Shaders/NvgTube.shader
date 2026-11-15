@@ -81,5 +81,23 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 4: the scene without the gun (_MainTex), the goggle eye's gun (_GunG) laid in at half where it is, weighted so
+  // that once the bare eye's (_GunB) is laid over at half after (pass 1), each is half where both are and the scene
+  // keeps what neither covers.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _GunG, _GunB;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 s = tex2D(_MainTex, i.uv), g = tex2D(_GunG, i.uv);
+    float wG = 0.5 * saturate(g.a), wB = 0.5 * saturate(tex2D(_GunB, i.uv).a);
+    float k = max(1 - wB, 1e-3);
+    return float4((s.rgb * (1 - wG - wB) + g.rgb * wG) / k, s.a);
+   }
+   ENDCG
+  }
  }
 }
