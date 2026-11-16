@@ -141,7 +141,7 @@ internal static class TwoRenders
     private static bool DrawLensLayer(RenderTexture into, Material material)
     {
         Camera? camera = Camera.main;
-        if (camera == null || _lensKept == null || _lensMaterialKept == null || !_lensKept.enabled || !_lensKept.gameObject.activeInHierarchy)
+        if (camera == null || _lensKept == null || _lensMaterialKept == null || !_lensKept.enabled || !_lensKept.gameObject.activeInHierarchy || !OpticAtWork())
             return false;
         Vector3 shift = camera.transform.rotation * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
         Vector3 eye = camera.transform.position + shift, place = camera.transform.position;
@@ -212,6 +212,9 @@ internal static class TwoRenders
         {
             try
             {
+                // Only while the sight's camera is at work (aimed): otherwise the lens has no picture, and is the gun's.
+                if (!OpticAtWork())
+                    return null;
                 return _lensKept ?? EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight?.LensRenderer;
             }
             catch

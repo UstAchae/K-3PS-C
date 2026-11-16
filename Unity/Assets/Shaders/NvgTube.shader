@@ -226,12 +226,10 @@ Shader "Justachae/NVG/Tube" {
     float raw = SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(uv, 0, 0));
     if (!shownAt(raw))
      return false;
+    // What the camera has there is the gun put in (its depth is the gun's): not where it was left out (its sight's
+    // lens), nor where something else stood before it.
     float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
-    #if defined(UNITY_REVERSED_Z)
-    return gun >= scene - 0.001;
-    #else
-    return gun <= scene + 0.001;
-    #endif
+    return abs(gun - scene) <= max(gun * 0.002, 0.00002);
    }
    // Which pixels had the gun put in (NvgDirect.shader's chessboard), by the render's own pixels.
    bool gunPixel (float2 uv) {
@@ -293,12 +291,10 @@ Shader "Justachae/NVG/Tube" {
     float raw = SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(uv, 0, 0));
     if (!shownAt(raw))
      return false;
+    // What the camera has there is the gun put in (its depth is the gun's): not where it was left out (its sight's
+    // lens), nor where something else stood before it.
     float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
-    #if defined(UNITY_REVERSED_Z)
-    return gun >= scene - 0.001;
-    #else
-    return gun <= scene + 0.001;
-    #endif
+    return abs(gun - scene) <= max(gun * 0.002, 0.00002);
    }
    // Which pixels had the gun put in (NvgDirect.shader's chessboard), by the render's own pixels.
    bool gunPixel (float2 uv) {
@@ -426,12 +422,10 @@ Shader "Justachae/NVG/Tube" {
     float raw = SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(uv, 0, 0));
     if (!shownAt(raw))
      return false;
+    // What the camera has there is the gun put in (its depth is the gun's): not where it was left out (its sight's
+    // lens), nor where something else stood before it.
     float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
-    #if defined(UNITY_REVERSED_Z)
-    return gun >= scene - 0.001;
-    #else
-    return gun <= scene + 0.001;
-    #endif
+    return abs(gun - scene) <= max(gun * 0.002, 0.00002);
    }
    sampler2D _Other, _LensLayer, _LensMask;
    float _GunShare, _LensShare;
