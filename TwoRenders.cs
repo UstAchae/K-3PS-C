@@ -206,6 +206,18 @@ internal static class TwoRenders
         return true;
     }
 
+    // The bare eye aims through its sight: only one gun is drawn (that eye's), so behind its sight's lens, where the frame
+    // is seen through it, no laser of the gun is seen at 1x (the one in the sight's picture is that gun's): the frame's
+    // lasers drawn apart and added back but there (NightVisionIr.cs).
+    internal static bool LasersCutAtLens
+    {
+        get
+        {
+            Camera? camera = Camera.main;
+            return camera != null && SightFromBareEye(camera.transform.rotation, out _) && BareLens != null;
+        }
+    }
+
     // The bare eye's gun's sight lens this frame (NightVisionDirect.cs leaves the gun out there).
     internal static Renderer? BareLens
     {
