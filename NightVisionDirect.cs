@@ -573,15 +573,66 @@ internal static partial class NightVisionEyepieces
     private static readonly RenderTexture?[] _gunDepths = new RenderTexture?[1];
     private static readonly RenderTargetIdentifier[] _gunTargets = new RenderTargetIdentifier[4];
     private static readonly Dictionary<SkinnedMeshRenderer, Mesh> _bakedGun = new Dictionary<SkinnedMeshRenderer, Mesh>();
-    private static readonly Dictionary<Renderer, (Material[] materials, int[] passes)> _gunSources = new Dictionary<Renderer, (Material[], int[])>();
+    private static readonly Dictionary<Renderer, (Material[] materials, int[] passes, int[] forward)> _gunSources = new Dictionary<Renderer, (Material[], int[], int[])>();
+    private static readonly List<(Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer)> _gunForward = new List<(Mesh, Matrix4x4, Material, int, int, Renderer)>();
+    private static CommandBuffer? _gunForwardBuffer;
+    private static Camera? _gunForwardCamera;
+
+    // A material's forward pass, for a part with none for the G-buffer.
+    private static int ForwardPass(Material? material)
+    {
+        if (material == null || GBufferPass(material) >= 0)
+            return -1;
+        for (int i = 0; i < material.passCount; i++)
+        {
+            string mode = material.shader.FindPassTagValue(i, new ShaderTagId("LightMode")).name ?? "";
+            if (mode.Length == 0 || string.Equals(mode, "ForwardBase", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mode, "Always", System.StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "SRPDefaultUnlit", System.StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
+    }
+
+    // The gun's forward-only parts, after the scene's see-through things, from the bare eye (as the camera sees them
+    // from there: the same matrices as its G-buffer parts, the camera at the origin).
+    private static void DrawGunForward(Camera main, Matrix4x4 turned, Vector3 place)
+    {
+        _gunForwardBuffer ??= new CommandBuffer { name = "Justachae NVG gun's forward parts" };
+        CommandBuffer buffer = _gunForwardBuffer;
+        buffer.Clear();
+        if (_gunForwardCamera != main)
+        {
+            _gunForwardCamera?.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
+            main.AddCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
+            _gunForwardCamera = main;
+        }
+        if (_gunForward.Count == 0)
+            return;
+        buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        buffer.SetViewProjectionMatrices(turned, main.projectionMatrix);
+        buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
+        foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunForward)
+        {
+            if (mesh == null || material == null || renderer == null)
+                continue;
+            renderer.GetPropertyBlock(_pieceBlock);
+            buffer.DrawMesh(mesh, matrix, material, sub, pass, _pieceBlock);
+        }
+        buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
+        buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
+    }
     private static readonly List<Material> _gunMaterialsNow = new List<Material>();
 
     private static bool DrawGun(CommandBuffer buffer, Camera main, Vector3 place, Matrix4x4 turned, Matrix4x4 projection, int width, int height)
     {
         List<Renderer>? renderers = TwoRenders.GunHere(main.transform.rotation, out Vector3 shift, out float shown);
         buffer.SetGlobalFloat(DirectGunShownId, 0f);
+        _gunForward.Clear();
         if (renderers == null || shown <= 0f || _directMaterial == null)
+        {
+            DrawGunForward(main, turned, place);
             return false;
+        }
         for (int t = 0; t < 4; t++)
             _gunTargets[t] = DirectTexture(_gunTextures, t, width, height, 0, DirectFormats[t], t < 2 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear, "Justachae NVG gun " + t);
         RenderTexture depthTexture = DirectTexture(_gunDepths, 0, width, height, 32, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG gun depth");
@@ -590,6 +641,7 @@ internal static partial class NightVisionEyepieces
         buffer.SetViewProjectionMatrices(turned, projection);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
         Matrix4x4 fromEye = Matrix4x4.Translate(-shift);
+        Renderer? aimedLens = TwoRenders.BareLens;
         int drawn = 0;
         foreach (Renderer r in renderers)
         {
@@ -613,13 +665,16 @@ internal static partial class NightVisionEyepieces
             if (mesh == null)
                 continue;
             r.GetSharedMaterials(_gunMaterialsNow);
-            if (!_gunSources.TryGetValue(r, out (Material[] materials, int[] passes) source) || !SameMaterials(source.materials, _gunMaterialsNow))
+            if (!_gunSources.TryGetValue(r, out (Material[] materials, int[] passes, int[] forward) source) || !SameMaterials(source.materials, _gunMaterialsNow))
             {
                 Material[] materials = _gunMaterialsNow.ToArray();
-                int[] passes = new int[materials.Length];
+                int[] passes = new int[materials.Length], forward = new int[materials.Length];
                 for (int i = 0; i < materials.Length; i++)
+                {
                     passes[i] = GBufferPass(materials[i]);
-                source = (materials, passes);
+                    forward[i] = ForwardPass(materials[i]);
+                }
+                source = (materials, passes, forward);
                 if (_gunSources.Count > 512)
                     _gunSources.Clear();
                 _gunSources[r] = source;
@@ -629,8 +684,15 @@ internal static partial class NightVisionEyepieces
             int count = Mathf.Min(source.materials.Length, mesh.subMeshCount);
             for (int s = 0; s < count; s++)
             {
+                // Parts with no G-buffer pass (glass, lights, some small fittings): drawn after the scene, by their own
+                // forward pass, from the same eye (DrawGunForward).
                 if (source.passes[s] < 0)
+                {
+                    // (Not the sight's lens while aimed: drawn with its picture over the frame, TwoRenders.DrawLensLayer.)
+                    if (source.forward[s] >= 0 && r != aimedLens)
+                        _gunForward.Add((mesh, matrix, source.materials[s], s, source.forward[s], r));
                     continue;
+                }
                 buffer.DrawMesh(mesh, matrix, source.materials[s], s, source.passes[s], _pieceBlock);
                 drawn++;
             }
@@ -654,6 +716,7 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalTexture(DirectGunDepth, depthTexture);
         buffer.SetGlobalFloat(DirectGunShownId, shown);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
+        DrawGunForward(main, turned, place);
         return drawn > 0;
     }
 }
