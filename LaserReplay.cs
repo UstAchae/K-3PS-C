@@ -37,7 +37,8 @@ internal static class LaserReplay
         // the opposite of that eye's offset, which is how the camera sees them as that eye does (the whole beam, and the
         // point where it lands, moved alike).
         Vector3 bareShift = Vector3.zero;
-        bool bare = camera.CompareTag("MainCamera") && TwoRenders.SightFromBareEye(camera.transform.rotation, out bareShift);
+        // (Both guns seen: the frame's lasers are the goggle eye's gun's, where they are; the bare eye's apart, NightVisionIr.cs.)
+        bool bare = !TwoRenders.BothGuns && camera.CompareTag("MainCamera") && TwoRenders.SightFromBareEye(camera.transform.rotation, out bareShift);
         try
         {
             foreach (MonoBehaviour laser in DeferredLasers)
@@ -100,7 +101,7 @@ internal static class LaserReplay
     }
 
     // On the gun in the hands (not the helmet's or the body's lights).
-    private static bool OnTheGun(Transform emitter)
+    internal static bool OnTheGun(Transform emitter)
     {
         Player? player = Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer;
         Transform? weapon = player?.PlayerBones?.Weapon_Root_Anim;

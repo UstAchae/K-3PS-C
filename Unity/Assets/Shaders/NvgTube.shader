@@ -427,15 +427,161 @@ Shader "Justachae/NVG/Tube" {
     float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
     return abs(gun - scene) <= max(gun * 0.002, 0.00002);
    }
-   sampler2D _Other, _LensLayer, _LensMask;
+   sampler2D _Other, _LensLayer, _LensMask, _BareLasers;
    float _GunShare, _LensShare;
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
-    if (tex2D(_LensMask, i.uv).r > 0.5)
+    // The bare eye's sight's lens while it aims: only the sight's picture there for that eye.
+    if (tex2D(_LensMask, i.uv).r > 0.5) {
      c.rgb = lerp(c.rgb, tex2D(_LensLayer, i.uv).rgb, _LensShare);
-    else if (gunAt(i.uv))
-     c.rgb = lerp(c.rgb, tex2D(_Other, i.uv).rgb, _GunShare);
+     return c;
+    }
+    // The bare eye's gun (pass 15: in alpha where it is), and its lasers as that eye sees them.
+    float4 g = tex2D(_Other, i.uv);
+    c.rgb = lerp(c.rgb, g.rgb, _GunShare * saturate(g.a));
+    c.rgb += tex2D(_BareLasers, i.uv).rgb * _GunShare;
     return c;
+   }
+   ENDCG
+  }
+  // 15: the bare eye's gun whole, out of the frame it was put into on every other pixel (NvgDirect.shader, pass 13): its own
+  // pixels as they are, the others made from those next to them; in alpha where it is.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   UNITY_DECLARE_DEPTH_TEXTURE(_DirectGD);
+   float4 _DirectGD_TexelSize;
+   float4 _DirectPlanes;
+   sampler2D _MainTex;
+   float4 _MainTex_TexelSize;
+   // As NvgDirect.shader has them: the gun's own depth into the main camera's.
+   float inverseDepth (float raw) {
+    #if !defined(UNITY_REVERSED_Z)
+    raw = 1 - raw;
+    #endif
+    return raw * (_DirectPlanes.x - _DirectPlanes.y) + _DirectPlanes.y;
+   }
+   float mainDepth (float inverse) {
+    float limit = _DirectPlanes.z, knee = limit * 0.7;
+    if (inverse > knee)
+     inverse = knee + (limit - knee) * (1 - exp((knee - inverse) / (limit - knee)));
+    float d = saturate((inverse - _DirectPlanes.w) / (_DirectPlanes.z - _DirectPlanes.w));
+    #if !defined(UNITY_REVERSED_Z)
+    d = 1 - d;
+    #endif
+    return d;
+   }
+   bool shownAt (float raw) {
+    #if defined(UNITY_REVERSED_Z)
+    return raw > 0;
+    #else
+    return raw < 1;
+    #endif
+   }
+   // The gun seen here (drawn here, and nothing the camera has before it: the device).
+   bool gunAt (float2 uv) {
+    float raw = SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(uv, 0, 0));
+    if (!shownAt(raw))
+     return false;
+    // What the camera has there is the gun put in (its depth is the gun's): not where it was left out (its sight's
+    // lens), nor where something else stood before it.
+    float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
+    return abs(gun - scene) <= max(gun * 0.002, 0.00002);
+   }
+   static const float2 around[8] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1), float2(1, 1), float2(-1, 1), float2(1, -1), float2(-1, -1) };
+   float4 frag (v2f_img i) : SV_Target {
+    if (!shownAt(SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(i.uv, 0, 0))))
+     return 0;
+    if (gunAt(i.uv))
+     return float4(tex2D(_MainTex, i.uv).rgb, 1);
+    // The four next to it first (the other kind, on a chessboard); the corners only if none of those.
+    float3 sum = 0, corners = 0;
+    float n = 0, m = 0;
+    [unroll] for (int k = 0; k < 8; k++) {
+     float2 at = i.uv + around[k] * _MainTex_TexelSize.xy;
+     if (gunAt(at)) {
+      float3 v = tex2Dlod(_MainTex, float4(at, 0, 0)).rgb;
+      if (k < 4) { sum += v; n += 1; }
+      else { corners += v; m += 1; }
+     }
+    }
+    if (n <= 0) { sum = corners; n = m; }
+    return n > 0 ? float4(sum / n, 1) : 0;
+   }
+   ENDCG
+  }
+  // 16: the frame as the goggle eye alone sees it: where the bare eye's gun was put in, made from the pixels next to it
+  // (the goggle eye's).
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   UNITY_DECLARE_DEPTH_TEXTURE(_DirectGD);
+   float4 _DirectGD_TexelSize;
+   float4 _DirectPlanes;
+   sampler2D _MainTex;
+   float4 _MainTex_TexelSize;
+   // As NvgDirect.shader has them: the gun's own depth into the main camera's.
+   float inverseDepth (float raw) {
+    #if !defined(UNITY_REVERSED_Z)
+    raw = 1 - raw;
+    #endif
+    return raw * (_DirectPlanes.x - _DirectPlanes.y) + _DirectPlanes.y;
+   }
+   float mainDepth (float inverse) {
+    float limit = _DirectPlanes.z, knee = limit * 0.7;
+    if (inverse > knee)
+     inverse = knee + (limit - knee) * (1 - exp((knee - inverse) / (limit - knee)));
+    float d = saturate((inverse - _DirectPlanes.w) / (_DirectPlanes.z - _DirectPlanes.w));
+    #if !defined(UNITY_REVERSED_Z)
+    d = 1 - d;
+    #endif
+    return d;
+   }
+   bool shownAt (float raw) {
+    #if defined(UNITY_REVERSED_Z)
+    return raw > 0;
+    #else
+    return raw < 1;
+    #endif
+   }
+   // The gun seen here (drawn here, and nothing the camera has before it: the device).
+   bool gunAt (float2 uv) {
+    float raw = SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(uv, 0, 0));
+    if (!shownAt(raw))
+     return false;
+    // What the camera has there is the gun put in (its depth is the gun's): not where it was left out (its sight's
+    // lens), nor where something else stood before it.
+    float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
+    return abs(gun - scene) <= max(gun * 0.002, 0.00002);
+   }
+   static const float2 around[8] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1), float2(1, 1), float2(-1, 1), float2(1, -1), float2(-1, -1) };
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2D(_MainTex, i.uv);
+    if (!gunAt(i.uv))
+     return c;
+    // The four next to it first (the other kind, on a chessboard); the corners only if none of those.
+    float3 sum = 0, corners = 0;
+    float n = 0, m = 0;
+    [unroll] for (int k = 0; k < 8; k++) {
+     float2 at = i.uv + around[k] * _MainTex_TexelSize.xy;
+     if (!gunAt(at)) {
+      float3 v = tex2Dlod(_MainTex, float4(at, 0, 0)).rgb;
+      if (k < 4) { sum += v; n += 1; }
+      else { corners += v; m += 1; }
+     }
+    }
+    if (n <= 0) { sum = corners; n = m; }
+    return n > 0 ? float4(sum / n, c.a) : c;
    }
    ENDCG
   }

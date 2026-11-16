@@ -571,6 +571,8 @@ internal static partial class NightVisionEyepieces
     private static readonly int DirectGunDepth = Shader.PropertyToID("_DirectGD"), DirectGunShownId = Shader.PropertyToID("_DirectGunShown");
     private static readonly RenderTexture?[] _gunTextures = new RenderTexture?[4];
     private static readonly RenderTexture?[] _gunDepths = new RenderTexture?[1];
+    // The bare eye's gun's own depth (its lasers drawn against it, NightVisionIr.cs).
+    internal static RenderTexture? GunDepth => _gunDepths[0];
     private static readonly RenderTargetIdentifier[] _gunTargets = new RenderTargetIdentifier[4];
     private static readonly Dictionary<SkinnedMeshRenderer, Mesh> _bakedGun = new Dictionary<SkinnedMeshRenderer, Mesh>();
     private static readonly Dictionary<Renderer, (Material[] materials, int[] passes, int[] forward)> _gunSources = new Dictionary<Renderer, (Material[], int[], int[])>();
@@ -641,7 +643,7 @@ internal static partial class NightVisionEyepieces
         buffer.SetViewProjectionMatrices(turned, projection);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
         Matrix4x4 fromEye = Matrix4x4.Translate(-shift);
-        Renderer? aimedLens = TwoRenders.BareLens;
+        Renderer? aimedLens = TwoRenders.SightLens;
         int drawn = 0;
         foreach (Renderer r in renderers)
         {

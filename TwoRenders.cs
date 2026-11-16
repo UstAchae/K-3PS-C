@@ -79,6 +79,14 @@ internal static class TwoRenders
     // How far the bare eye's gun is seen through (F12 单筒：裸眼瞄准时枪的透明度): 0 solid, 1 not seen; at half, as the two
     // eyes' frames laid together did.
     internal static float BareGunSeeThrough = 0.5f;   // now the bare eye's sight lens's (F12 单筒：裸眼瞄准时分划的透明度)
+    // Both eyes' guns seen (the user's, 2026-11-16): the goggle eye's is the frame's own (night vision and the objective's
+    // blur on it, as on all it sees), the bare eye's put in on every other pixel, taken apart before the eyepieces and laid
+    // over their picture after, by this (F12 单筒：裸眼看到的枪的透明度), with no night vision or blur on it.
+    internal const bool BothGuns = true;
+    internal static float BareGunTransparency = 0.5f;
+    private static float BareGunOpacity => 1f - Mathf.Clamp01(BareGunTransparency);
+    private const int BareViewPass = 15, GoggleViewPass = 16;   // NvgTube.shader
+    private static readonly int BareLasersId = Shader.PropertyToID("_BareLasers");
     private static float LensOpacity => 1f - Mathf.Clamp01(BareGunSeeThrough);
     private static float GunOpacity => LensOpacity;
     // The goggle is never seen through: nothing laid over what the camera has nearer than this (m; the gun is further).
@@ -187,11 +195,11 @@ internal static class TwoRenders
     {
         shift = Vector3.zero;
         shown = 0f;
-        if (!DrawnIntoFrame || !Now || _gunsFrame != Time.frameCount || _shareBare <= 0.001f || _gunRenderers.Count == 0)
+        if (!DrawnIntoFrame || !Now || _gunsFrame != Time.frameCount || _shareBare <= 0.001f && !BothGuns || _gunRenderers.Count == 0)
             return null;
         shift = turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
         // Solid (the user's, 2026-11-16); where its sight's lens is, left out (NightVisionDirect.cs).
-        shown = 1f;
+        shown = BothGuns ? 0.5f : 1f;
         return _gunRenderers;
     }
 
@@ -214,8 +222,37 @@ internal static class TwoRenders
         get
         {
             Camera? camera = Camera.main;
-            return camera != null && SightFromBareEye(camera.transform.rotation, out _) && BareLens != null;
+            // (Both guns seen: the frame's lasers are the goggle eye's gun's, seen; the bare eye's are laid over apart.)
+            return !BothGuns && camera != null && SightFromBareEye(camera.transform.rotation, out _) && BareLens != null;
         }
+    }
+
+    // The aimed sight's lens, whichever eye aims: never drawn with the bare eye's gun by its own material (its picture is
+    // the sight camera's, laid by the game for the goggle eye, by DrawLensLayer for the bare eye).
+    internal static Renderer? SightLens
+    {
+        get
+        {
+            try
+            {
+                return OpticAtWork() ? EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight?.LensRenderer : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    // Lasers on the gun as the bare eye sees them (NightVisionIr.cs, drawn apart and laid over with its gun): moved by the
+    // opposite of that eye's offset from the camera.
+    internal static bool BareLaserShift(Camera camera, out Vector3 shift)
+    {
+        shift = Vector3.zero;
+        if (!BothGuns || !DrawnIntoFrame || !Now || _gunsFrame != Time.frameCount || _gunRenderers.Count == 0)
+            return false;
+        shift = camera.transform.rotation * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
+        return true;
     }
 
     // The bare eye's gun's sight lens this frame (NightVisionDirect.cs leaves the gun out there).
@@ -226,7 +263,8 @@ internal static class TwoRenders
             try
             {
                 // Only while the sight's camera is at work (aimed): otherwise the lens has no picture, and is the gun's.
-                if (!OpticAtWork())
+                // (And only while the bare eye aims: otherwise the goggle eye's gun has the sight's picture.)
+                if (!OpticAtWork() || _shareBare <= 0.5f)
                     return null;
                 return _lensKept ?? EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight?.LensRenderer;
             }
@@ -315,7 +353,7 @@ internal static class TwoRenders
         _shareBare = Mathf.Clamp01(0.5f + 0.5f * toward);
         _shareGoggle = 1f - _shareBare;
         // Aimed with the goggle's eye: its gun solid, as the frame's own render draws it (the user's, 2026-11-15).
-        if (_shareBare <= 0.001f)
+        if (_shareBare <= 0.001f && !BothGuns)
             return;
         // The bare eye's gun drawn into the frame's own G-buffer from that eye (NightVisionDirect.cs, GunHere), the
         // goggle eye's kept out once the bare eye's is the more seen: no render of the camera of its own.
@@ -536,7 +574,11 @@ internal static class TwoRenders
         _gunHidden = hide;
         // Drawn into the frame, kept to its shadow as the device is (switched off whole, its shadow went too, and the
         // light about the player changed as the bare eye took the aim); otherwise not drawn at all.
-        if (DrawnIntoFrame)
+        if (BothGuns)
+        {
+            // Both guns seen: the frame's own (the goggle eye's) left as it is; only its sight's lens, below.
+        }
+        else if (DrawnIntoFrame)
         {
             if (hide)
             {
@@ -652,8 +694,21 @@ internal static class TwoRenders
         // The bare eye's gun drawn into the frame: taken out of it here (the eyepieces' picture is the goggle eye's,
         // which does not see it), and laid back over it once the eyepieces are done (TakeEye).
         _gunApartFrame = -1;
-        if (GunKeptApart && !_pass && Now && _shareBare > 0.001f && _gunsFrame == Time.frameCount && Shader.GetGlobalTexture(DirectGunDepthId) != null)
+        if (GunKeptApart && !_pass && Now && (_shareBare > 0.001f || BothGuns) && _gunsFrame == Time.frameCount && Shader.GetGlobalTexture(DirectGunDepthId) != null)
         {
+            if (BothGuns)
+            {
+                // The two eyes' pictures taken apart: the bare eye's gun whole (its pixels, and the others made from them),
+                // kept to lay over after; the frame the goggle eye's alone (where the bare eye's gun was put in, made from the
+                // pixels next to it), for the eyepieces.
+                Graphics.Blit(scene, Kept(ref _gunApart, scene, "Justachae bare eye's gun"), material, BareViewPass);
+                RenderTexture goggleView = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
+                Graphics.Blit(scene, goggleView, material, GoggleViewPass);
+                Graphics.Blit(goggleView, scene);
+                RenderTexture.ReleaseTemporary(goggleView);
+                _gunApartFrame = Time.frameCount;
+                return;
+            }
             // The sight's lens laid in this frame from the bare eye (SightAtBareEye.cs): the frame from before it, where
             // it differs the lens, the gun's too.
             // The frame as the bare eye's gun is in it, before the eyepieces: laid back over their picture where the gun
@@ -755,8 +810,9 @@ internal static class TwoRenders
             laying.SetTexture(OtherId, _gunApart);
             laying.SetTexture(LensLayerId, lens ? _lensLayer : Texture2D.blackTexture);
             laying.SetTexture(LensMaskId, lens ? _lensSolid : Texture2D.blackTexture);
-            laying.SetFloat(GunShareId, _shareBare);
+            laying.SetFloat(GunShareId, BothGuns ? BareGunOpacity : _shareBare);
             laying.SetFloat(LensShareId, LensOpacity * _shareBare);
+            laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
             Graphics.Blit(frame, into, laying, GunAndLensPass);
             RenderTexture.ReleaseTemporary(frame);
             return;

@@ -453,7 +453,8 @@ Shader "Justachae/NVG/Direct" {
   // into the main camera's where it is nearest; seen through (_DirectGunShown below 1), on every other pixel only, what lies
   // behind kept on the others and the two evened once lit (pass 15).
   Pass {
-   Cull Off ZWrite On ZTest LEqual
+   // Before whatever the frame has there (the other eye's gun, the frame's own, is not in this eye's way), but the device.
+   Cull Off ZWrite On ZTest Always
    Stencil { Ref [_DirectStencilRef] WriteMask 255 Comp Always Pass Replace }
    CGPROGRAM
    #pragma vertex vert
@@ -465,6 +466,17 @@ Shader "Justachae/NVG/Direct" {
     float raw = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
     if (!gunPicked(i.pos.xy, raw))
      discard;
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
+    if (coverage(uv, rawL, rawR, toRight) > 0) {
+     float device = pickedDepth(rawL, rawR, toRight), gun = mainDepth(inverseDepth(raw));
+     #if defined(UNITY_REVERSED_Z)
+     if (device > gun)
+      discard;
+     #else
+     if (device < gun)
+      discard;
+     #endif
+    }
     output o;
     o.g0 = tex2D(_DirectG0, uv);
     o.g1 = tex2D(_DirectG1, uv);

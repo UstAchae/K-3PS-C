@@ -69,7 +69,10 @@ internal static partial class NightVisionEyepieces
     // Lifted only to be cut at the bare eye's sight lens (no upscaler): added back in the camera's own frame.
     private static bool LiftedInFrame => !Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera);
     private const int LaserAddPass = 2, LaserAddCutPass = 5;   // NvgIrLight.shader
-    private static RenderTexture? _irCut;
+    private static RenderTexture? _irCut, _bareLasers;
+    private static int _bareLasersFrame = -1;
+    // The visible lasers on the gun as the bare eye sees them, this frame (TwoRenders.TakeEye lays them over with its gun).
+    internal static Texture? BareLasers => _bareLasersFrame == Time.frameCount ? _bareLasers : null;
 
     private static readonly System.Reflection.FieldInfo? ResolveDisabledField = AccessTools.Field(typeof(UnityEngine.Rendering.PostProcessing.PostProcessLayer), "_isTAAResolveDisabled");
 
@@ -335,7 +338,9 @@ internal static partial class NightVisionEyepieces
             return;
         CollectIrLasers();
         bool lights = ir && _irLightsFrame == Time.frameCount && _irLights.Count > 0;
-        bool lasers = lifted && _irMeshes.Count > 0 || ir && _irOnlyMeshes.Count > 0;
+        bool bare = TwoRenders.BareLaserShift(camera, out Vector3 bareShift) && GunDepth != null && _irLaserRecords.Count > 0
+            && _irMeshesFrame == Time.frameCount;
+        bool lasers = lifted && _irMeshes.Count > 0 || ir && _irOnlyMeshes.Count > 0 || bare;
         // The night-vision ambient's difference (NightVisionAmbient.cs), once the layer's materials are made.
         bool ambient = ir && IrResources() && NightAmbientWanted();
         if (!lights && !lasers && !ambient || !IrResources())
@@ -362,6 +367,9 @@ internal static partial class NightVisionEyepieces
                 Object.Destroy(_irNaked);
             if (_irCut != null)
                 Object.Destroy(_irCut);
+            if (_bareLasers != null)
+                Object.Destroy(_bareLasers);
+            _bareLasers = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG bare eye's lasers", hideFlags = HideFlags.DontSave };
             _irCut = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG IR lasers to cut", hideFlags = HideFlags.DontSave };
             _irLayer = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG IR layer", hideFlags = HideFlags.DontSave };
             _irNaked = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG lasers to the naked eye", hideFlags = HideFlags.DontSave };
@@ -456,6 +464,26 @@ internal static partial class NightVisionEyepieces
                     _irLasers.Blit(_irCut, _irLayer, _irAdd!, LaserAddCutPass);
             }
             _irLasers.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
+            // The visible lasers on the gun as the bare eye sees them: moved by the opposite of its offset, against its gun's
+            // own depth (the beam ends where it hits, so nothing else stands before it), apart.
+            if (bare && _bareLasers != null && GunDepth is RenderTexture gunDepth
+                && gunDepth.width == _bareLasers.width && gunDepth.height == _bareLasers.height)
+            {
+                _irLasers.SetRenderTarget(_bareLasers, gunDepth);
+                _irLasers.ClearRenderTarget(false, true, Color.clear);
+                Matrix4x4 toBare = Matrix4x4.Translate(-bareShift);
+                foreach (KeyValuePair<LaserBeam, IrLaser> laser in _irLaserRecords)
+                {
+                    if (!laser.Value.Seen || laser.Key == null || !LaserReplay.OnTheGun(laser.Key.transform))
+                        continue;
+                    foreach (IrMesh? mesh in new[] { laser.Value.Beam, laser.Value.Point })
+                    {
+                        if (mesh is IrMesh m && m.Mesh != null && m.Material != null)
+                            _irLasers.DrawMesh(m.Mesh, toBare * m.Matrix, m.Material, 0, 0, m.Block);
+                    }
+                }
+                _bareLasersFrame = Time.frameCount;
+            }
             camera.AddCommandBuffer(CameraEvent.AfterForwardAlpha, _irLasers);
         }
         _irCamera = camera;
