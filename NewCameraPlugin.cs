@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.58";
+    public const string PluginVersion = "1.8.59";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -231,6 +231,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 
         eyeShift.SettingChanged += (_, _) => Refresh();
         bareGunSeeThrough.SettingChanged += (_, _) => Refresh();
+        bareGunTransparency.SettingChanged += (_, _) => Refresh();
         deviceSeeThrough.SettingChanged += (_, _) => Refresh();
         picture.SettingChanged += (_, _) => Refresh();
         raiseMount.SettingChanged += (_, _) => Refresh();

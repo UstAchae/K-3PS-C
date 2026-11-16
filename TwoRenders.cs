@@ -89,6 +89,8 @@ internal static class TwoRenders
     private static float BareGunOpacity => 1f - Mathf.Clamp01(BareGunTransparency) * (1f - _shareBare);
     private static float GoggleGunOpacity => 1f - Mathf.Clamp01(BareGunTransparency) * _shareBare;
     private static readonly int GoggleShareId = Shader.PropertyToID("_GoggleShare");
+    // Which eye's gun is put in whole (NvgDirect.shader, gunOf): the aiming eye's.
+    internal static bool BareAims => _shareBare > 0.5f;
 
     // The two eyes' guns taken apart at the camera's own pixels, after all is drawn and before the image effects (the
     // upscale among them mixes the chessboard's pixels, and the diagnostics of 1.8.55 showed the frame at 2560x1440 with the

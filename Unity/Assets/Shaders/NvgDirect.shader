@@ -140,6 +140,28 @@ Shader "Justachae/NVG/Direct" {
   return _DirectGunShown >= 0.999 || checker(pixel);
  }
 
+ // Both guns seen: which eye's gun this pixel is given (1 the bare eye's, 2 the goggle eye's, 0 neither) and its depth. The
+ // aiming eye's gun wherever it is, whole (sharp; it is solid); the other's on its half of the chessboard where the aiming
+ // eye's is not (it is seen through: taken apart with what lies behind it, TwoRenders.cs). One gun alone: as gunPicked.
+ float _DirectBareAims;
+ int gunOf (float2 pixel, float2 uv, out float raw) {
+  float rawB = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
+  bool bare = shown(rawB) && _DirectGunShown > 0 && tex2Dlod(_DirectGunLens, float4(pixel * _DirectGunTexel.xy, 0, 0)).r <= 0.5;
+  raw = rawB;
+  if (_DirectGoggleShown <= 0)
+   return bare && (_DirectGunShown >= 0.999 || checker(pixel)) ? 1 : 0;
+  float rawG = SAMPLE_DEPTH_TEXTURE(_DirectHD, uv);
+  bool goggle = shown(rawG), even = checker(pixel);
+  if (_DirectBareAims > 0.5) {
+   if (bare) return 1;
+   if (goggle && !even) { raw = rawG; return 2; }
+  } else {
+   if (goggle) { raw = rawG; return 2; }
+   if (bare && even) return 1;
+  }
+  return 0;
+ }
+
  bool pick (float2 pixel, float2 uv, float rawL, float rawR, out float toRight) {
   float c = coverage(uv, rawL, rawR, toRight);
   if (c <= 0)
@@ -468,9 +490,10 @@ Shader "Justachae/NVG/Direct" {
    output frag (v2f i) {
     float2 uv = i.screen.xy / i.screen.w;
     // On the chessboard's one kind the bare eye's gun, on the other the goggle eye's (both guns seen).
-    bool goggle = _DirectGoggleShown > 0 && !checker(i.pos.xy);
-    float raw = goggle ? SAMPLE_DEPTH_TEXTURE(_DirectHD, uv) : SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
-    if (goggle ? !shown(raw) : !gunPicked(i.pos.xy, raw))
+    float raw;
+    int which = gunOf(i.pos.xy, uv, raw);
+    bool goggle = which == 2;
+    if (which == 0)
      discard;
     float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
     if (coverage(uv, rawL, rawR, toRight) > 0) {
@@ -503,9 +526,10 @@ Shader "Justachae/NVG/Direct" {
    struct surface { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; float depth : SV_Depth; };
    surface frag (v2f i) {
     float2 uv = i.screen.xy / i.screen.w;
-    bool goggle = _DirectGoggleShown > 0 && !checker(i.pos.xy);
-    float raw = goggle ? SAMPLE_DEPTH_TEXTURE(_DirectHD, uv) : SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
-    if (goggle ? !shown(raw) : !gunPicked(i.pos.xy, raw))
+    float raw;
+    int which = gunOf(i.pos.xy, uv, raw);
+    bool goggle = which == 2;
+    if (which == 0)
      discard;
     surface o;
     o.depth = mainDepth(inverseDepth(raw));
@@ -579,9 +603,10 @@ Shader "Justachae/NVG/Direct" {
    #pragma target 3.5
    float4 frag (v2f i) : SV_Target {
     float2 uv = i.screen.xy / i.screen.w;
-    bool goggle = _DirectGoggleShown > 0 && !checker(i.pos.xy);
-    float raw = goggle ? SAMPLE_DEPTH_TEXTURE(_DirectHD, uv) : SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
-    if (goggle ? !shown(raw) : !gunPicked(i.pos.xy, raw))
+    float raw;
+    int which = gunOf(i.pos.xy, uv, raw);
+    bool goggle = which == 2;
+    if (which == 0)
      return 0;
     float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
     if (coverage(uv, rawL, rawR, toRight) > 0) {

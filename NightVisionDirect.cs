@@ -577,7 +577,7 @@ internal static partial class NightVisionEyepieces
     private const int GunInsertPass = 13, GunSurfacePass = 14, GunEvenPass = 15, GunLensPass = 16, GunWhichPass = 17;
     private static readonly RenderTexture?[] _gunWhich = new RenderTexture?[1];
     internal static RenderTexture? GunWhichTexture => _gunWhich[0];   // (diagnostics, TwoRenders.Diagnose)
-    private static readonly int GunWhichId = Shader.PropertyToID("_GunWhich");
+    private static readonly int GunWhichId = Shader.PropertyToID("_GunWhich"), DirectBareAimsId = Shader.PropertyToID("_DirectBareAims");
     private static readonly RenderTexture?[] _gunLensMask = new RenderTexture?[1];
     private static readonly int DirectGunLensId = Shader.PropertyToID("_DirectGunLens"), DirectGunTexelId = Shader.PropertyToID("_DirectGunTexel");
     private static readonly int[] DirectGun = { Shader.PropertyToID("_DirectG0"), Shader.PropertyToID("_DirectG1"), Shader.PropertyToID("_DirectG2"), Shader.PropertyToID("_DirectG3") };
@@ -755,6 +755,7 @@ internal static partial class NightVisionEyepieces
         if (goggleDepth != null)
             buffer.SetGlobalTexture(DirectGoggleGunDepth, goggleDepth);
         buffer.SetGlobalFloat(DirectGoggleShownId, goggleDepth != null ? 1f : 0f);
+        buffer.SetGlobalFloat(DirectBareAimsId, TwoRenders.BareAims ? 1f : 0f);
         // Its sight's lens: the gun left out there, so the frame keeps what lies behind it (the goggle's picture is made
         // from it, and the lens laid over that at its see-through: TwoRenders.DrawLensLayer).
         RenderTexture lensMask = DirectTexture(_gunLensMask, 0, width, height, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear, "Justachae NVG gun's sight lens");
