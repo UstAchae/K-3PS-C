@@ -205,6 +205,9 @@ internal static class TwoRenders
         return true;
     }
 
+    // Under the gun in the hands, as gathered (its own model's hierarchy).
+    internal static bool IsOnGun(Transform t) => _gunRoot != null && t.IsChildOf(_gunRoot);
+
     internal static void SeeLens(float across)
     {
         if (_pass || !Now || Mathf.Abs(across) < 0.01f)

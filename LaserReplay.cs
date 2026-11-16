@@ -33,6 +33,11 @@ internal static class LaserReplay
 
         _drawCamera = camera;
         _replayingLaser = true;
+        // A monocular's bare eye aiming (TwoRenders.cs): its gun is drawn from that eye, so the lasers on it are moved by
+        // the opposite of that eye's offset, which is how the camera sees them as that eye does (the whole beam, and the
+        // point where it lands, moved alike).
+        Vector3 bareShift = Vector3.zero;
+        bool bare = camera.CompareTag("MainCamera") && TwoRenders.SightFromBareEye(camera.transform.rotation, out bareShift);
         try
         {
             foreach (MonoBehaviour laser in DeferredLasers)
@@ -46,8 +51,10 @@ internal static class LaserReplay
                 Quaternion savedRotation = emitter.rotation;
                 if (AimArms.GunCarried && !alreadyMoved)
                     AimArms.CarryWithGun(emitter);
+                if (bare && OnTheGun(emitter))
+                    emitter.position -= bareShift;
                 _laserLateUpdate.Invoke(laser, null);
-                if (AimArms.GunCarried && !alreadyMoved)
+                if (AimArms.GunCarried && !alreadyMoved || bare)
                     emitter.SetPositionAndRotation(saved, savedRotation);
             }
         }
@@ -90,6 +97,14 @@ internal static class LaserReplay
         }
 
         return list;
+    }
+
+    // On the gun in the hands (not the helmet's or the body's lights).
+    private static bool OnTheGun(Transform emitter)
+    {
+        Player? player = Comfort.Common.Singleton<GameWorld>.Instance?.MainPlayer;
+        Transform? weapon = player?.PlayerBones?.Weapon_Root_Anim;
+        return weapon != null && emitter.IsChildOf(weapon) || TwoRenders.IsOnGun(emitter);
     }
 
     private static bool EmitterAlreadyMoved(Transform emitter)
