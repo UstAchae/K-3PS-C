@@ -570,6 +570,14 @@ internal static partial class NightVisionEyepieces
     private static readonly int[] DirectGun = { Shader.PropertyToID("_DirectG0"), Shader.PropertyToID("_DirectG1"), Shader.PropertyToID("_DirectG2"), Shader.PropertyToID("_DirectG3") };
     private static readonly int DirectGunDepth = Shader.PropertyToID("_DirectGD"), DirectGunShownId = Shader.PropertyToID("_DirectGunShown");
     private static readonly RenderTexture?[] _gunTextures = new RenderTexture?[4];
+    // Both guns seen (TwoRenders.BothGuns): the goggle eye's drawn too, the frame's own kept to its shadow.
+    private static readonly RenderTexture?[] _goggleGunTextures = new RenderTexture?[4], _goggleGunDepths = new RenderTexture?[1];
+    private static readonly RenderTargetIdentifier[] _goggleGunTargets = new RenderTargetIdentifier[4];
+    private static readonly int[] DirectGoggleGun = { Shader.PropertyToID("_DirectH0"), Shader.PropertyToID("_DirectH1"), Shader.PropertyToID("_DirectH2"), Shader.PropertyToID("_DirectH3") };
+    private static readonly int DirectGoggleGunDepth = Shader.PropertyToID("_DirectHD"), DirectGoggleShownId = Shader.PropertyToID("_DirectGoggleShown");
+    private static readonly List<(Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer)> _gunDraws = new List<(Mesh, Matrix4x4, Material, int, int, Renderer)>();
+    private static Matrix4x4 _forwardFromBare = Matrix4x4.identity;
+    private static bool _forwardGoggleToo;
     private static readonly RenderTexture?[] _gunDepths = new RenderTexture?[1];
     // The bare eye's gun's own depth (its lasers drawn against it, NightVisionIr.cs).
     internal static RenderTexture? GunDepth => _gunDepths[0];
@@ -613,12 +621,16 @@ internal static partial class NightVisionEyepieces
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         buffer.SetViewProjectionMatrices(turned, main.projectionMatrix);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
-        foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunForward)
+        for (int eye = 0; eye < (_forwardGoggleToo ? 2 : 1); eye++)
         {
-            if (mesh == null || material == null || renderer == null)
-                continue;
-            renderer.GetPropertyBlock(_pieceBlock);
-            buffer.DrawMesh(mesh, matrix, material, sub, pass, _pieceBlock);
+            Matrix4x4 eyeMove = eye == 0 ? _forwardFromBare : Matrix4x4.identity;
+            foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunForward)
+            {
+                if (mesh == null || material == null || renderer == null)
+                    continue;
+                renderer.GetPropertyBlock(_pieceBlock);
+                buffer.DrawMesh(mesh, eyeMove * matrix, material, sub, pass, _pieceBlock);
+            }
         }
         buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
@@ -629,22 +641,17 @@ internal static partial class NightVisionEyepieces
     {
         List<Renderer>? renderers = TwoRenders.GunHere(main.transform.rotation, out Vector3 shift, out float shown);
         buffer.SetGlobalFloat(DirectGunShownId, 0f);
+        buffer.SetGlobalFloat(DirectGoggleShownId, 0f);
         _gunForward.Clear();
         if (renderers == null || shown <= 0f || _directMaterial == null)
         {
             DrawGunForward(main, turned, place);
             return false;
         }
-        for (int t = 0; t < 4; t++)
-            _gunTargets[t] = DirectTexture(_gunTextures, t, width, height, 0, DirectFormats[t], t < 2 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear, "Justachae NVG gun " + t);
-        RenderTexture depthTexture = DirectTexture(_gunDepths, 0, width, height, 32, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG gun depth");
-        buffer.SetRenderTarget(_gunTargets, depthTexture);
-        buffer.ClearRenderTarget(true, true, Color.clear);
-        buffer.SetViewProjectionMatrices(turned, projection);
-        buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
-        Matrix4x4 fromEye = Matrix4x4.Translate(-shift);
+        // Gathered once (skinned parts baked once), drawn from each eye: the bare eye's (moved by the opposite of its
+        // offset) and, both guns seen, the goggle eye's (the camera's own place), each into G-buffers of its own.
+        _gunDraws.Clear();
         Renderer? aimedLens = TwoRenders.SightLens;
-        int drawn = 0;
         foreach (Renderer r in renderers)
         {
             // Only what the camera itself would draw: switched off is not drawn (the first-person arms, with the watch, are
@@ -683,24 +690,55 @@ internal static partial class NightVisionEyepieces
                     _gunSources.Clear();
                 _gunSources[r] = source;
             }
-            r.GetPropertyBlock(_pieceBlock);
-            Matrix4x4 matrix = fromEye * FromCamera(r.transform, place);
+            Matrix4x4 matrix = FromCamera(r.transform, place);
             int count = Mathf.Min(source.materials.Length, mesh.subMeshCount);
             for (int s = 0; s < count; s++)
             {
                 // Parts with no G-buffer pass (glass, lights, some small fittings): drawn after the scene, by their own
-                // forward pass, from the same eye (DrawGunForward).
+                // forward pass, from each eye (DrawGunForward).
                 if (source.passes[s] < 0)
                 {
-                    // (Not the sight's lens while aimed: drawn with its picture over the frame, TwoRenders.DrawLensLayer.)
+                    // (Not the aimed sight's lens: its picture is laid by the game, or by TwoRenders.DrawLensLayer.)
                     if (source.forward[s] >= 0 && r != aimedLens)
                         _gunForward.Add((mesh, matrix, source.materials[s], s, source.forward[s], r));
                     continue;
                 }
-                buffer.DrawMesh(mesh, matrix, source.materials[s], s, source.passes[s], _pieceBlock);
+                _gunDraws.Add((mesh, matrix, source.materials[s], s, source.passes[s], r));
+            }
+        }
+        bool goggleToo = TwoRenders.BothGuns;
+        Matrix4x4 fromEye = Matrix4x4.Translate(-shift);
+        _forwardFromBare = fromEye;
+        _forwardGoggleToo = goggleToo;
+        RenderTexture depthTexture = DirectTexture(_gunDepths, 0, width, height, 32, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG gun depth");
+        RenderTexture? goggleDepth = null;
+        int drawn = 0;
+        for (int eye = 0; eye < (goggleToo ? 2 : 1); eye++)
+        {
+            RenderTexture?[] textures = eye == 0 ? _gunTextures : _goggleGunTextures;
+            RenderTargetIdentifier[] targets = eye == 0 ? _gunTargets : _goggleGunTargets;
+            for (int t = 0; t < 4; t++)
+                targets[t] = DirectTexture(textures, t, width, height, 0, DirectFormats[t], t < 2 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear, (eye == 0 ? "Justachae NVG gun " : "Justachae NVG goggle eye's gun ") + t);
+            RenderTexture depth = eye == 0 ? depthTexture : (goggleDepth = DirectTexture(_goggleGunDepths, 0, width, height, 32, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG goggle eye's gun depth"));
+            buffer.SetRenderTarget(targets, depth);
+            buffer.ClearRenderTarget(true, true, Color.clear);
+            buffer.SetViewProjectionMatrices(turned, projection);
+            buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
+            Matrix4x4 eyeMove = eye == 0 ? fromEye : Matrix4x4.identity;
+            foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunDraws)
+            {
+                if (renderer == null)
+                    continue;
+                renderer.GetPropertyBlock(_pieceBlock);
+                buffer.DrawMesh(mesh, eyeMove * matrix, material, sub, pass, _pieceBlock);
                 drawn++;
             }
         }
+        for (int t = 0; t < 4; t++)
+            buffer.SetGlobalTexture(DirectGoggleGun[t], goggleToo ? _goggleGunTextures[t]! : Texture2D.blackTexture);
+        if (goggleDepth != null)
+            buffer.SetGlobalTexture(DirectGoggleGunDepth, goggleDepth);
+        buffer.SetGlobalFloat(DirectGoggleShownId, goggleDepth != null ? 1f : 0f);
         // Its sight's lens: the gun left out there, so the frame keeps what lies behind it (the goggle's picture is made
         // from it, and the lens laid over that at its see-through: TwoRenders.DrawLensLayer).
         RenderTexture lensMask = DirectTexture(_gunLensMask, 0, width, height, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear, "Justachae NVG gun's sight lens");

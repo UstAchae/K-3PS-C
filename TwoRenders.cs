@@ -83,8 +83,12 @@ internal static class TwoRenders
     // blur on it, as on all it sees), the bare eye's put in on every other pixel, taken apart before the eyepieces and laid
     // over their picture after, by this (F12 单筒：裸眼看到的枪的透明度), with no night vision or blur on it.
     internal const bool BothGuns = true;
+    // The aiming eye's gun solid, the other's seen through by this (F12 单筒：非瞄准眼看到的枪的透明度; the user's,
+    // 2026-11-16), eased over as the aim goes to the other eye.
     internal static float BareGunTransparency = 0.5f;
-    private static float BareGunOpacity => 1f - Mathf.Clamp01(BareGunTransparency);
+    private static float BareGunOpacity => 1f - Mathf.Clamp01(BareGunTransparency) * (1f - _shareBare);
+    private static float GoggleGunOpacity => 1f - Mathf.Clamp01(BareGunTransparency) * _shareBare;
+    private static readonly int GoggleShareId = Shader.PropertyToID("_GoggleShare");
     private const int BareViewPass = 15, GoggleViewPass = 16;   // NvgTube.shader
     private static readonly int BareLasersId = Shader.PropertyToID("_BareLasers");
     private static float LensOpacity => 1f - Mathf.Clamp01(BareGunSeeThrough);
@@ -359,7 +363,7 @@ internal static class TwoRenders
         // goggle eye's kept out once the bare eye's is the more seen: no render of the camera of its own.
         if (DrawnIntoFrame)
         {
-            if (_shareBare > 0.5f)
+            if (BothGuns || _shareBare > 0.5f)
                 HideGun(true);
             return;
         }
@@ -574,11 +578,8 @@ internal static class TwoRenders
         _gunHidden = hide;
         // Drawn into the frame, kept to its shadow as the device is (switched off whole, its shadow went too, and the
         // light about the player changed as the bare eye took the aim); otherwise not drawn at all.
-        if (BothGuns)
-        {
-            // Both guns seen: the frame's own (the goggle eye's) left as it is; only its sight's lens, below.
-        }
-        else if (DrawnIntoFrame)
+        // (Both guns seen: both drawn into the frame, NightVisionDirect.cs; the frame's own kept to its shadow too.)
+        if (DrawnIntoFrame)
         {
             if (hide)
             {
@@ -613,7 +614,8 @@ internal static class TwoRenders
         // it hung there by itself, a dark disc going with the camera.
         SSAAPropagator? propagator = Camera.main != null ? Camera.main.GetComponent<SSAAPropagator>() : null;
         // (Drawn into the frame, the bare eye's gun keeps its lens: laid in from that eye, SightAtBareEye.cs.)
-        if (hide && propagator != null)
+        // (Both guns seen: only while the bare eye aims; otherwise the game lays it for the goggle eye's gun.)
+        if (hide && propagator != null && (!BothGuns || _shareBare > 0.5f))
         {
             _lensKept = LensRenderer(propagator);
             _collimatorKept = CollimatorRenderer(propagator);
@@ -703,6 +705,7 @@ internal static class TwoRenders
                 // pixels next to it), for the eyepieces.
                 Graphics.Blit(scene, Kept(ref _gunApart, scene, "Justachae bare eye's gun"), material, BareViewPass);
                 RenderTexture goggleView = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
+                material.SetFloat(GoggleShareId, GoggleGunOpacity);
                 Graphics.Blit(scene, goggleView, material, GoggleViewPass);
                 Graphics.Blit(goggleView, scene);
                 RenderTexture.ReleaseTemporary(goggleView);

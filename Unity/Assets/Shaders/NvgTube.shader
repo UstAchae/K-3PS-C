@@ -565,23 +565,40 @@ Shader "Justachae/NVG/Tube" {
     return abs(gun - scene) <= max(gun * 0.002, 0.00002);
    }
    static const float2 around[8] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1), float2(1, 1), float2(-1, 1), float2(1, -1), float2(-1, -1) };
+   UNITY_DECLARE_DEPTH_TEXTURE(_DirectHD);
+   float _GoggleShare;
+   // The goggle eye's gun put in here (NvgDirect.shader, pass 13: its depth is what the camera has).
+   bool goggleAt (float2 uv) {
+    float raw = SAMPLE_DEPTH_TEXTURE_LOD(_DirectHD, float4(uv, 0, 0));
+    if (!shownAt(raw))
+     return false;
+    float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
+    return abs(gun - scene) <= max(gun * 0.002, 0.00002);
+   }
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
-    if (!gunAt(i.uv))
-     return c;
-    // The four next to it first (the other kind, on a chessboard); the corners only if none of those.
-    float3 sum = 0, corners = 0;
-    float n = 0, m = 0;
+    bool bareHere = gunAt(i.uv), goggleHere = goggleAt(i.uv);
+    bool goggleCovers = shownAt(SAMPLE_DEPTH_TEXTURE_LOD(_DirectHD, float4(i.uv, 0, 0)));
+    // From the pixels next to it (the four first, the corners only if none of those): what lies behind the guns (those
+    // with neither put in), and the goggle eye's gun (those with it).
+    float3 behind4 = 0, behindC = 0, gun4 = 0, gunC = 0;
+    float nb = 0, mb = 0, ng = 0, mg = 0;
     [unroll] for (int k = 0; k < 8; k++) {
      float2 at = i.uv + around[k] * _MainTex_TexelSize.xy;
-     if (!gunAt(at)) {
-      float3 v = tex2Dlod(_MainTex, float4(at, 0, 0)).rgb;
-      if (k < 4) { sum += v; n += 1; }
-      else { corners += v; m += 1; }
-     }
+     float3 v = tex2Dlod(_MainTex, float4(at, 0, 0)).rgb;
+     bool b = gunAt(at), g = goggleAt(at);
+     if (!b && !g) { if (k < 4) { behind4 += v; nb += 1; } else { behindC += v; mb += 1; } }
+     if (g) { if (k < 4) { gun4 += v; ng += 1; } else { gunC += v; mg += 1; } }
     }
-    if (n <= 0) { sum = corners; n = m; }
-    return n > 0 ? float4(sum / n, c.a) : c;
+    float3 own = goggleHere ? c.rgb : (ng > 0 ? gun4 / ng : (mg > 0 ? gunC / mg : c.rgb));
+    // Behind: this pixel's own where neither gun is put in; else from around; where nothing around has neither, the
+    // goggle eye's gun (both guns over it: nothing behind to be seen, the bare eye's laid over after).
+    float3 behind = c.rgb;
+    if (bareHere || goggleHere)
+     behind = nb > 0 ? behind4 / nb : (mb > 0 ? behindC / mb : own);
+    if (!goggleCovers || !goggleHere && ng <= 0 && mg <= 0)
+     return float4(behind, c.a);
+    return float4(lerp(behind, own, _GoggleShare), c.a);
    }
    ENDCG
   }

@@ -126,6 +126,10 @@ Shader "Justachae/NVG/Direct" {
  sampler2D _DirectG0, _DirectG1, _DirectG2, _DirectG3;
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectGD);
  float _DirectGunShown;
+ // Both guns seen (TwoRenders.BothGuns): the goggle eye's too, on the other pixels.
+ sampler2D _DirectH0, _DirectH1, _DirectH2, _DirectH3;
+ UNITY_DECLARE_DEPTH_TEXTURE(_DirectHD);
+ float _DirectGoggleShown;
  sampler2D _DirectGunLens;   // where the gun's sight's lens is, from the bare eye (pass 16): the gun left out there
  float4 _DirectGunTexel;
  bool gunPicked (float2 pixel, float raw) {
@@ -463,8 +467,10 @@ Shader "Justachae/NVG/Direct" {
    struct output { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; float4 g3 : SV_Target3; float depth : SV_Depth; };
    output frag (v2f i) {
     float2 uv = i.screen.xy / i.screen.w;
-    float raw = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
-    if (!gunPicked(i.pos.xy, raw))
+    // On the chessboard's one kind the bare eye's gun, on the other the goggle eye's (both guns seen).
+    bool goggle = _DirectGoggleShown > 0 && !checker(i.pos.xy);
+    float raw = goggle ? SAMPLE_DEPTH_TEXTURE(_DirectHD, uv) : SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
+    if (goggle ? !shown(raw) : !gunPicked(i.pos.xy, raw))
      discard;
     float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
     if (coverage(uv, rawL, rawR, toRight) > 0) {
@@ -478,10 +484,10 @@ Shader "Justachae/NVG/Direct" {
      #endif
     }
     output o;
-    o.g0 = tex2D(_DirectG0, uv);
-    o.g1 = tex2D(_DirectG1, uv);
-    o.g2 = tex2D(_DirectG2, uv);
-    o.g3 = tex2D(_DirectG3, uv);
+    o.g0 = goggle ? tex2D(_DirectH0, uv) : tex2D(_DirectG0, uv);
+    o.g1 = goggle ? tex2D(_DirectH1, uv) : tex2D(_DirectG1, uv);
+    o.g2 = goggle ? tex2D(_DirectH2, uv) : tex2D(_DirectG2, uv);
+    o.g3 = goggle ? tex2D(_DirectH3, uv) : tex2D(_DirectG3, uv);
     o.depth = mainDepth(inverseDepth(raw));
     return o;
    }
@@ -497,14 +503,15 @@ Shader "Justachae/NVG/Direct" {
    struct surface { float4 g0 : SV_Target0; float4 g1 : SV_Target1; float4 g2 : SV_Target2; float depth : SV_Depth; };
    surface frag (v2f i) {
     float2 uv = i.screen.xy / i.screen.w;
-    float raw = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
-    if (!gunPicked(i.pos.xy, raw))
+    bool goggle = _DirectGoggleShown > 0 && !checker(i.pos.xy);
+    float raw = goggle ? SAMPLE_DEPTH_TEXTURE(_DirectHD, uv) : SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
+    if (goggle ? !shown(raw) : !gunPicked(i.pos.xy, raw))
      discard;
     surface o;
     o.depth = mainDepth(inverseDepth(raw));
-    o.g0 = tex2D(_DirectG0, uv);
-    o.g1 = tex2D(_DirectG1, uv);
-    o.g2 = tex2D(_DirectG2, uv);
+    o.g0 = goggle ? tex2D(_DirectH0, uv) : tex2D(_DirectG0, uv);
+    o.g1 = goggle ? tex2D(_DirectH1, uv) : tex2D(_DirectG1, uv);
+    o.g2 = goggle ? tex2D(_DirectH2, uv) : tex2D(_DirectG2, uv);
     return o;
    }
    ENDCG
