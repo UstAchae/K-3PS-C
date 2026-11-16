@@ -874,9 +874,9 @@ internal static class TwoRenders
                 if (_apartFrame != Time.frameCount || _bareView == null)
                     return;
                 // The eyepieces' steps by the goggle eye's depth (the objective's blur above all), until TakeEye.
-                if (_goggleDepthNow != null && Shader.GetGlobalTexture(CameraDepthId) is Texture own && own != _goggleDepthNow)
+                if (_goggleDepthNow != null && Shader.GetGlobalTexture(CameraDepthId) is Texture frameDepth && frameDepth != _goggleDepthNow)
                 {
-                    _ownDepth = own;
+                    _ownDepth = frameDepth;
                     Shader.SetGlobalTexture(CameraDepthId, _goggleDepthNow);
                 }
                 _gunApartFrame = Time.frameCount;
