@@ -602,6 +602,16 @@ internal static partial class NightVisionEyepieces
     // At each frame's end (TwoRenders.EndOfFrame): filled again by the next DrawGun, or left empty when the gun is no longer
     // drawn (the goggle up): otherwise it kept drawing the last frame's parts, where they were.
     internal static void EmptyGunForward() => _gunForwardBuffer?.Clear();
+    private static readonly int ForwardCopyId = Shader.PropertyToID("_JustachaeForwardCopy"), PartsShareId = Shader.PropertyToID("_PartsShare");
+
+    // After the two eyes' guns are taken apart (TwoRenders.FillApart, the same camera event): put on again, behind it.
+    internal static void GunForwardAfter(Camera main)
+    {
+        if (_gunForwardBuffer == null || _gunForwardCamera != main)
+            return;
+        main.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, _gunForwardBuffer);
+        main.AddCommandBuffer(CameraEvent.AfterForwardAlpha, _gunForwardBuffer);
+    }
     private static Camera? _gunForwardCamera;
 
     // A material's forward pass, for a part with none for the G-buffer.
@@ -634,11 +644,31 @@ internal static partial class NightVisionEyepieces
         }
         if (_gunForward.Count == 0)
             return;
-        buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         buffer.SetViewProjectionMatrices(turned, main.projectionMatrix);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
+        // Both guns seen: each eye's parts with its gun. The bare eye's into its gun's own picture (TwoRenders, laid over
+        // after the eyepieces) against its gun's own depth; the goggle eye's into the frame, by its gun's share (drawn on a
+        // copy of the frame, the copy laid back by that share): seen through as its gun is, not at all when it is not seen.
+        RenderTexture? bareView = TwoRenders.BareViewNow, bareDepth = _gunDepths[0];
+        Material? laying = TwoRenders.TubeMaterial;
+        bool apart = _forwardGoggleToo && bareView != null && bareDepth != null && bareView.width == bareDepth.width && bareView.height == bareDepth.height && laying != null;
         for (int eye = 0; eye < (_forwardGoggleToo ? 2 : 1); eye++)
         {
+            float share = !apart ? 1f : eye == 0 ? 1f : TwoRenders.GoggleOpacityNow;
+            if (share <= 0.001f)
+                continue;
+            bool copy = apart && eye == 1 && share < 0.999f;
+            if (apart && eye == 0)
+                buffer.SetRenderTarget(bareView!, bareDepth!);
+            else if (copy)
+            {
+                buffer.GetTemporaryRT(ForwardCopyId, -1, -1, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
+                buffer.Blit(BuiltinRenderTextureType.CameraTarget, ForwardCopyId);
+                buffer.SetRenderTarget(ForwardCopyId, BuiltinRenderTextureType.CameraTarget);
+                buffer.SetViewProjectionMatrices(turned, main.projectionMatrix);
+            }
+            else
+                buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
             Matrix4x4 eyeMove = eye == 0 ? _forwardFromBare : Matrix4x4.identity;
             foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunForward)
             {
@@ -646,6 +676,13 @@ internal static partial class NightVisionEyepieces
                     continue;
                 renderer.GetPropertyBlock(_pieceBlock);
                 buffer.DrawMesh(mesh, eyeMove * matrix, material, sub, pass, _pieceBlock);
+            }
+            if (copy)
+            {
+                buffer.SetGlobalFloat(PartsShareId, share);
+                buffer.Blit(ForwardCopyId, BuiltinRenderTextureType.CameraTarget, laying!, TwoRenders.PartsLayPass);
+                buffer.ReleaseTemporaryRT(ForwardCopyId);
+                buffer.SetViewProjectionMatrices(turned, main.projectionMatrix);
             }
         }
         buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);

@@ -99,6 +99,12 @@ internal static class TwoRenders
     private static UnityEngine.Rendering.CommandBuffer? _apartBuffer;
     private static Camera? _apartCamera;
     private static RenderTexture? _bareView, _goggleFill;
+    // For the guns' forward parts (NightVisionDirect.DrawGunForward): the bare eye's gun's picture this frame, the goggle
+    // eye's gun's share, the material that lays a copy back by a share.
+    internal static RenderTexture? BareViewNow => BothGuns && _apartFrame == Time.frameCount ? _bareView : null;
+    internal static float GoggleOpacityNow => GoggleGunOpacity;
+    internal static Material? TubeMaterial => _material;
+    internal const int PartsLayPass = 18;   // NvgTube.shader
     private const int GoggleFillPass = 17;   // NvgTube.shader
     private static int _apartFrame = -1;
     private static readonly int ApartTempId = Shader.PropertyToID("_JustachaeGunsApart"), GunTexelId = Shader.PropertyToID("_GunTexel");
@@ -114,6 +120,7 @@ internal static class TwoRenders
             _apartCamera?.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _apartBuffer);
             main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _apartBuffer);
             _apartCamera = main;
+            NightVisionEyepieces.GunForwardAfter(main);
         }
         int w = Mathf.Max(main.pixelWidth, 1), h = Mathf.Max(main.pixelHeight, 1);
         if (_bareView == null || _bareView.width != w || _bareView.height != h)

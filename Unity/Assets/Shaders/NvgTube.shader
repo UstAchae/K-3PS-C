@@ -631,5 +631,17 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 18: a copy of the frame with the goggle eye's gun's forward parts on it, laid back over the frame by that gun's share.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend SrcAlpha OneMinusSrcAlpha
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex;
+   float _PartsShare;
+   float4 frag (v2f_img i) : SV_Target { return float4(tex2D(_MainTex, i.uv).rgb, _PartsShare); }
+   ENDCG
+  }
  }
 }
