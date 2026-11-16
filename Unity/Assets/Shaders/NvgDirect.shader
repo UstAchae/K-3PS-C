@@ -569,5 +569,34 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 1; }
    ENDCG
   }
+  // 17: which eye's gun pass 13 put in at each pixel, as it decides it: 1 the bare eye's, 0.5 the goggle eye's (TwoRenders.cs
+  // takes the two apart by it; their depths are too near alike to tell them by).
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    bool goggle = _DirectGoggleShown > 0 && !checker(i.pos.xy);
+    float raw = goggle ? SAMPLE_DEPTH_TEXTURE(_DirectHD, uv) : SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
+    if (goggle ? !shown(raw) : !gunPicked(i.pos.xy, raw))
+     return 0;
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
+    if (coverage(uv, rawL, rawR, toRight) > 0) {
+     float device = pickedDepth(rawL, rawR, toRight), gun = mainDepth(inverseDepth(raw));
+     #if defined(UNITY_REVERSED_Z)
+     if (device > gun)
+      return 0;
+     #else
+     if (device < gun)
+      return 0;
+     #endif
+    }
+    return goggle ? 0.5 : 1;
+   }
+   ENDCG
+  }
  }
 }

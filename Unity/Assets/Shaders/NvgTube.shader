@@ -494,17 +494,19 @@ Shader "Justachae/NVG/Tube" {
     return abs(gun - scene) <= max(gun * 0.002, 0.00002);
    }
    static const float2 around[8] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1), float2(1, 1), float2(-1, 1), float2(1, -1), float2(-1, -1) };
+   sampler2D _GunWhich;   // which eye's gun was put in here (NvgDirect.shader, pass 17): 1 the bare eye's, 0.5 the goggle eye's
+   bool bareAt (float2 uv) { return tex2Dlod(_GunWhich, float4(uv, 0, 0)).r > 0.75; }
    float4 frag (v2f_img i) : SV_Target {
     if (!shownAt(SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(i.uv, 0, 0))))
      return 0;
-    if (gunAt(i.uv))
+    if (bareAt(i.uv))
      return float4(tex2D(_MainTex, i.uv).rgb, 1);
     // The four next to it first (the other kind, on a chessboard); the corners only if none of those.
     float3 sum = 0, corners = 0;
     float n = 0, m = 0;
     [unroll] for (int k = 0; k < 8; k++) {
      float2 at = i.uv + around[k] * _MainTex_TexelSize.xy;
-     if (gunAt(at)) {
+     if (bareAt(at)) {
       float3 v = tex2Dlod(_MainTex, float4(at, 0, 0)).rgb;
       if (k < 4) { sum += v; n += 1; }
       else { corners += v; m += 1; }
@@ -568,16 +570,12 @@ Shader "Justachae/NVG/Tube" {
    UNITY_DECLARE_DEPTH_TEXTURE(_DirectHD);
    float _GoggleShare;
    // The goggle eye's gun put in here (NvgDirect.shader, pass 13: its depth is what the camera has).
-   bool goggleAt (float2 uv) {
-    float raw = SAMPLE_DEPTH_TEXTURE_LOD(_DirectHD, float4(uv, 0, 0));
-    if (!shownAt(raw))
-     return false;
-    float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
-    return abs(gun - scene) <= max(gun * 0.002, 0.00002);
-   }
+   sampler2D _GunWhich;   // which eye's gun was put in here (NvgDirect.shader, pass 17): 1 the bare eye's, 0.5 the goggle eye's
+   bool bareAt (float2 uv) { return tex2Dlod(_GunWhich, float4(uv, 0, 0)).r > 0.75; }
+   bool goggleAt (float2 uv) { float w = tex2Dlod(_GunWhich, float4(uv, 0, 0)).r; return w > 0.25 && w < 0.75; }
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
-    bool bareHere = gunAt(i.uv), goggleHere = goggleAt(i.uv);
+    bool bareHere = bareAt(i.uv), goggleHere = goggleAt(i.uv);
     bool goggleCovers = shownAt(SAMPLE_DEPTH_TEXTURE_LOD(_DirectHD, float4(i.uv, 0, 0)));
     // From the pixels next to it (the four first, the corners only if none of those): what lies behind the guns (those
     // with neither put in), and the goggle eye's gun (those with it).
@@ -586,7 +584,7 @@ Shader "Justachae/NVG/Tube" {
     [unroll] for (int k = 0; k < 8; k++) {
      float2 at = i.uv + around[k] * _MainTex_TexelSize.xy;
      float3 v = tex2Dlod(_MainTex, float4(at, 0, 0)).rgb;
-     bool b = gunAt(at), g = goggleAt(at);
+     bool b = bareAt(at), g = goggleAt(at);
      if (!b && !g) { if (k < 4) { behind4 += v; nb += 1; } else { behindC += v; mb += 1; } }
      if (g) { if (k < 4) { gun4 += v; ng += 1; } else { gunC += v; mg += 1; } }
     }

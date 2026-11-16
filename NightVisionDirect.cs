@@ -530,7 +530,17 @@ internal static partial class NightVisionEyepieces
         buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, InsertPass);
         if (gun)
+        {
             buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, GunInsertPass);
+            // Which eye's gun each pixel was given (TwoRenders.cs takes the two apart by it).
+            RenderTexture which = DirectTexture(_gunWhich, 0, width, height, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear, "Justachae NVG which eye's gun");
+            which.filterMode = FilterMode.Point;
+            buffer.SetRenderTarget(which);
+            buffer.ClearRenderTarget(false, true, Color.clear);
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, GunWhichPass);
+            buffer.SetGlobalTexture(GunWhichId, which);
+            buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
+        }
 
         // After the decals, which are thrown on whatever the depth holds.
         buffer = _directAgain;
@@ -564,7 +574,9 @@ internal static partial class NightVisionEyepieces
 
     // The bare eye's gun (and its hands and arms), drawn from that eye into G-buffers of its own, as the device is; put into
     // the main camera's after the device (passes 13-15). Skinned ones baked each frame into meshes of their own, kept.
-    private const int GunInsertPass = 13, GunSurfacePass = 14, GunEvenPass = 15, GunLensPass = 16;
+    private const int GunInsertPass = 13, GunSurfacePass = 14, GunEvenPass = 15, GunLensPass = 16, GunWhichPass = 17;
+    private static readonly RenderTexture?[] _gunWhich = new RenderTexture?[1];
+    private static readonly int GunWhichId = Shader.PropertyToID("_GunWhich");
     private static readonly RenderTexture?[] _gunLensMask = new RenderTexture?[1];
     private static readonly int DirectGunLensId = Shader.PropertyToID("_DirectGunLens"), DirectGunTexelId = Shader.PropertyToID("_DirectGunTexel");
     private static readonly int[] DirectGun = { Shader.PropertyToID("_DirectG0"), Shader.PropertyToID("_DirectG1"), Shader.PropertyToID("_DirectG2"), Shader.PropertyToID("_DirectG3") };
