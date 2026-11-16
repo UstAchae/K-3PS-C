@@ -642,7 +642,71 @@ internal static class TwoRenders
         HarmonyLib.AccessTools.FieldRefAccess<SSAAPropagator, Material>("_opticLensMaterial");
 
     // From NewCameraPlugin.EndOfFrame.
-    internal static void EndOfFrame() => HideGun(false);
+    internal static void EndOfFrame()
+    {
+        HideGun(false);
+        Diagnose();
+    }
+
+    // DIAGNOSTICS (both guns, 2026-11-16; to come out once the cause is found): every two seconds while a monocular is
+    // down, the shares, whether the steps ran, and what the map of which eye's gun each pixel was given holds, read back.
+    private static int _diagNext, _diagBefore, _diagTake;
+    private static void Diagnose()
+    {
+        if (!BothGuns || !Now || Time.frameCount < _diagNext)
+            return;
+        _diagNext = Time.frameCount + 120;
+        string head = $"Both guns: shareBare {_shareBare:F2}, bare opacity {BareGunOpacity:F2}, goggle opacity {GoggleGunOpacity:F2}, transparency {BareGunTransparency:F2}, aiming eye across {CameraPosition.AimingEyeAcross:F3}, goggle eye {_goggleEye:F3}, apart {Apart:F2}, gunsFrame now {_gunsFrame == Time.frameCount}; last 120 frames: taken apart {_diagBefore}, laid over {_diagTake}";
+        _diagBefore = _diagTake = 0;
+        RenderTexture? which = NightVisionEyepieces.GunWhichTexture;
+        RenderTexture? apart = _gunApart;
+        if (which == null)
+        {
+            NewCameraPlugin.Log?.LogInfo(head + "; no map");
+            return;
+        }
+        int w = which.width, h = which.height;
+        UnityEngine.Rendering.AsyncGPUReadback.Request(which, 0, request =>
+        {
+            if (request.hasError)
+            {
+                NewCameraPlugin.Log?.LogInfo(head + "; map readback failed");
+                return;
+            }
+            var data = request.GetData<byte>();
+            int bare = 0, goggle = 0, bareEven = 0, goggleEven = 0, other = 0;
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    byte v = data[y * w + x];
+                    bool even = ((x + y) & 1) == 0;
+                    if (v > 191) { bare++; if (even) bareEven++; }
+                    else if (v > 64) { goggle++; if (even) goggleEven++; }
+                    else if (v > 0) other++;
+                }
+            }
+            NewCameraPlugin.Log?.LogInfo($"{head}; map {w}x{h} ({which.format}): bare {bare} (even {bareEven}), goggle {goggle} (even {goggleEven}), other {other}");
+        });
+        if (apart != null)
+        {
+            int aw = apart.width, ah = apart.height;
+            UnityEngine.Rendering.AsyncGPUReadback.Request(apart, 0, request =>
+            {
+                if (request.hasError)
+                    return;
+                var data = request.GetData<ushort>();
+                int seen = 0, part = 0;
+                for (int i = 3; i < data.Length; i += 4)
+                {
+                    float a = Mathf.HalfToFloat(data[i]);
+                    if (a > 0.99f) seen++;
+                    else if (a > 0.01f) part++;
+                }
+                NewCameraPlugin.Log?.LogInfo($"Both guns: the bare eye's gun taken apart {aw}x{ah} ({apart.format}): whole {seen}, part {part}");
+            });
+        }
+    }
 
     private const int GunMaskPass = 7, LensSharpPass = 8;   // NvgTube.shader
     private static RenderTexture? _lensMask;
@@ -710,6 +774,7 @@ internal static class TwoRenders
                 Graphics.Blit(goggleView, scene);
                 RenderTexture.ReleaseTemporary(goggleView);
                 _gunApartFrame = Time.frameCount;
+                _diagBefore++;
                 return;
             }
             // The sight's lens laid in this frame from the bare eye (SightAtBareEye.cs): the frame from before it, where
@@ -805,6 +870,7 @@ internal static class TwoRenders
         if (_gunApartFrame == Time.frameCount && _gunApart != null && MaterialFor(tubeShader) is Material laying)
         {
             _gunApartFrame = -1;
+            _diagTake++;
             // The gun solid (the user's, 2026-11-16); only its sight's lens seen through, over what lies behind it in
             // the frame: the eyepieces' picture where they are.
             bool lens = DrawLensLayer(into, laying);

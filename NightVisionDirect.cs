@@ -576,6 +576,7 @@ internal static partial class NightVisionEyepieces
     // the main camera's after the device (passes 13-15). Skinned ones baked each frame into meshes of their own, kept.
     private const int GunInsertPass = 13, GunSurfacePass = 14, GunEvenPass = 15, GunLensPass = 16, GunWhichPass = 17;
     private static readonly RenderTexture?[] _gunWhich = new RenderTexture?[1];
+    internal static RenderTexture? GunWhichTexture => _gunWhich[0];   // (diagnostics, TwoRenders.Diagnose)
     private static readonly int GunWhichId = Shader.PropertyToID("_GunWhich");
     private static readonly RenderTexture?[] _gunLensMask = new RenderTexture?[1];
     private static readonly int DirectGunLensId = Shader.PropertyToID("_DirectGunLens"), DirectGunTexelId = Shader.PropertyToID("_DirectGunTexel");
