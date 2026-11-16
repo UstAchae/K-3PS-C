@@ -494,6 +494,7 @@ Shader "Justachae/NVG/Tube" {
     return abs(gun - scene) <= max(gun * 0.002, 0.00002);
    }
    static const float2 around[8] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1), float2(1, 1), float2(-1, 1), float2(1, -1), float2(-1, -1) };
+   float4 _GunTexel;   // the camera's own pixels (TwoRenders.FillApart: before the upscale)
    sampler2D _GunWhich;   // which eye's gun was put in here (NvgDirect.shader, pass 17): 1 the bare eye's, 0.5 the goggle eye's
    bool bareAt (float2 uv) { return tex2Dlod(_GunWhich, float4(uv, 0, 0)).r > 0.75; }
    float4 frag (v2f_img i) : SV_Target {
@@ -505,7 +506,7 @@ Shader "Justachae/NVG/Tube" {
     float3 sum = 0, corners = 0;
     float n = 0, m = 0;
     [unroll] for (int k = 0; k < 8; k++) {
-     float2 at = i.uv + around[k] * _MainTex_TexelSize.xy;
+     float2 at = i.uv + around[k] * _GunTexel.xy;
      if (bareAt(at)) {
       float3 v = tex2Dlod(_MainTex, float4(at, 0, 0)).rgb;
       if (k < 4) { sum += v; n += 1; }
@@ -570,6 +571,7 @@ Shader "Justachae/NVG/Tube" {
    UNITY_DECLARE_DEPTH_TEXTURE(_DirectHD);
    float _GoggleShare;
    // The goggle eye's gun put in here (NvgDirect.shader, pass 13: its depth is what the camera has).
+   float4 _GunTexel;   // the camera's own pixels (TwoRenders.FillApart: before the upscale)
    sampler2D _GunWhich;   // which eye's gun was put in here (NvgDirect.shader, pass 17): 1 the bare eye's, 0.5 the goggle eye's
    bool bareAt (float2 uv) { return tex2Dlod(_GunWhich, float4(uv, 0, 0)).r > 0.75; }
    bool goggleAt (float2 uv) { float w = tex2Dlod(_GunWhich, float4(uv, 0, 0)).r; return w > 0.25 && w < 0.75; }
@@ -582,7 +584,7 @@ Shader "Justachae/NVG/Tube" {
     float3 behind4 = 0, behindC = 0, gun4 = 0, gunC = 0;
     float nb = 0, mb = 0, ng = 0, mg = 0;
     [unroll] for (int k = 0; k < 8; k++) {
-     float2 at = i.uv + around[k] * _MainTex_TexelSize.xy;
+     float2 at = i.uv + around[k] * _GunTexel.xy;
      float3 v = tex2Dlod(_MainTex, float4(at, 0, 0)).rgb;
      bool b = bareAt(at), g = goggleAt(at);
      if (!b && !g) { if (k < 4) { behind4 += v; nb += 1; } else { behindC += v; mb += 1; } }

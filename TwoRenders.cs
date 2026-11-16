@@ -89,6 +89,51 @@ internal static class TwoRenders
     private static float BareGunOpacity => 1f - Mathf.Clamp01(BareGunTransparency) * (1f - _shareBare);
     private static float GoggleGunOpacity => 1f - Mathf.Clamp01(BareGunTransparency) * _shareBare;
     private static readonly int GoggleShareId = Shader.PropertyToID("_GoggleShare");
+
+    // The two eyes' guns taken apart at the camera's own pixels, after all is drawn and before the image effects (the
+    // upscale among them mixes the chessboard's pixels, and the diagnostics of 1.8.55 showed the frame at 2560x1440 with the
+    // camera's at 1707x960): the bare eye's gun whole kept (_bareView, laid over after the eyepieces, TakeEye); the frame
+    // left the goggle eye's alone, its gun seen through by its share. Filled each frame it is wanted, emptied at its end.
+    private static UnityEngine.Rendering.CommandBuffer? _apartBuffer;
+    private static Camera? _apartCamera;
+    private static RenderTexture? _bareView;
+    private static int _apartFrame = -1;
+    private static readonly int ApartTempId = Shader.PropertyToID("_JustachaeGunsApart"), GunTexelId = Shader.PropertyToID("_GunTexel");
+
+    private static void FillApart(Camera main)
+    {
+        Material? material = _material;
+        if (material == null)
+            return;
+        _apartBuffer ??= new UnityEngine.Rendering.CommandBuffer { name = "Justachae two eyes' guns apart" };
+        if (_apartCamera != main)
+        {
+            _apartCamera?.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _apartBuffer);
+            main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _apartBuffer);
+            _apartCamera = main;
+        }
+        int w = Mathf.Max(main.pixelWidth, 1), h = Mathf.Max(main.pixelHeight, 1);
+        if (_bareView == null || _bareView.width != w || _bareView.height != h)
+        {
+            if (_bareView != null)
+            {
+                _bareView.Release();
+                Object.Destroy(_bareView);
+            }
+            _bareView = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae bare eye's gun", hideFlags = HideFlags.DontSave };
+            _bareView.Create();
+        }
+        var buffer = _apartBuffer;
+        buffer.Clear();
+        buffer.SetGlobalVector(GunTexelId, new Vector4(1f / w, 1f / h, w, h));
+        buffer.SetGlobalFloat(GoggleShareId, GoggleGunOpacity);
+        buffer.GetTemporaryRT(ApartTempId, w, h, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
+        buffer.Blit(UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, ApartTempId);
+        buffer.Blit(ApartTempId, _bareView, material, BareViewPass);
+        buffer.Blit(ApartTempId, UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, material, GoggleViewPass);
+        buffer.ReleaseTemporaryRT(ApartTempId);
+        _apartFrame = Time.frameCount;
+    }
     private const int BareViewPass = 15, GoggleViewPass = 16;   // NvgTube.shader
     private static readonly int BareLasersId = Shader.PropertyToID("_BareLasers");
     private static float LensOpacity => 1f - Mathf.Clamp01(BareGunSeeThrough);
@@ -365,6 +410,8 @@ internal static class TwoRenders
         {
             if (BothGuns || _shareBare > 0.5f)
                 HideGun(true);
+            if (BothGuns)
+                FillApart(main);
             return;
         }
         RenderGun(main, GunPass.Bare, gunLayers);
@@ -645,6 +692,7 @@ internal static class TwoRenders
     internal static void EndOfFrame()
     {
         HideGun(false);
+        _apartBuffer?.Clear();
         Diagnose();
     }
 
@@ -659,7 +707,7 @@ internal static class TwoRenders
         string head = $"Both guns: shareBare {_shareBare:F2}, bare opacity {BareGunOpacity:F2}, goggle opacity {GoggleGunOpacity:F2}, transparency {BareGunTransparency:F2}, aiming eye across {CameraPosition.AimingEyeAcross:F3}, goggle eye {_goggleEye:F3}, apart {Apart:F2}, gunsFrame now {_gunsFrame == Time.frameCount}; last 120 frames: taken apart {_diagBefore}, laid over {_diagTake}";
         _diagBefore = _diagTake = 0;
         RenderTexture? which = NightVisionEyepieces.GunWhichTexture;
-        RenderTexture? apart = _gunApart;
+        RenderTexture? apart = BothGuns ? _bareView : _gunApart;
         if (which == null)
         {
             NewCameraPlugin.Log?.LogInfo(head + "; no map");
@@ -767,12 +815,9 @@ internal static class TwoRenders
                 // The two eyes' pictures taken apart: the bare eye's gun whole (its pixels, and the others made from them),
                 // kept to lay over after; the frame the goggle eye's alone (where the bare eye's gun was put in, made from the
                 // pixels next to it), for the eyepieces.
-                Graphics.Blit(scene, Kept(ref _gunApart, scene, "Justachae bare eye's gun"), material, BareViewPass);
-                RenderTexture goggleView = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
-                material.SetFloat(GoggleShareId, GoggleGunOpacity);
-                Graphics.Blit(scene, goggleView, material, GoggleViewPass);
-                Graphics.Blit(goggleView, scene);
-                RenderTexture.ReleaseTemporary(goggleView);
+                // Done before the upscale, at the camera's own pixels (FillApart): the frame is the goggle eye's by now.
+                if (_apartFrame != Time.frameCount || _bareView == null)
+                    return;
                 _gunApartFrame = Time.frameCount;
                 _diagBefore++;
                 return;
@@ -876,7 +921,7 @@ internal static class TwoRenders
             bool lens = DrawLensLayer(into, laying);
             RenderTexture frame = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
             Graphics.Blit(into, frame);
-            laying.SetTexture(OtherId, _gunApart);
+            laying.SetTexture(OtherId, BothGuns ? _bareView : _gunApart);
             laying.SetTexture(LensLayerId, lens ? _lensLayer : Texture2D.blackTexture);
             laying.SetTexture(LensMaskId, lens ? _lensSolid : Texture2D.blackTexture);
             laying.SetFloat(GunShareId, BothGuns ? BareGunOpacity : _shareBare);
