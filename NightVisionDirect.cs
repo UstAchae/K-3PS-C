@@ -631,7 +631,7 @@ internal static partial class NightVisionEyepieces
 
     // The gun's forward-only parts, after the scene's see-through things, from the bare eye (as the camera sees them
     // from there: the same matrices as its G-buffer parts, the camera at the origin).
-    private static void DrawGunForward(Camera main, Matrix4x4 turned, Vector3 place)
+    private static void DrawGunForward(Camera main, Matrix4x4 turned, Vector3 place, Matrix4x4 gunProjection)
     {
         _gunForwardBuffer ??= new CommandBuffer { name = "Justachae NVG gun's forward parts" };
         CommandBuffer buffer = _gunForwardBuffer;
@@ -659,7 +659,12 @@ internal static partial class NightVisionEyepieces
                 continue;
             bool copy = apart && eye == 1 && share < 0.999f;
             if (apart && eye == 0)
+            {
+                // Against the bare eye's gun's own depth: by the projection it was drawn with (the device's near and far
+                // planes), or what stands behind its body showed through it.
                 buffer.SetRenderTarget(bareView!, bareDepth!);
+                buffer.SetViewProjectionMatrices(turned, gunProjection);
+            }
             else if (copy)
             {
                 buffer.GetTemporaryRT(ForwardCopyId, -1, -1, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
@@ -677,6 +682,8 @@ internal static partial class NightVisionEyepieces
                 renderer.GetPropertyBlock(_pieceBlock);
                 buffer.DrawMesh(mesh, eyeMove * matrix, material, sub, pass, _pieceBlock);
             }
+            if (apart && eye == 0)
+                buffer.SetViewProjectionMatrices(turned, main.projectionMatrix);
             if (copy)
             {
                 buffer.SetGlobalFloat(PartsShareId, share);
@@ -698,7 +705,7 @@ internal static partial class NightVisionEyepieces
         _gunForward.Clear();
         if (renderers == null || shown <= 0f || _directMaterial == null)
         {
-            DrawGunForward(main, turned, place);
+            DrawGunForward(main, turned, place, projection);
             return false;
         }
         // Gathered once (skinned parts baked once), drawn from each eye: the bare eye's (moved by the opposite of its
@@ -812,7 +819,7 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalTexture(DirectGunDepth, depthTexture);
         buffer.SetGlobalFloat(DirectGunShownId, shown);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
-        DrawGunForward(main, turned, place);
+        DrawGunForward(main, turned, place, projection);
         return drawn > 0;
     }
 }
