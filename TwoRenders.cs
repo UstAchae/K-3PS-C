@@ -693,6 +693,7 @@ internal static class TwoRenders
     {
         HideGun(false);
         _apartBuffer?.Clear();
+        NightVisionEyepieces.EmptyGunForward();
         Diagnose();
     }
 

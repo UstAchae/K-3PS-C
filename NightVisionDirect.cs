@@ -599,6 +599,9 @@ internal static partial class NightVisionEyepieces
     private static readonly Dictionary<Renderer, (Material[] materials, int[] passes, int[] forward)> _gunSources = new Dictionary<Renderer, (Material[], int[], int[])>();
     private static readonly List<(Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer)> _gunForward = new List<(Mesh, Matrix4x4, Material, int, int, Renderer)>();
     private static CommandBuffer? _gunForwardBuffer;
+    // At each frame's end (TwoRenders.EndOfFrame): filled again by the next DrawGun, or left empty when the gun is no longer
+    // drawn (the goggle up): otherwise it kept drawing the last frame's parts, where they were.
+    internal static void EmptyGunForward() => _gunForwardBuffer?.Clear();
     private static Camera? _gunForwardCamera;
 
     // A material's forward pass, for a part with none for the G-buffer.
