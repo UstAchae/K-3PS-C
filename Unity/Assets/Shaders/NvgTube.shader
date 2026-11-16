@@ -428,11 +428,14 @@ Shader "Justachae/NVG/Tube" {
     return abs(gun - scene) <= max(gun * 0.002, 0.00002);
    }
    sampler2D _Other, _LensLayer, _LensMask, _BareLasers;
+   // The bare eye's sight's lens while the goggle eye aims: not over the goggle eye's gun (put in where it is, whole).
+   sampler2D _GunWhich14;
+   float _LensUnderAiming;
    float _GunShare, _LensShare;
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
     // The bare eye's sight's lens while it aims: only the sight's picture there for that eye.
-    if (tex2D(_LensMask, i.uv).r > 0.5) {
+    if (tex2D(_LensMask, i.uv).r > 0.5 && (_LensUnderAiming <= 0 || tex2D(_GunWhich14, i.uv).r < 0.25 || tex2D(_GunWhich14, i.uv).r > 0.75)) {
      c.rgb = lerp(c.rgb, tex2D(_LensLayer, i.uv).rgb, _LensShare);
      return c;
     }
@@ -596,9 +599,35 @@ Shader "Justachae/NVG/Tube" {
     float3 behind = c.rgb;
     if (bareHere || goggleHere)
      behind = nb > 0 ? behind4 / nb : (mb > 0 ? behindC / mb : own);
+    // Where the bare eye's gun was put in, what the goggle eye sees is not in the frame: left out (weight 0), filled from
+    // around (pass 17), so that the objective's blur does not spread the bare eye's gun into the goggle's picture.
+    float w = bareHere ? 0 : 1;
     if (!goggleCovers || !goggleHere && ng <= 0 && mg <= 0)
-     return float4(behind, c.a);
-    return float4(lerp(behind, own, _GoggleShare), c.a);
+     return float4(behind * w, w);
+    return float4(lerp(behind, own, _GoggleShare) * w, w);
+   }
+   ENDCG
+  }
+  // 17: the goggle eye's frame with what was left out (pass 16: weight 0 in alpha, colours weighted) filled from around: from
+  // the first smaller level of this picture (its mips, made in between) that has some of what was kept.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   #include "UnityCG.cginc"
+   sampler2D _MainTex;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 s = tex2Dlod(_MainTex, float4(i.uv, 0, 0));
+    if (s.a > 0.99)
+     return float4(s.rgb / s.a, 1);
+    for (int level = 1; level < 12; level++) {
+     float4 m = tex2Dlod(_MainTex, float4(i.uv, 0, level));
+     if (m.a > 0.002)
+      return float4(m.rgb / m.a, 1);
+    }
+    return float4(0, 0, 0, 1);
    }
    ENDCG
   }

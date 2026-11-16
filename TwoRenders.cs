@@ -98,7 +98,8 @@ internal static class TwoRenders
     // left the goggle eye's alone, its gun seen through by its share. Filled each frame it is wanted, emptied at its end.
     private static UnityEngine.Rendering.CommandBuffer? _apartBuffer;
     private static Camera? _apartCamera;
-    private static RenderTexture? _bareView;
+    private static RenderTexture? _bareView, _goggleFill;
+    private const int GoggleFillPass = 17;   // NvgTube.shader
     private static int _apartFrame = -1;
     private static readonly int ApartTempId = Shader.PropertyToID("_JustachaeGunsApart"), GunTexelId = Shader.PropertyToID("_GunTexel");
 
@@ -132,7 +133,19 @@ internal static class TwoRenders
         buffer.GetTemporaryRT(ApartTempId, w, h, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
         buffer.Blit(UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, ApartTempId);
         buffer.Blit(ApartTempId, _bareView, material, BareViewPass);
-        buffer.Blit(ApartTempId, UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, material, GoggleViewPass);
+        if (_goggleFill == null || _goggleFill.width != w || _goggleFill.height != h)
+        {
+            if (_goggleFill != null)
+            {
+                _goggleFill.Release();
+                Object.Destroy(_goggleFill);
+            }
+            _goggleFill = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae goggle eye's frame to fill", hideFlags = HideFlags.DontSave, useMipMap = true, autoGenerateMips = false };
+            _goggleFill.Create();
+        }
+        buffer.Blit(ApartTempId, _goggleFill, material, GoggleViewPass);
+        buffer.GenerateMips(_goggleFill);
+        buffer.Blit(_goggleFill, UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, material, GoggleFillPass);
         buffer.ReleaseTemporaryRT(ApartTempId);
         _apartFrame = Time.frameCount;
     }
@@ -201,7 +214,16 @@ internal static class TwoRenders
     private static bool DrawLensLayer(RenderTexture into, Material material)
     {
         Camera? camera = Camera.main;
-        if (camera == null || _lensKept == null || _lensMaterialKept == null || !_lensKept.enabled || !_lensKept.gameObject.activeInHierarchy || !OpticAtWork())
+        // The bare eye's gun's sight lens: kept from the game while that eye aims; while the goggle eye aims, the game's own
+        // (it lays it for the goggle eye's gun), drawn here again from the bare eye, seen as that eye sees it from aside.
+        Renderer? lensRenderer = _lensKept;
+        Material? lensMaterial = _lensMaterialKept;
+        if (BothGuns && !BareAims && camera != null && camera.GetComponent<SSAAPropagator>() is SSAAPropagator propagator)
+        {
+            lensRenderer = LensRenderer(propagator);
+            lensMaterial = LensMaterial(propagator);
+        }
+        if (camera == null || lensRenderer == null || lensMaterial == null || !lensRenderer.enabled || !lensRenderer.gameObject.activeInHierarchy || !OpticAtWork())
             return false;
         Vector3 shift = camera.transform.rotation * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
         Vector3 eye = camera.transform.position + shift, place = camera.transform.position;
@@ -217,18 +239,19 @@ internal static class TwoRenders
         buffer.SetGlobalMatrix(NonJitteredProjId, GL.GetGPUProjectionMatrix(projection, true));
         buffer.SetRenderTarget(layer);
         buffer.ClearRenderTarget(false, true, Color.clear);
-        buffer.DrawRenderer(_lensKept, _lensMaterialKept);
+        buffer.DrawRenderer(lensRenderer, lensMaterial);
         buffer.DisableShaderKeyword("NON_JITTERED");
         buffer.DisableShaderKeyword("TAA");
         buffer.SetRenderTarget(solid);
         buffer.ClearRenderTarget(false, true, Color.clear);
-        buffer.DrawRenderer(_lensKept, material, 0, LensSolidPass);
+        buffer.DrawRenderer(lensRenderer, material, 0, LensSolidPass);
         buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
         Graphics.ExecuteCommandBuffer(buffer);
         return true;
     }
     private const int GunAndLensPass = 14;   // NvgTube.shader
+    private static readonly int LensUnderAimingId = Shader.PropertyToID("_LensUnderAiming"), GunWhich14Id = Shader.PropertyToID("_GunWhich14");
     private static readonly int LensLayerId = Shader.PropertyToID("_LensLayer"), GunShareId = Shader.PropertyToID("_GunShare"), LensShareId = Shader.PropertyToID("_LensShare");
 
     // For SightAtBareEye: where the frame from before the lens is kept, this frame.
@@ -928,7 +951,9 @@ internal static class TwoRenders
             laying.SetTexture(LensLayerId, lens ? _lensLayer : Texture2D.blackTexture);
             laying.SetTexture(LensMaskId, lens ? _lensSolid : Texture2D.blackTexture);
             laying.SetFloat(GunShareId, BothGuns ? BareGunOpacity : _shareBare);
-            laying.SetFloat(LensShareId, LensOpacity * _shareBare);
+            laying.SetFloat(LensShareId, BothGuns && !BareAims ? BareGunOpacity : LensOpacity * _shareBare);
+            laying.SetFloat(LensUnderAimingId, BothGuns && !BareAims ? 1f : 0f);
+            laying.SetTexture(GunWhich14Id, NightVisionEyepieces.GunWhichTexture ?? (Texture)Texture2D.blackTexture);
             laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
             Graphics.Blit(frame, into, laying, GunAndLensPass);
             RenderTexture.ReleaseTemporary(frame);
