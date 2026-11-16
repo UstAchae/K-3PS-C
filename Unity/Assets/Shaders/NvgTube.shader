@@ -643,5 +643,45 @@ Shader "Justachae/NVG/Tube" {
    float4 frag (v2f_img i) : SV_Target { return float4(tex2D(_MainTex, i.uv).rgb, _PartsShare); }
    ENDCG
   }
+  // 19: the camera's depth as the goggle eye has it, weighted: where the bare eye's gun was put in (_GunWhich 1) left out, to be
+  // filled from around (pass 20) as its picture is (pass 17): the objective's blur goes by the nearest depth about a pixel,
+  // and the bare eye's gun's spread its blur round it.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   sampler2D _GunWhich;
+   float4 frag (v2f_img i) : SV_Target {
+    float w = tex2Dlod(_GunWhich, float4(i.uv, 0, 0)).r > 0.75 ? 0 : 1;
+    return float4(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(i.uv, 0, 0)) * w, w, 0, 0);
+   }
+   ENDCG
+  }
+  // 20: that depth filled from around (its mips made in between): from the first smaller level that has some of what was kept.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   #include "UnityCG.cginc"
+   sampler2D _MainTex;
+   float4 frag (v2f_img i) : SV_Target {
+    float2 s = tex2Dlod(_MainTex, float4(i.uv, 0, 0)).rg;
+    if (s.y > 0.99)
+     return s.x / s.y;
+    for (int level = 1; level < 12; level++) {
+     float2 m = tex2Dlod(_MainTex, float4(i.uv, 0, level)).rg;
+     if (m.y > 0.002)
+      return m.x / m.y;
+    }
+    return 0;
+   }
+   ENDCG
+  }
  }
 }

@@ -105,7 +105,8 @@ internal static class TwoRenders
     internal static float GoggleOpacityNow => GoggleGunOpacity;
     internal static Material? TubeMaterial => _material;
     internal const int PartsLayPass = 18;   // NvgTube.shader
-    private const int GoggleFillPass = 17;   // NvgTube.shader
+    private const int GoggleFillPass = 17, DepthWeighPass = 19, DepthPullPass = 20;   // NvgTube.shader
+    private static RenderTexture? _depthFill, _goggleDepthNow;
     private static int _apartFrame = -1;
     private static readonly int ApartTempId = Shader.PropertyToID("_JustachaeGunsApart"), GunTexelId = Shader.PropertyToID("_GunTexel");
 
@@ -153,6 +154,27 @@ internal static class TwoRenders
         buffer.Blit(ApartTempId, _goggleFill, material, GoggleViewPass);
         buffer.GenerateMips(_goggleFill);
         buffer.Blit(_goggleFill, UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, material, GoggleFillPass);
+        // Its depth too, filled alike, for the eyepieces' steps (BeforeEyepieces gives it them, TakeEye takes it back).
+        if (_depthFill == null || _depthFill.width != w || _depthFill.height != h)
+        {
+            if (_depthFill != null)
+            {
+                _depthFill.Release();
+                Object.Destroy(_depthFill);
+            }
+            if (_goggleDepthNow != null)
+            {
+                _goggleDepthNow.Release();
+                Object.Destroy(_goggleDepthNow);
+            }
+            _depthFill = new RenderTexture(w, h, 0, RenderTextureFormat.RGFloat) { name = "Justachae goggle eye's depth to fill", hideFlags = HideFlags.DontSave, useMipMap = true, autoGenerateMips = false };
+            _depthFill.Create();
+            _goggleDepthNow = new RenderTexture(w, h, 0, RenderTextureFormat.RFloat) { name = "Justachae goggle eye's depth", hideFlags = HideFlags.DontSave, filterMode = FilterMode.Point };
+            _goggleDepthNow.Create();
+        }
+        buffer.Blit(ApartTempId, _depthFill, material, DepthWeighPass);
+        buffer.GenerateMips(_depthFill);
+        buffer.Blit(_depthFill, _goggleDepthNow, material, DepthPullPass);
         buffer.ReleaseTemporaryRT(ApartTempId);
         _apartFrame = Time.frameCount;
     }
@@ -851,6 +873,12 @@ internal static class TwoRenders
                 // Done before the upscale, at the camera's own pixels (FillApart): the frame is the goggle eye's by now.
                 if (_apartFrame != Time.frameCount || _bareView == null)
                     return;
+                // The eyepieces' steps by the goggle eye's depth (the objective's blur above all), until TakeEye.
+                if (_goggleDepthNow != null && Shader.GetGlobalTexture(CameraDepthId) is Texture own && own != _goggleDepthNow)
+                {
+                    _ownDepth = own;
+                    Shader.SetGlobalTexture(CameraDepthId, _goggleDepthNow);
+                }
                 _gunApartFrame = Time.frameCount;
                 _diagBefore++;
                 return;
