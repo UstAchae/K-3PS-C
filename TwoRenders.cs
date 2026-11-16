@@ -912,7 +912,7 @@ internal static class TwoRenders
             Shader.SetGlobalTexture(CameraDepthId, _ownDepth);
             _ownDepth = null;
         }
-        if (_gunApartFrame == Time.frameCount && _gunApart != null && MaterialFor(tubeShader) is Material laying)
+        if (_gunApartFrame == Time.frameCount && (BothGuns ? _bareView : _gunApart) != null && MaterialFor(tubeShader) is Material laying)
         {
             _gunApartFrame = -1;
             _diagTake++;
