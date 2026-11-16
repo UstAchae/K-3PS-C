@@ -358,5 +358,28 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 13: the frame (_MainTex, the eyepieces' picture made without the bare eye's gun) with that gun laid in (_Other, its
+  // alpha where it is) by _GunShare, and over it, where its sight's lens is (_LensMask), the lens (_LensLayer) seen
+  // through by _LensShare: what lies behind the lens is the frame, not the gun.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _Other, _LensLayer, _LensMask;
+   float _GunShare, _LensShare;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2D(_MainTex, i.uv);
+    if (tex2D(_LensMask, i.uv).r > 0.5)
+     c.rgb = lerp(c.rgb, tex2D(_LensLayer, i.uv).rgb, _LensShare);
+    else {
+     float4 g = tex2D(_Other, i.uv);
+     c.rgb = lerp(c.rgb, g.rgb, _GunShare * saturate(g.a));
+    }
+    return c;
+   }
+   ENDCG
+  }
  }
 }

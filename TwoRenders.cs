@@ -77,8 +77,9 @@ internal static class TwoRenders
     private static float _shareGoggle = 1f, _shareBare;
     // How far the bare eye's gun is seen through (F12 单筒：裸眼瞄准时枪的透明度): 0 solid, 1 not seen; at half, as the two
     // eyes' frames laid together did.
-    internal static float BareGunSeeThrough = 0.5f;
-    private static float GunOpacity => 1f - Mathf.Clamp01(BareGunSeeThrough);
+    internal static float BareGunSeeThrough = 0.5f;   // now the bare eye's sight lens's (F12 单筒：裸眼瞄准时分划的透明度)
+    private static float LensOpacity => 1f - Mathf.Clamp01(BareGunSeeThrough);
+    private static float GunOpacity => LensOpacity;
     // The goggle is never seen through: nothing laid over what the camera has nearer than this (m; the gun is further).
     private const float DeviceReach = 0.12f;
     private static readonly int ShareGId = Shader.PropertyToID("_ShareG"), ShareBId = Shader.PropertyToID("_ShareB"), DeviceReachId = Shader.PropertyToID("_DeviceReach");
@@ -137,11 +138,11 @@ internal static class TwoRenders
     private static UnityEngine.Rendering.CommandBuffer? _lensBuffer;
     private static readonly int NonJitteredProjId = Shader.PropertyToID("NonJitteredProj"), CameraPlaceId = Shader.PropertyToID("_WorldSpaceCameraPos");
 
-    private static void DrawLensLayer(RenderTexture into, Material material, float shown)
+    private static bool DrawLensLayer(RenderTexture into, Material material)
     {
         Camera? camera = Camera.main;
-        if (camera == null || _lensKept == null || _lensMaterialKept == null || !_lensKept.enabled || !_lensKept.gameObject.activeInHierarchy || shown <= 0f)
-            return;
+        if (camera == null || _lensKept == null || _lensMaterialKept == null || !_lensKept.enabled || !_lensKept.gameObject.activeInHierarchy)
+            return false;
         Vector3 shift = camera.transform.rotation * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
         Vector3 eye = camera.transform.position + shift, place = camera.transform.position;
         Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
@@ -165,14 +166,10 @@ internal static class TwoRenders
         buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
         Graphics.ExecuteCommandBuffer(buffer);
-        RenderTexture frame = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
-        Graphics.Blit(into, frame);
-        material.SetTexture(OtherId, layer);
-        material.SetTexture(LensMaskId, solid);
-        material.SetFloat(OtherShareId, shown);
-        Graphics.Blit(frame, into, material, LensLayPass);
-        RenderTexture.ReleaseTemporary(frame);
+        return true;
     }
+    private const int GunAndLensPass = 13;   // NvgTube.shader
+    private static readonly int LensLayerId = Shader.PropertyToID("_LensLayer"), GunShareId = Shader.PropertyToID("_GunShare"), LensShareId = Shader.PropertyToID("_LensShare");
 
     // For SightAtBareEye: where the frame from before the lens is kept, this frame.
     internal static RenderTexture PreLensFor(RenderTexture frame)
@@ -192,7 +189,8 @@ internal static class TwoRenders
         if (!DrawnIntoFrame || !Now || _gunsFrame != Time.frameCount || _shareBare <= 0.001f || _gunRenderers.Count == 0)
             return null;
         shift = turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
-        shown = Mathf.Clamp01(GunOpacity * _shareBare);
+        // On the chessboard always, to be taken apart from what lies behind (TakeEye lays it in solid).
+        shown = 0.5f;
         return _gunRenderers;
     }
 
@@ -719,14 +717,18 @@ internal static class TwoRenders
         if (_gunApartFrame == Time.frameCount && _gunApart != null && MaterialFor(tubeShader) is Material laying)
         {
             _gunApartFrame = -1;
+            // The gun solid (the user's, 2026-11-16); only its sight's lens seen through, over what lies behind it in
+            // the frame: the eyepieces' picture where they are.
+            bool lens = DrawLensLayer(into, laying);
             RenderTexture frame = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
             Graphics.Blit(into, frame);
             laying.SetTexture(OtherId, _gunApart);
-            laying.SetFloat(OtherShareId, GunOpacity * _shareBare);
-            laying.SetFloat(DeviceReachId, 0f);
-            Graphics.Blit(frame, into, laying, HalvesPass);
+            laying.SetTexture(LensLayerId, lens ? _lensLayer : Texture2D.blackTexture);
+            laying.SetTexture(LensMaskId, lens ? _lensSolid : Texture2D.blackTexture);
+            laying.SetFloat(GunShareId, _shareBare);
+            laying.SetFloat(LensShareId, LensOpacity * _shareBare);
+            Graphics.Blit(frame, into, laying, GunAndLensPass);
             RenderTexture.ReleaseTemporary(frame);
-            DrawLensLayer(into, laying, GunOpacity * _shareBare);
             return;
         }
         Material? material = MaterialFor(tubeShader);
