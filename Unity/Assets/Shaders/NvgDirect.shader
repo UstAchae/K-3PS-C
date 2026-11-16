@@ -126,8 +126,12 @@ Shader "Justachae/NVG/Direct" {
  sampler2D _DirectG0, _DirectG1, _DirectG2, _DirectG3;
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectGD);
  float _DirectGunShown;
+ sampler2D _DirectGunLens;   // where the gun's sight's lens is, from the bare eye (pass 16): the gun left out there
+ float4 _DirectGunTexel;
  bool gunPicked (float2 pixel, float raw) {
   if (!shown(raw) || _DirectGunShown <= 0)
+   return false;
+  if (tex2Dlod(_DirectGunLens, float4(pixel * _DirectGunTexel.xy, 0, 0)).r > 0.5)
    return false;
   return _DirectGunShown >= 0.999 || checker(pixel);
  }
@@ -493,7 +497,7 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 15: the gun seen through, once all is lit: its pixels and what lies behind on the others evened, by _DirectGunShown.
+  // 15 (unused while the gun is laid in solid): the gun seen through, once all is lit: its pixels and what lies behind on the others evened, by _DirectGunShown.
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM
@@ -533,6 +537,17 @@ Shader "Justachae/NVG/Direct" {
     other /= count;
     return float4(lerp(isGun ? other : own, isGun ? own : other, _DirectGunShown), 1);
    }
+   ENDCG
+  }
+  // 16: the gun's sight's lens, from the bare eye, before what of the gun stands in front of it (the gun's own depth): 1.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual
+   CGPROGRAM
+   #pragma vertex lensVert
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 lensVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 1; }
    ENDCG
   }
  }

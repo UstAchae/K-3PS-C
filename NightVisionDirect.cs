@@ -564,7 +564,9 @@ internal static partial class NightVisionEyepieces
 
     // The bare eye's gun (and its hands and arms), drawn from that eye into G-buffers of its own, as the device is; put into
     // the main camera's after the device (passes 13-15). Skinned ones baked each frame into meshes of their own, kept.
-    private const int GunInsertPass = 13, GunSurfacePass = 14, GunEvenPass = 15;
+    private const int GunInsertPass = 13, GunSurfacePass = 14, GunEvenPass = 15, GunLensPass = 16;
+    private static readonly RenderTexture?[] _gunLensMask = new RenderTexture?[1];
+    private static readonly int DirectGunLensId = Shader.PropertyToID("_DirectGunLens"), DirectGunTexelId = Shader.PropertyToID("_DirectGunTexel");
     private static readonly int[] DirectGun = { Shader.PropertyToID("_DirectG0"), Shader.PropertyToID("_DirectG1"), Shader.PropertyToID("_DirectG2"), Shader.PropertyToID("_DirectG3") };
     private static readonly int DirectGunDepth = Shader.PropertyToID("_DirectGD"), DirectGunShownId = Shader.PropertyToID("_DirectGunShown");
     private static readonly RenderTexture?[] _gunTextures = new RenderTexture?[4];
@@ -633,6 +635,20 @@ internal static partial class NightVisionEyepieces
                 drawn++;
             }
         }
+        // Its sight's lens: the gun left out there, so the frame keeps what lies behind it (the goggle's picture is made
+        // from it, and the lens laid over that at its see-through: TwoRenders.DrawLensLayer).
+        RenderTexture lensMask = DirectTexture(_gunLensMask, 0, width, height, 0, RenderTextureFormat.R8, RenderTextureReadWrite.Linear, "Justachae NVG gun's sight lens");
+        buffer.SetRenderTarget(lensMask, depthTexture);
+        buffer.ClearRenderTarget(false, true, Color.clear);
+        Renderer? lens = TwoRenders.BareLens;
+        if (lens != null && lens.TryGetComponent(out MeshFilter lensFilter) && lensFilter.sharedMesh != null)
+        {
+            Matrix4x4 lensMatrix = fromEye * FromCamera(lens.transform, place);
+            for (int s = 0; s < lensFilter.sharedMesh.subMeshCount; s++)
+                buffer.DrawMesh(lensFilter.sharedMesh, lensMatrix, _directMaterial, s, GunLensPass);
+        }
+        buffer.SetGlobalTexture(DirectGunLensId, lensMask);
+        buffer.SetGlobalVector(DirectGunTexelId, new Vector4(1f / Mathf.Max(width, 1), 1f / Mathf.Max(height, 1), 0f, 0f));
         for (int t = 0; t < 4; t++)
             buffer.SetGlobalTexture(DirectGun[t], _gunTextures[t]!);
         buffer.SetGlobalTexture(DirectGunDepth, depthTexture);

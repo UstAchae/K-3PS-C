@@ -381,5 +381,69 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 14: the eyepieces' picture (_MainTex) with the bare eye's gun laid back where it is (_Other, the frame before the
+  // eyepieces: no night vision on it) by _GunShare, and its sight's lens (_LensLayer, where _LensMask is) over what lies
+  // behind it by _LensShare.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   #include "UnityCG.cginc"
+   UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   UNITY_DECLARE_DEPTH_TEXTURE(_DirectGD);
+   float4 _DirectGD_TexelSize;
+   float4 _DirectPlanes;
+   sampler2D _MainTex;
+   float4 _MainTex_TexelSize;
+   // As NvgDirect.shader has them: the gun's own depth into the main camera's.
+   float inverseDepth (float raw) {
+    #if !defined(UNITY_REVERSED_Z)
+    raw = 1 - raw;
+    #endif
+    return raw * (_DirectPlanes.x - _DirectPlanes.y) + _DirectPlanes.y;
+   }
+   float mainDepth (float inverse) {
+    float limit = _DirectPlanes.z, knee = limit * 0.7;
+    if (inverse > knee)
+     inverse = knee + (limit - knee) * (1 - exp((knee - inverse) / (limit - knee)));
+    float d = saturate((inverse - _DirectPlanes.w) / (_DirectPlanes.z - _DirectPlanes.w));
+    #if !defined(UNITY_REVERSED_Z)
+    d = 1 - d;
+    #endif
+    return d;
+   }
+   bool shownAt (float raw) {
+    #if defined(UNITY_REVERSED_Z)
+    return raw > 0;
+    #else
+    return raw < 1;
+    #endif
+   }
+   // The gun seen here (drawn here, and nothing the camera has before it: the device).
+   bool gunAt (float2 uv) {
+    float raw = SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(uv, 0, 0));
+    if (!shownAt(raw))
+     return false;
+    float scene = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0)), gun = mainDepth(inverseDepth(raw));
+    #if defined(UNITY_REVERSED_Z)
+    return gun >= scene - 0.001;
+    #else
+    return gun <= scene + 0.001;
+    #endif
+   }
+   sampler2D _Other, _LensLayer, _LensMask;
+   float _GunShare, _LensShare;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2D(_MainTex, i.uv);
+    if (tex2D(_LensMask, i.uv).r > 0.5)
+     c.rgb = lerp(c.rgb, tex2D(_LensLayer, i.uv).rgb, _LensShare);
+    else if (gunAt(i.uv))
+     c.rgb = lerp(c.rgb, tex2D(_Other, i.uv).rgb, _GunShare);
+    return c;
+   }
+   ENDCG
+  }
  }
 }

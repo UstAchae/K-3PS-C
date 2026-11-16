@@ -168,7 +168,7 @@ internal static class TwoRenders
         Graphics.ExecuteCommandBuffer(buffer);
         return true;
     }
-    private const int GunAndLensPass = 13;   // NvgTube.shader
+    private const int GunAndLensPass = 14;   // NvgTube.shader
     private static readonly int LensLayerId = Shader.PropertyToID("_LensLayer"), GunShareId = Shader.PropertyToID("_GunShare"), LensShareId = Shader.PropertyToID("_LensShare");
 
     // For SightAtBareEye: where the frame from before the lens is kept, this frame.
@@ -189,8 +189,8 @@ internal static class TwoRenders
         if (!DrawnIntoFrame || !Now || _gunsFrame != Time.frameCount || _shareBare <= 0.001f || _gunRenderers.Count == 0)
             return null;
         shift = turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
-        // On the chessboard always, to be taken apart from what lies behind (TakeEye lays it in solid).
-        shown = 0.5f;
+        // Solid (the user's, 2026-11-16); where its sight's lens is, left out (NightVisionDirect.cs).
+        shown = 1f;
         return _gunRenderers;
     }
 
@@ -203,6 +203,22 @@ internal static class TwoRenders
             return false;
         shift = turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
         return true;
+    }
+
+    // The bare eye's gun's sight lens this frame (NightVisionDirect.cs leaves the gun out there).
+    internal static Renderer? BareLens
+    {
+        get
+        {
+            try
+            {
+                return _lensKept ?? EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight?.LensRenderer;
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 
     // Under the gun in the hands, as gathered (its own model's hierarchy).
@@ -624,14 +640,9 @@ internal static class TwoRenders
         {
             // The sight's lens laid in this frame from the bare eye (SightAtBareEye.cs): the frame from before it, where
             // it differs the lens, the gun's too.
-            bool lens = false;   // (the lens is no longer laid in by the game for the bare eye's gun: DrawLensLayer)
-            material.SetTexture(PreLensId, lens ? _preLens : scene);
-            RenderTexture gunAlone = Kept(ref _gunApart, scene, "Justachae bare eye's gun apart");
-            Graphics.Blit(scene, gunAlone, material, GunAlonePass);
-            RenderTexture without = RenderTexture.GetTemporary(scene.width, scene.height, 0, scene.format);
-            Graphics.Blit(lens ? _preLens : scene, without, material, GunOutPass);
-            Graphics.Blit(without, scene);
-            RenderTexture.ReleaseTemporary(without);
+            // The frame as the bare eye's gun is in it, before the eyepieces: laid back over their picture where the gun
+            // is (the goggle's eye does not see it, nor night vision touch it).
+            Graphics.Blit(scene, Kept(ref _gunApart, scene, "Justachae frame with the bare eye's gun"));
             _gunApartFrame = Time.frameCount;
             return;
         }
