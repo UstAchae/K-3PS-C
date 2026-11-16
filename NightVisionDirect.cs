@@ -645,7 +645,9 @@ internal static partial class NightVisionEyepieces
         int drawn = 0;
         foreach (Renderer r in renderers)
         {
-            if (r == null || !r.gameObject.activeInHierarchy || !FinestLevel(r))
+            // Only what the camera itself would draw: switched off is not drawn (the first-person arms, with the watch, are
+            // switched off in third person, where the body's own arms hold the gun).
+            if (r == null || !r.enabled || r.forceRenderingOff || !r.gameObject.activeInHierarchy || !FinestLevel(r))
                 continue;
             Mesh? mesh = null;
             if (r is SkinnedMeshRenderer skin)
