@@ -49,7 +49,8 @@ internal static class TwoRenders
             _gunRoot = root;
             _handsOf = body;
             _gunLayers = 0;
-            root.GetComponentsInChildren(false, _gunRenderers);
+            // Those switched off now too (a laser's parts that come on with it): each drawn or hidden as it is then.
+            root.GetComponentsInChildren(true, _gunRenderers);
             // The hands and the arms holding it too: one gun, one pair of hands and arms (the user's, 2026-11-15). The arms are
             // the body's model (its sleeves with it), so the body goes along.
             if (body != null)
