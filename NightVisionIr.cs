@@ -602,7 +602,8 @@ internal static partial class NightVisionEyepieces
     //   the goggle's (ThroughScope): off, so that visible lasers are drawn at their own light for the tube to amplify, as
     //   in the lenses' picture, and the IR lasers drawn by us with it on after the transparent things (_opticIrLasers).
     // IkLight lights the IR lights for it in either case (OpticSeesNightVision).
-    private static bool _opticIr;
+    private static bool _opticIr, _opticIrHeldOff;
+    private static float _opticIrWas;
     private static CommandBuffer? _opticIrLasers;
     private static Camera? _opticIrLasersOn;
 
@@ -610,6 +611,19 @@ internal static partial class NightVisionEyepieces
     {
         if (!IrWanted || !OpticPicture.IsCamera(camera))
             return;
+        // Not seen with night vision (the bare eye at the sight, or the goggle not looked through it): no IR in its picture.
+        // The game's own night vision may be on for the FPS camera (K-ENVG-B sets it so), and it draws the IR lasers on every
+        // camera while it is: there the IR laser came into the sight's picture, red (BRNVG's IR brightness) to the bare eye.
+        if (!OpticSeesNightVision())
+        {
+            _opticIrWas = Shader.GetGlobalFloat(NightVisionOnId);
+            if (_opticIrWas > 0f)
+            {
+                Shader.SetGlobalFloat(NightVisionOnId, 0f);
+                _opticIrHeldOff = true;
+            }
+            return;
+        }
         if (OpticOwnNightVision())
         {
             Shader.SetGlobalFloat(NightVisionOnId, 1f);
@@ -667,6 +681,11 @@ internal static partial class NightVisionEyepieces
         {
             _opticIrLasersOn.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, _opticIrLasers);
             _opticIrLasersOn = null;
+        }
+        if (_opticIrHeldOff)
+        {
+            _opticIrHeldOff = false;
+            Shader.SetGlobalFloat(NightVisionOnId, _opticIrWas);
         }
         if (!_opticIr)
             return;
