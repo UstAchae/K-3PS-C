@@ -140,8 +140,7 @@ internal static class TwoRenders
 
     // The bare eye aiming through its sight: behind its lens the goggle eye's picture shows what lies beyond, not its gun,
     // nor the lasers on it (NightVisionIr.cs: drawn apart and added but there).
-    // DIAG BUILD 1.8.77 (installed with the 1.8.75 shaders, which lack NvgIrLight's pass 5): the cut held off.
-    internal static bool LasersCutAtLens => false && Now && _gunsFrame == Time.frameCount && BareLens != null;
+    internal static bool LasersCutAtLens => Now && _gunsFrame == Time.frameCount && BareLens != null;
 
     // The bare eye's gun's sight lens while that eye aims through it (NightVisionDirect.cs leaves the gun out there).
     internal static Renderer? BareLens
