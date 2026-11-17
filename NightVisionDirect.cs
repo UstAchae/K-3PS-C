@@ -236,12 +236,12 @@ internal static partial class NightVisionEyepieces
     private static Matrix4x4 _oldVP;
     private static int _motionFrame = -100;
 
-    // The goggle eye's gun's motion (both guns seen; NvgDirect.shader, pass 18), while it is seen more than through: from
+    // The goggle eye's gun's motion (both guns seen; NvgDirect.shader, pass 17), while it is seen more than through: from
     // its pieces as drawn this frame (DrawGun) against where they stood last frame.
     private static readonly Dictionary<Renderer, Matrix4x4> _oldGunPieces = new Dictionary<Renderer, Matrix4x4>();
     private static Matrix4x4 _gunOldVP;
     private static int _gunMotionFrame = -100;
-    private const int GunMotionPass = 18, BareMotionPass = 19;
+    private const int GunMotionPass = 17, BareMotionPass = 18;
     private static readonly int GunParityId = Shader.PropertyToID("_GunParity");
     private static Vector3 _bareShiftNow, _bareShiftOld;
     private static readonly RenderTexture?[] _bareMotion = new RenderTexture?[1];
@@ -639,20 +639,12 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalTexture(DirectLitNow, DirectLitNow);
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, EvenPass);
-        // Kept apart to the eyepieces' stage, where the gun is laid over their picture (TwoRenders.cs): evened here,
-        // it went into the goggle's picture too.
-        if (gun && !TwoRenders.GunKeptApart)
-        {
-            buffer.Blit(BuiltinRenderTextureType.CameraTarget, DirectLitNow);
-            buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, GunEvenPass);
-        }
         buffer.ReleaseTemporaryRT(DirectLitNow);
     }
 
     // The bare eye's gun (and its hands and arms), drawn from that eye into G-buffers of its own, as the device is; put into
-    // the main camera's after the device (passes 13-15). Skinned ones baked each frame into meshes of their own, kept.
-    private const int GunInsertPass = 13, GunSurfacePass = 14, GunEvenPass = 15, GunLensPass = 16, GunWhichPass = 17;
+    // the main camera's after the device (passes 13, 14). Skinned ones baked each frame into meshes of their own, kept.
+    private const int GunInsertPass = 13, GunSurfacePass = 14, GunLensPass = 15, GunWhichPass = 16;
     private static readonly RenderTexture?[] _gunWhich = new RenderTexture?[1];
     internal static RenderTexture? GunWhichTexture => _gunWhich[0];   // (diagnostics, TwoRenders.Diagnose)
     private static readonly int GunWhichId = Shader.PropertyToID("_GunWhich"), DirectBareAimsId = Shader.PropertyToID("_DirectBareAims");
@@ -794,7 +786,6 @@ internal static partial class NightVisionEyepieces
         Matrix4x4 jittered = main.projectionMatrix, steady = main.nonJitteredProjectionMatrix;
         // The bare eye's gun drawn without the camera's jitter (it is laid over after the frame is smoothed over frames, so
         // it is not smoothed: jittered, half its pixels shimmered); its parts, lens and lasers likewise (BareGunProjection).
-        TwoRenders.GunJitter = Vector2.zero;
         Matrix4x4 bareProjection = steady;
         bareProjection.m22 = projection.m22;
         bareProjection.m23 = projection.m23;
@@ -854,7 +845,7 @@ internal static partial class NightVisionEyepieces
                 _gunDraws.Add((mesh, matrix, source.materials[s], s, source.passes[s], r));
             }
         }
-        bool goggleToo = TwoRenders.BothGuns;
+        bool goggleToo = true;   // both eyes' guns drawn (TwoRenders.cs)
         Matrix4x4 fromEye = Matrix4x4.Translate(-shift);
         _forwardFromBare = fromEye;
         _forwardGoggleToo = goggleToo;

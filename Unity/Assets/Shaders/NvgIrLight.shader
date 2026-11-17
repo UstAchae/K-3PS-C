@@ -9,8 +9,6 @@
 // 3: the layer held over frames as TAA holds a frame: this frame's (its jitter taken out) blended into the last
 //    frame's, followed along the motion vectors and kept within what this frame has about the pixel. The layer is
 //    drawn from the jittered G-buffer but added after the upscale, which does not steady it.
-// 5: as 2, but not where the bare eye's sight lens is (_DirectGunLens, NightVisionDirect.cs): behind it no laser of the
-//    gun is seen at 1x (TwoRenders.LasersCutAtLens).
 // 4: the night-vision ambient's difference on the frame's surfaces (NightVisionAmbient.cs), added into the layer: each
 //    surface's diffuse colour and occlusion from the G-buffer, times the difference of the two ambient probes along its
 //    normal (_NvSh*, packed as Unity packs a probe), as Unity's deferred shading lights a surface by the ambient.
@@ -207,20 +205,6 @@ Shader "Justachae/NVG/IrLight" {
     sh += float3(dot(_NvShBr, b), dot(_NvShBg, b), dot(_NvShBb, b));
     sh += _NvShC.rgb * (n.x * n.x - n.y * n.y);
     return half4(data.diffuseColor * data.occlusion * sh, 0);
-   }
-   ENDCG
-  }
-  Pass {
-   Blend One One
-   CGPROGRAM
-   #pragma vertex vert_img
-   #pragma fragment frag
-   #include "UnityCG.cginc"
-   sampler2D _MainTex, _DirectGunLens;
-   float4 frag (v2f_img i) : SV_Target {
-    if (tex2D(_DirectGunLens, i.uv).r > 0.5)
-     return 0;
-    return float4(tex2D(_MainTex, i.uv).rgb, 0);
    }
    ENDCG
   }

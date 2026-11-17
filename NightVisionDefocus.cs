@@ -198,31 +198,12 @@ internal static partial class NightVisionEyepieces
     private const float DefocusPixelsPerRadianSet = 386f;
     // How much wider (quarter-size pixels) the layers are blurred again for the share they show by (as against a table).
     private const float DefocusShareSigma = 5f;
-    private static RenderTexture? _gatheredQRad, _gatheredBare;
-    private static bool BareEyeBlur;
-
-    // The objective's blur of what is near, laid on a frame by its own depth (TwoRenders.cs: the bare eye's gun, blurred
-    // as the goggle blurs what is near, though not seen through it): made into a temporary, or false.
-    internal static bool BlurNear(Component camera, RenderTexture frame, ref RenderTexture? made)
-    {
-        if (!NearBlurOn || !AtObjective(camera, out Camera view))
-            return false;
-        BareEyeBlur = true;
-        try
-        {
-            return DefocusThrough(view, frame, ref made);
-        }
-        finally
-        {
-            BareEyeBlur = false;
-        }
-    }
+    private static RenderTexture? _gatheredQRad;
     private static readonly int HistoryId = Shader.PropertyToID("_History"), TakeId = Shader.PropertyToID("_Take"), TolId = Shader.PropertyToID("_Tol");
     private const float DefocusTake = 0.35f;
     private static RenderTexture Gathered(RenderTexture current, Material defocus)
     {
-        // The bare eye's gun render (TwoRenders.cs) gathers its own: two views' nearness in one history smeared both.
-        ref RenderTexture? held = ref BareEyeBlur ? ref _gatheredBare : ref _gatheredQRad;
+        ref RenderTexture? held = ref _gatheredQRad;
         if (held == null || held.width != current.width || held.height != current.height)
         {
             held?.Release();

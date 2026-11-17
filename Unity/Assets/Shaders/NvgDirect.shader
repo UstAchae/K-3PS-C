@@ -130,7 +130,7 @@ Shader "Justachae/NVG/Direct" {
  sampler2D _DirectH0, _DirectH1, _DirectH2, _DirectH3;
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectHD);
  float _DirectGoggleShown;
- sampler2D _DirectGunLens;   // where the gun's sight's lens is, from the bare eye (pass 16): the gun left out there
+ sampler2D _DirectGunLens;   // where the gun's sight's lens is, from the bare eye (pass 15): the gun left out there
  float4 _DirectGunTexel;
  bool gunPicked (float2 pixel, float raw) {
   if (!shown(raw) || _DirectGunShown <= 0)
@@ -480,9 +480,8 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 13: the gun (TwoRenders.cs: the bare eye's, drawn from that eye into G-buffers of its own, _DirectG0..3, _DirectGD) put
-  // into the main camera's where it is nearest; seen through (_DirectGunShown below 1), on every other pixel only, what lies
-  // behind kept on the others and the two evened once lit (pass 15).
+  // 13: the guns (TwoRenders.cs: the bare eye's, _DirectG0..3, _DirectGD, and the goggle eye's, _DirectH0..3, _DirectHD, each
+  // drawn into G-buffers of its own) put into the main camera's, each pixel the one gunOf picks.
   Pass {
    // Before whatever the frame has there (the other eye's gun, the frame's own, is not in this eye's way), but the device.
    Cull Off ZWrite On ZTest Always
@@ -545,49 +544,7 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 15 (unused while the gun is laid in solid): the gun seen through, once all is lit: its pixels and what lies behind on the others evened, by _DirectGunShown.
-  Pass {
-   Cull Off ZWrite Off ZTest Always
-   CGPROGRAM
-   #pragma vertex vert
-   #pragma fragment frag
-   #pragma target 3.5
-   sampler2D _DirectLitNow;
-   float4 _DirectTexel;
-   float4 frag (v2f i) : SV_Target {
-    float2 uv = i.screen.xy / i.screen.w;
-    float raw = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
-    if (!shown(raw) || _DirectGunShown >= 0.999 || _DirectGunShown <= 0)
-     discard;
-    // Not behind what the camera has there (the device before it).
-    float scene = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv), gun = mainDepth(inverseDepth(raw));
-    #if defined(UNITY_REVERSED_Z)
-    if (gun < scene - 0.001)
-     discard;
-    #else
-    if (gun > scene + 0.001)
-     discard;
-    #endif
-    float3 own = tex2Dlod(_DirectLitNow, float4(uv, 0, 0)).rgb;
-    bool isGun = checker(i.pos.xy);
-    float3 other = 0;
-    float count = 0;
-    static const float2 steps[4] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1) };
-    [unroll] for (int k = 0; k < 4; k++) {
-     float2 at = uv + steps[k] * _DirectTexel.xy;
-     bool has = shown(SAMPLE_DEPTH_TEXTURE_LOD(_DirectGD, float4(at, 0, 0)));
-     float w = isGun || has ? 1 : 0;
-     other += tex2Dlod(_DirectLitNow, float4(at, 0, 0)).rgb * w;
-     count += w;
-    }
-    if (count <= 0)
-     return float4(own, 1);
-    other /= count;
-    return float4(lerp(isGun ? other : own, isGun ? own : other, _DirectGunShown), 1);
-   }
-   ENDCG
-  }
-  // 16: the gun's sight's lens, from the bare eye, before what of the gun stands in front of it (the gun's own depth): 1.
+  // 15: the gun's sight's lens, from the bare eye, before what of the gun stands in front of it (the gun's own depth): 1.
   Pass {
    Cull Off ZWrite Off ZTest LEqual
    CGPROGRAM
@@ -598,7 +555,7 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 1; }
    ENDCG
   }
-  // 17: which eye's gun pass 13 put in at each pixel, as it decides it: 1 the bare eye's, 0.5 the goggle eye's (TwoRenders.cs
+  // 16: which eye's gun pass 13 put in at each pixel, as it decides it: 1 the bare eye's, 0.5 the goggle eye's (TwoRenders.cs
   // takes the two apart by it; their depths are too near alike to tell them by).
   Pass {
    Cull Off ZWrite Off ZTest Always
@@ -628,7 +585,7 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 18: the goggle eye's gun's own motion on the screen (both guns seen), as pass 3 for the device: the frame is smoothed over
+  // 17: the goggle eye's gun's own motion on the screen (both guns seen), as pass 3 for the device: the frame is smoothed over
   // frames along the motion, and the game's copy of the gun, kept to its shadow, writes none; left to what lay behind, the
   // gun and what was laid round it drifted. Only its front (its own depth), not before the device, not where the bare eye's
   // gun was put in or behind the aiming bare eye's sight lens (those show what lies behind, and keep its motion).
@@ -672,7 +629,7 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 19: the bare eye's gun's own motion on the screen (both guns seen), into a target of its own, for gathering its picture
+  // 18: the bare eye's gun's own motion on the screen (both guns seen), into a target of its own, for gathering its picture
   // over frames (TwoRenders.cs): only its front (its own depth).
   Pass {
    Cull Off ZWrite Off ZTest Always

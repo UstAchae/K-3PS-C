@@ -33,12 +33,6 @@ internal static class LaserReplay
 
         _drawCamera = camera;
         _replayingLaser = true;
-        // A monocular's bare eye aiming (TwoRenders.cs): its gun is drawn from that eye, so the lasers on it are moved by
-        // the opposite of that eye's offset, which is how the camera sees them as that eye does (the whole beam, and the
-        // point where it lands, moved alike).
-        Vector3 bareShift = Vector3.zero;
-        // (Both guns seen: the frame's lasers are the goggle eye's gun's, where they are; the bare eye's apart, NightVisionIr.cs.)
-        bool bare = !TwoRenders.BothGuns && camera.CompareTag("MainCamera") && TwoRenders.SightFromBareEye(camera.transform.rotation, out bareShift);
         try
         {
             foreach (MonoBehaviour laser in DeferredLasers)
@@ -52,10 +46,8 @@ internal static class LaserReplay
                 Quaternion savedRotation = emitter.rotation;
                 if (AimArms.GunCarried && !alreadyMoved)
                     AimArms.CarryWithGun(emitter);
-                if (bare && OnTheGun(emitter))
-                    emitter.position -= bareShift;
                 _laserLateUpdate.Invoke(laser, null);
-                if (AimArms.GunCarried && !alreadyMoved || bare)
+                if (AimArms.GunCarried && !alreadyMoved)
                     emitter.SetPositionAndRotation(saved, savedRotation);
             }
         }

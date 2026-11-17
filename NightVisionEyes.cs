@@ -88,11 +88,8 @@ internal static partial class NightVisionEyepieces
         // Once the device's mount is set for this frame: the camera has been placed by now. The device drawn into the
         // main camera by this mod (NightVisionDirect.cs), its lenses left open, so the lenses' picture is made from the
         // scene behind them; drawn with the eye at the origin, so it does not shake far out in a map.
-        _direct = _directShader != null && !TwoRenders.GunOnly && LensesOn(camera) && PrepareRelative(camera);
+        _direct = _directShader != null && LensesOn(camera) && PrepareRelative(camera);
         if (_direct)
-            HideDevice(camera);
-        // A render of the gun alone (TwoRenders.cs): the device kept out of it.
-        else if (TwoRenders.GunOnly && _body != null)
             HideDevice(camera);
     }
 
@@ -109,8 +106,6 @@ internal static partial class NightVisionEyepieces
         // Whatever comes of this frame, the last one's device is not drawn again, on whichever camera it hangs on.
         if (camera == _directCamera)
             ClearDirect();
-        if (TwoRenders.GunOnly)
-            return;
         if (camera != Camera.main || _body == null || _binocularMaterial == null || _lensNodes.Length == 0)
             return;
         Material binocular = _binocularMaterial;
