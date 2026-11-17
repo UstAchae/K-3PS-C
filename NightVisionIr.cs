@@ -470,6 +470,8 @@ internal static partial class NightVisionEyepieces
                 && gunDepth.width == _bareLasers.width && gunDepth.height == _bareLasers.height)
             {
                 _irLasers.SetRenderTarget(_bareLasers, gunDepth);
+                // Against that gun's depth by the projection it was drawn with (unjittered, the device's planes).
+                _irLasers.SetViewProjectionMatrices(camera.worldToCameraMatrix, BareGunProjection);
                 _irLasers.ClearRenderTarget(false, true, Color.clear);
                 Matrix4x4 toBare = Matrix4x4.Translate(-bareShift);
                 foreach (KeyValuePair<LaserBeam, IrLaser> laser in _irLaserRecords)

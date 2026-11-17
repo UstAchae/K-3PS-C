@@ -153,8 +153,11 @@ Shader "Justachae/NVG/Direct" {
   float rawG = SAMPLE_DEPTH_TEXTURE(_DirectHD, uv);
   bool goggle = shown(rawG), even = checker(pixel);
   if (_DirectBareAims > 0.5) {
-   if (bare) return 1;
-   if (goggle && !even) { raw = rawG; return 2; }
+   // The bare eye aims: its gun on one kind of the chessboard, the goggle eye's (seen through) on the other, what lies
+   // behind wherever either is not: under the bare eye's gun the goggle eye's own view is kept on half the pixels (made
+   // whole from them, TwoRenders.cs), not guessed (filled from around, it showed round the gun as a blurred outline).
+   if (even) return bare ? 1 : 0;
+   if (goggle) { raw = rawG; return 2; }
   } else {
    if (goggle) { raw = rawG; return 2; }
    if (bare && even) return 1;

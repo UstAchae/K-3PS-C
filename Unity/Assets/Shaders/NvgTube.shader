@@ -606,7 +606,9 @@ Shader "Justachae/NVG/Tube" {
      behind = nb > 0 ? behind4 / nb : (mb > 0 ? behindC / mb : own);
     // Where the bare eye's gun was put in, what the goggle eye sees is not in the frame: left out (weight 0), filled from
     // around (pass 17), so that the objective's blur does not spread the bare eye's gun into the goggle's picture.
-    float w = bareHere ? 0 : 1;
+    // Under the bare eye's gun (put in on half the pixels) made from the goggle eye's own pixels next to it; filled from
+    // around (pass 17) only where none is.
+    float w = bareHere && nb + mb + ng + mg <= 0 ? 0 : 1;
     // Behind the aiming bare eye's sight lens (_DirectGunLens): that eye sees through its sight there, and what the goggle
     // eye's picture adds is what lies beyond, not its own gun (the user's, 2026-11-17).
     float share = tex2Dlod(_DirectGunLens, float4(i.uv, 0, 0)).r > 0.5 ? 0 : _GoggleShare;
@@ -637,7 +639,7 @@ Shader "Justachae/NVG/Tube" {
     for (int level = 11; level >= 0; level--) {
      float4 m = tex2Dlod(_MainTex, float4(i.uv, 0, level));
      if (m.a > 0.0001) {
-      filled = any > 0 ? lerp(filled, m.rgb / m.a, saturate(m.a)) : m.rgb / m.a;
+      filled = any > 0 ? lerp(filled, m.rgb / m.a, saturate(m.a * 8)) : m.rgb / m.a;
       any = 1;
      }
     }
@@ -697,7 +699,7 @@ Shader "Justachae/NVG/Tube" {
     for (int level = 11; level >= 0; level--) {
      float2 m = tex2Dlod(_MainTex, float4(i.uv, 0, level)).rg;
      if (m.y > 0.0001) {
-      filled = any > 0 ? lerp(filled, m.x / m.y, saturate(m.y)) : m.x / m.y;
+      filled = any > 0 ? lerp(filled, m.x / m.y, saturate(m.y * 8)) : m.x / m.y;
       any = 1;
      }
     }
