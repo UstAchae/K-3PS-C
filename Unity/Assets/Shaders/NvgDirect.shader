@@ -112,9 +112,14 @@ Shader "Justachae/NVG/Direct" {
  // a monocular, y its eye: 0 left, 1 right, z the fade's power, 0 not at all).
  float4 _DirectMonocular;
  float _DirectSeeThrough;   // the device seen through, all over (F12 夜视仪透明度): 0 solid
+ // Where an eyepiece swung up on its pod is what is seen (pass 19): before no eye, seen by the bare one too, it never fades.
+ sampler2D _DirectRaised;
  float monocularShown (float2 uv) {
   float all = 1 - saturate(_DirectSeeThrough);
   if (_DirectMonocular.x < 0.5 || _DirectMonocular.z <= 0)
+   return all;
+  // An eyepiece swung up on its pod (the ENVG-B's) never fades: before no eye, the bare one sees it too.
+  if (tex2Dlod(_DirectRaised, float4(uv, 0, 0)).r > 0.5)
    return all;
   float s = smoothstep(0, 0.5 + _DirectStrip * 0.5, _DirectMonocular.y > 0.5 ? uv.x : 1 - uv.x);
   return pow(max(s, 1e-5), _DirectMonocular.z) * all;
@@ -655,6 +660,16 @@ Shader "Justachae/NVG/Direct" {
     float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
     return float4(now - old, 0, 1);
    }
+   ENDCG
+  }
+  // 19: an eyepiece swung up on its pod, where it is what the eye sees (on the eye's own depth of the device): kept whole there.
+  Pass {
+   Cull Off ZWrite Off ZTest LEqual
+   CGPROGRAM
+   #pragma vertex raisedVert
+   #pragma fragment frag
+   float4 raisedVert (float4 v : POSITION) : SV_POSITION { return UnityObjectToClipPos(v); }
+   float4 frag () : SV_Target { return 1; }
    ENDCG
   }
  }

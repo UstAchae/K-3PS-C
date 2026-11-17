@@ -23,7 +23,7 @@ internal static partial class NightVisionEyepieces
     // A tube's field, as the half angle off its axis within which a line of sight through its lens finds the
     // picture: wide enough for the whole "8" from where the camera sits behind it, so the lenses go dark only when
     // seen from well off to the side.
-    private const float TubeField = 30f, TubeFieldFade = 5f;
+    private const float TubeFieldFade = 5f;   // the field fades out over this past its edge (half the device's FieldDegrees)
 
     private static readonly int TubeFieldId = Shader.PropertyToID("_TubeField");
     private static readonly int[] TubeAxisIds =
@@ -74,6 +74,10 @@ internal static partial class NightVisionEyepieces
             return false;
         if ((!BinocularOn && !Active) || _eyepieceImage == null || !_eyepieceImage.enabled)
             return false;
+        // Both eyepieces swung all the way away on their pods: the eyes are bare, the device the game's to draw again,
+        // as with it flipped up (the eyes eased back to the camera on the way, below).
+        if (_lensPods.Length > 0 && PodBare(CentreLensA) >= 1f && PodBare(CentreLensB) >= 1f)
+            return false;
         Vector3 mount = _rotator != null ? _rotator.transform.position : _body.position;
         return (mount - camera.transform.position).sqrMagnitude <= MaxEyeDistance * MaxEyeDistance;
     }
@@ -91,7 +95,46 @@ internal static partial class NightVisionEyepieces
         _direct = _directShader != null && LensesOn(camera) && PrepareRelative(camera);
         if (_direct)
             HideDevice(camera);
+        ClaimFusion(camera);
     }
+
+    // A fusion device's eyepieces shown this frame: claimed for EyepieceFusion, with where its right tube looks on the
+    // screen and how far it is down. The ENVG-B lays its thermal into the right tube only (the wearer's right, of the
+    // two eyepieces the one further along the camera's right); the left stays the tube's own.
+    private static Vector4 _fusedTubes;
+    private static void ClaimFusion(Camera camera)
+    {
+        if (!_device.Fusion || _lensNodes.Length == 0 || !LensesOn(camera))
+            return;
+        // Which is which by where the eyepieces stand down before the eyes (not where a pod has swung one).
+        int indexB = Mathf.Min(CentreLensB, _lensNodes.Length - 1);
+        Transform a = _lensRest[CentreLensA], b = _lensRest[indexB];
+        Vector3 right = camera.transform.right;
+        float middle = (Vector3.Dot(a.position, right) + Vector3.Dot(b.position, right)) * 0.5f;
+        bool aRight = Vector3.Dot(a.position, right) >= Vector3.Dot(b.position, right);
+        Transform rightTube = aRight ? a : b;
+        // The right eyepiece swung away from the eye: its tube is off, and there is nothing to lay the thermal into.
+        // Until then, as it fades out (and K-ENVG-B's thermal with it), still laid in.
+        if (PodGone(aRight ? CentreLensA : indexB) >= 1f)
+            return;
+        for (int i = 0; i < 4; i++)
+            _fusedTubes[i] = i < _lensRest.Length && Vector3.Dot(_lensRest[i].position, right) > middle ? 1f : 0f;
+        Vector3 axis = -rightTube.forward;
+        Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
+        Vector3 ahead = camera.worldToCameraMatrix.MultiplyPoint3x4(camera.transform.position + axis * 100f);
+        Vector4 clip = projection * new Vector4(ahead.x, ahead.y, ahead.z, 1f);
+        Vector2 uv = clip.w > 1e-4f ? new Vector2(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f) : new Vector2(0.5f, 0.5f);
+        float radius = 0.5f * Mathf.Tan(_device.FieldDegrees * 0.5f * Mathf.Deg2Rad) * projection.m11;
+        Interop.EyepieceFusion.FieldInMainUv = new Vector4(uv.x, uv.y, radius, camera.aspect);
+        Interop.EyepieceFusion.Deployed = _flip;
+        Interop.EyepieceFusion.ClaimedFrame = Time.frameCount;
+        if (!_fusionClaimNoted)
+        {
+            _fusionClaimNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the eyepieces claim this device for another mod's picture (field at {uv.x:F3},{uv.y:F3}, radius {radius:F3}; its picture {(Interop.EyepieceFusion.Fuse != null ? "offered" : "not offered yet")}).");
+        }
+    }
+    private static bool _fusionClaimNoted;
 
     internal static void OnCameraPostRender(Camera camera)
     {
@@ -114,7 +157,8 @@ internal static partial class NightVisionEyepieces
         binocular.SetMatrix(NightVisionVpId, camera.nonJitteredProjectionMatrix * camera.worldToCameraMatrix);
         for (int i = 0; i < TubeAxisIds.Length; i++)
             binocular.SetVector(TubeAxisIds[i], -_lensNodes[i].forward);
-        binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((TubeField + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(TubeField * Mathf.Deg2Rad), 0f, 0f));
+        float half = _device.FieldDegrees * 0.5f;
+        binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((half + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(half * Mathf.Deg2Rad), 0f, 0f));
 
         ShadeMain(camera, !_direct);
         if (!_direct)
@@ -131,16 +175,31 @@ internal static partial class NightVisionEyepieces
     private static void RenderLenses(Camera camera, Material binocular, Transform view, Vector3 position)
     {
         Vector3 right = view.right;
-        Vector3 placeA = FromCamera(_lensNodes[CentreLensA], position).GetColumn(3), placeB = FromCamera(_lensNodes[CentreLensB], position).GetColumn(3);
+        // The eyes by where the eyepieces stand down before them, whether or not a pod has swung one away.
+        Vector3 placeA = FromCamera(_lensRest[CentreLensA], position).GetColumn(3), placeB = FromCamera(_lensRest[CentreLensB], position).GetColumn(3);
         float a = Vector3.Dot(placeA, right), b = Vector3.Dot(placeB, right);
         // A monocular's two renders (TwoRenders.cs): the goggle's eye behind its lens, across from the head's middle.
         if (_device.Monocular)
             TwoRenders.SeeLens(a + CameraPosition.Horizontal);
         // A monocular is before one eye only: over the other eye's half the device fades out toward the edge. Which eye, by where its lens
         // is from the head's middle, not from the camera: gone over to the aiming eye, the camera is right behind a lens before that eye.
-        // No monocular's fade: a monocular is seen from each eye in a render of its own (TwoRenders.cs); a binocular's
-        // two halves as ever.
+        // A binocular with one eyepiece swung away on its pod (the ENVG-B's): seen as a monocular from the one left, as the
+        // PVS-14 is (TwoRenders.cs: the camera at that eye, both eyes' guns); both swung all the way away, the game draws the
+        // device (LensesOn).
+        bool podMono = PodMonocular(out int lone, out _);
+        if (podMono)
+            TwoRenders.SeeLens((lone == CentreLensA ? a : b) + CameraPosition.Horizontal);
+        bool asMonocular = _device.Monocular || podMono;
         int monocular = -1;
+        // The one swung up, for the device drawn into the main camera (NightVisionDirect.OnRaisedPod).
+        RaisedPod = RaisedCupPod = null;
+        if (podMono)
+        {
+            Transform? raised = _lensPods[lone == CentreLensA ? CentreLensB : CentreLensA];
+            int which = raised != null ? System.Array.IndexOf(_device.Pods, raised.name) : -1;
+            RaisedPod = raised != null ? raised.name : null;
+            RaisedCupPod = which >= 0 && which < _device.CupPods.Length ? _device.CupPods[which] : null;
+        }
         float seeThrough = Mathf.Clamp01(MonocularSeeThrough);
         float fade = seeThrough <= 0.5f ? seeThrough * 2f : 1f + (seeThrough - 0.5f) * 6f;
         binocular.SetVector(MonocularId, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
@@ -154,15 +213,19 @@ internal static partial class NightVisionEyepieces
         // camera when it has come forward to a sight (NightVisionScope.cs). Where the game draws the device, from the camera.
         // A monocular comes in none of the way once aimed: as the camera goes over to the aiming eye, and back as it returns.
         Vector3 back = view.forward * ScopePullback;
-        float comesIn = EyeShift * _split * (monocular >= 0 ? 1f - CameraPosition.ViewAimed : 1f);
-        Vector3 EyeShiftOf(float lens) => _direct && !_device.Monocular ? right * (lens * comesIn) - back : Vector3.zero;
+        float comesIn = EyeShift * _split;
+        Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
         Vector3 leftPlace = a <= b ? placeA : placeB, rightPlace = a <= b ? placeB : placeA;
-        if (monocular >= 0)
-            leftShift = rightShift = EyeShiftOf(a);
+        // An eye is never let past its eyepiece: brought so near (the mount slid toward the face, the head turned), the
+        // camera went in past the lens's mouth and the lenses had nothing to show from there (the tube's inside, the
+        // scene beyond its far end). Held back along the tube's axis to EyeClear in front of the eyepiece's mouth.
+        Transform leftLens = _lensRest[a <= b ? CentreLensA : CentreLensB], rightLens = _lensRest[a <= b ? CentreLensB : CentreLensA];
+        leftShift = KeptClear(leftLens, position, leftShift);
+        rightShift = KeptClear(rightLens, position, rightShift);
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
-        float split = _device.Monocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
+        float split = asMonocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
@@ -198,9 +261,73 @@ internal static partial class NightVisionEyepieces
         }
         if (_direct)
             DrawDirect(camera, leftShift, rightShift, split, new Vector4(0f, -1f, fade, 0f));
+        FusionField(camera, a <= b ? CentreLensB : CentreLensA, position + rightShift);
     }
     private const float RayFar = 2f;                               // m: the lines of sight's frame (only their direction counts)
     private static float RayNear => Mathf.Max(EyeNear, RayFar / 2e5f);
+
+    // An eye's shift from the camera, with as much added along its eyepiece's axis as keeps it EyeClear in front of the
+    // eyepiece's mouth (its Centre, as the lens node stands), or of its eyecup's lip where it has one: an eye brought
+    // inside the eyecup sees only the cup's inside and the tube's (the mount slid toward the face, the head turned).
+    // Only as far as the device is down (_split), as the eyes themselves come in: flipping up, the eyepiece turns away
+    // over the eye, which then stands "behind" it; held clear in full, the eye was thrown out along the turned axis, the
+    // device drawn here seen from there, and it jumped where the game took it back, from the camera.
+    private const float EyeClear = 0.002f;
+    private static Vector3 KeptClear(Transform lens, Vector3 position, Vector3 shift)
+    {
+        float scale = Mathf.Max(lens.lossyScale.x, 1e-6f);
+        float along = lens.InverseTransformPoint(position + shift).z * scale;
+        float least = (Mathf.Max(_device.RimHeight, 0f) + EyeClear) * scale;
+        if (along >= least)
+            return shift;
+        if (!_eyeHeldNoted)
+        {
+            _eyeHeldNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG: an eye held back in front of its eyepiece ({along * 1000f:F1} mm from its mouth, kept to {least * 1000f:F1} mm).");
+        }
+        return shift + lens.forward * ((least - along) * Mathf.Clamp01(_split));
+    }
+    private static bool _eyeHeldNoted;
+
+    // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
+    // The eyepiece's own glass (its rim, as the lens node stands), projected from where this file puts the eye: the
+    // fused rectangle is sized and placed by it, and so stays still against the eyepiece, as if fixed to it. Not the
+    // narrowest of what the eye looks through (lens, eyecup throat, lip) nor cut by the tube's field: which of those
+    // was narrowest changed with the eye (aimed or not, eyecups on or off), and the rectangle grew and shrank against
+    // the eyepiece. Where the cup's lip or throat hides some of it, it is hidden there like the rest of the picture.
+    private static void FusionField(Camera camera, int rightLens, Vector3 eye)
+    {
+        if (!_device.Fusion || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || rightLens >= _lensNodes.Length)
+            return;
+        Transform lens = _lensNodes[rightLens];
+        float scale = lens.lossyScale.x;
+        Vector4 floor = _lensFloors[rightLens];
+        Vector3 glass = lens.TransformPoint(new Vector3(floor.x, floor.y, floor.z));
+        float rim = floor.w * scale;
+        Matrix4x4 toView = camera.worldToCameraMatrix, projection = camera.nonJitteredProjectionMatrix;
+        float aspect = camera.aspect;
+        // A place, as seen from the eye with the camera's turn, in uv of the screen's height (x stretched by the aspect).
+        bool Seen(Vector3 place, out Vector2 uv)
+        {
+            Vector3 view = toView.MultiplyVector(place - eye);
+            Vector4 clip = projection * new Vector4(view.x, view.y, view.z, 0f);
+            uv = clip.w > 1e-6f ? new Vector2((clip.x / clip.w * 0.5f + 0.5f) * aspect, clip.y / clip.w * 0.5f + 0.5f) : Vector2.zero;
+            return clip.w > 1e-6f;
+        }
+        if (!Seen(glass, out Vector2 centre) || !Seen(glass + lens.right * rim, out Vector2 across) || !Seen(glass + lens.up * rim, out Vector2 up))
+            return;
+        // The rim seen at a slant is an ellipse; its two radii from the centre, along the glass's own axes, span it: the
+        // circle of the same area.
+        Vector2 u = across - centre, v = up - centre;
+        float radius = Mathf.Sqrt(Mathf.Abs(u.x * v.y - u.y * v.x));
+        Interop.EyepieceFusion.FieldInMainUv = new Vector4(centre.x / aspect, centre.y, radius, aspect);
+        if (!_fusionFieldNoted)
+        {
+            _fusionFieldNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the right eyepiece's glass as the right eye sees it: {Interop.EyepieceFusion.FieldInMainUv} (rim {rim * 1000f:F1} mm, {(glass - eye).magnitude * 1000f:F0} mm from the eye).");
+        }
+    }
+    private static bool _fusionFieldNoted;
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.
     private static float Across(Camera camera, Vector3 to)
@@ -334,6 +461,10 @@ internal static partial class NightVisionEyepieces
         }
         for (int centre = CentreLensA; centre <= CentreLensB; centre += CentreLensB - CentreLensA)
         {
+            // An eyepiece swung away on its pod, its tube off: no lens to look into there, only the device. With its card
+            // still drawn, the composite and the device drawn into the main camera left a lens-shaped hole in it.
+            if (PodGone(centre) >= 1f)
+                continue;
             Transform a = _lensNodes[centre], b = _lensNodes[centre + 1];
             Vector3 normal = (a.forward + b.forward).normalized;
             Vector3 pa = (fromEye * FromCamera(a, cameraPlace)).GetColumn(3), pb = (fromEye * FromCamera(b, cameraPlace)).GetColumn(3);

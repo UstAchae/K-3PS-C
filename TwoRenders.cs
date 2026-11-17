@@ -16,7 +16,8 @@ namespace EFTNewCamera;
 // to its shadow; the sight's lens is laid by the game while the goggle eye aims, by DrawLensLayer while the bare eye does.
 internal static class TwoRenders
 {
-    internal static bool Now => NightVisionEyepieces.DownOrFlipping && NightVisionEyepieces.MonocularWorn;
+    // (Also the ENVG-B with one eyepiece swung away on its pod: NightVisionEyepieces.PodMonocular.)
+    internal static bool Now => NightVisionEyepieces.DownOrFlipping && NightVisionEyepieces.MonocularNow;
 
     // F12 单筒：裸眼瞄准时分划的透明度: the bare eye's sight lens seen through (0 solid).
     internal static float BareLensSeeThrough = 0.5f;
@@ -34,7 +35,9 @@ internal static class TwoRenders
     private static float _goggleEye = 0.03f;
     private static float BareEye => -_goggleEye;
     // As the goggle flips down the eyes go out to their places from where the camera would be, and back as it flips up.
-    private static float Apart => Mathf.SmoothStep(0f, 1f, NightVisionEyepieces.Flip);
+    // An eyepiece swung away on its pod: as far as that swing has gone too.
+    private static float Apart => Mathf.SmoothStep(0f, 1f, NightVisionEyepieces.Flip)
+        * (NightVisionEyepieces.MonocularWorn || !NightVisionEyepieces.PodMonocular(out _, out float pod) ? 1f : pod);
     internal static float Place(float across) => Now ? Mathf.Lerp(across, _goggleEye, Apart) : across;
     private static Vector3 BareShift(Quaternion turn) => turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
 

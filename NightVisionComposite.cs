@@ -47,7 +47,9 @@ internal static partial class NightVisionEyepieces
     internal static string Picture = PictureGame;
 
     // BRNVG's picture: chosen, and BRNVG there (chosen without it, the game's).
-    private static bool UseBrnvg => Picture == PictureBrnvg && BodyVisibility.NightRendererType != null;
+    // Never for a fusion device (EyepieceFusion): its picture is its own mod's (the item's own phosphor, as the game's
+    // filter has it), which BRNVG knows nothing of.
+    private static bool UseBrnvg => Picture == PictureBrnvg && BodyVisibility.NightRendererType != null && !_device.Fusion;
 
     private static EyepieceImage? _eyepieceImage;
 
@@ -140,6 +142,7 @@ internal static partial class NightVisionEyepieces
             from = source;
             to = destination;
         }
+        NoteStage(propagator, staged, from);
         // The experiment (TwoRenders.cs): a gun's render kept, or the goggle eye's gun laid into the scene.
         TwoRenders.BeforeEyepieces(from, _tubeShader);
 
@@ -150,19 +153,25 @@ internal static partial class NightVisionEyepieces
             Graphics.Blit(from, into);
         else
         {
-            RenderTexture? made = null, tubed = null, focused = null;
+            RenderTexture? made = null, tubed = null, focused = null, fused = null, dimmed = null;
             // The steps at the head of this file, in order.
             ScopeLensStep(camera, from);
             Texture picture = LensPicture(camera, ThroughObjective(camera, ForTube(from, ref tubed), ref focused), ref made);
             picture = EaseGrain(picture, ref made);
+            picture = TubesGain(picture, ref dimmed);
+            Texture? fusedPicture = Fused(picture, ref fused);
             ReleaseMask();
-            Compose(composite, glow, from, into, picture);
+            Compose(composite, glow, from, into, picture, fusedPicture);
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
             if (tubed != null)
                 RenderTexture.ReleaseTemporary(tubed);
             if (focused != null)
                 RenderTexture.ReleaseTemporary(focused);
+            if (fused != null)
+                RenderTexture.ReleaseTemporary(fused);
+            if (dimmed != null)
+                RenderTexture.ReleaseTemporary(dimmed);
         }
         // The experiment (TwoRenders.cs): the bare eye's gun laid over at half.
         TwoRenders.TakeEye(into, _tubeShader);
@@ -173,6 +182,49 @@ internal static partial class NightVisionEyepieces
         }
         if (staged)
             propagator!.ReleaseSourceDestination(from, to);
+    }
+
+    // Another mod's picture laid into the tube's (EyepieceFusion), on a frame the eyepieces claimed for it: for the
+    // tubes it goes into (_fusedTubes), the others keep the tube's own. Null when there is none this frame.
+    private static bool _fuseFailed, _fuseNoted;
+    private static Texture? Fused(Texture picture, ref RenderTexture? fused)
+    {
+        Func<RenderTexture, RenderTexture, bool>? fuse = Interop.EyepieceFusion.Fuse;
+        if (fuse == null || _fuseFailed || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || picture is not RenderTexture i2)
+            return null;
+        fused = RenderTexture.GetTemporary(i2.width, i2.height, 0, i2.format);
+        bool wrote;
+        try
+        {
+            wrote = fuse(i2, fused);
+        }
+        catch (Exception e)
+        {
+            _fuseFailed = true;
+            NewCameraPlugin.Log?.LogError($"NVG fusion: the other mod's picture failed, the eyepieces show the tube's alone from now on: {e}");
+            return null;
+        }
+        if (wrote && !_fuseNoted)
+        {
+            _fuseNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the other mod's picture laid into the eyepieces ({i2.width}x{i2.height} {i2.format}; tubes {_fusedTubes}).");
+        }
+        return wrote ? fused : null;
+    }
+
+    // Once: the frame's format at the eyepieces' stage, and whether the SSAA stage has taken it to display range by then
+    // (PrismEffects' HDR to LDR), for a mod laying its picture in (EyepieceFusion).
+    private static bool _stageNoted;
+    private static readonly HarmonyLib.AccessTools.FieldRef<SSAAPropagator, bool>? StageHdr =
+        HarmonyLib.AccessTools.Field(typeof(SSAAPropagator), "_HDRSourceDestination") != null
+            ? HarmonyLib.AccessTools.FieldRefAccess<SSAAPropagator, bool>("_HDRSourceDestination") : null;
+    private static void NoteStage(SSAAPropagator? propagator, bool staged, RenderTexture from)
+    {
+        if (_stageNoted)
+            return;
+        _stageNoted = true;
+        string hdr = propagator != null && StageHdr != null ? (StageHdr(propagator) ? "still HDR (before the tone mapping)" : "display range (after the tone mapping)") : "unknown";
+        NewCameraPlugin.Log?.LogInfo($"NVG eyepieces: the frame at their stage is {from.width}x{from.height} {from.format}, {(staged ? "from the SSAA stage" : "the camera's own")}, {hdr}.");
     }
 
     // What the lenses show this frame, from the frame as it stands: made into a temporary (made) when it is made here.
@@ -232,6 +284,29 @@ internal static partial class NightVisionEyepieces
     private static readonly int TubeGainId = Shader.PropertyToID("_TubeGain");
     private static readonly int TubeCompressId = Shader.PropertyToID("_TubeCompress");
 
+    // A fusion device's tubes turned down by the other mod (EyepieceFusion.I2Gain): the picture both eyes' tubes show,
+    // and the one handed to it, times the gain (NvgTube.shader, straight). Only on a frame claimed for it.
+    private static bool _tubesGainNoted;
+    private static Texture TubesGain(Texture picture, ref RenderTexture? dimmed)
+    {
+        float gain = Mathf.Clamp01(Interop.EyepieceFusion.I2Gain);
+        // On every frame of a fusion device, claimed or not: with its right eyepiece swung up the left's tube kept the gain
+        // the two had together, and did not jump back to full.
+        if (gain >= 0.999f || _tubeShader == null || !_device.Fusion)
+            return picture;
+        Material tube = _tubeMaterial ??= new Material(_tubeShader) { name = "Justachae NVG tube", hideFlags = HideFlags.DontSave };
+        tube.SetFloat(TubeGainId, gain);
+        tube.SetFloat(TubeCompressId, 0f);
+        dimmed = RenderTexture.GetTemporary(picture.width, picture.height, 0, picture is RenderTexture rt ? rt.format : RenderTextureFormat.ARGB32);
+        Graphics.Blit(picture, dimmed, tube);
+        if (!_tubesGainNoted)
+        {
+            _tubesGainNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the other mod's tube gain laid on both eyes ({gain:F2}).");
+        }
+        return dimmed;
+    }
+
     // Null while there is nothing to change (gain 1, no compression), or without the shader.
     private static Material? TubeMaterial()
     {
@@ -241,15 +316,27 @@ internal static partial class NightVisionEyepieces
     }
 
     // The eyepieces put together over the frame (from) into to, with picture as what the lenses show.
-    private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture)
+    private static readonly int FusedId = Shader.PropertyToID("_Fused");
+    private static readonly int TubeFusedId = Shader.PropertyToID("_TubeFused");
+    private static readonly int FusedRectId = Shader.PropertyToID("_FusedRect");
+    private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture, Texture? fusedPicture)
     {
         composite.SetFloat(ModeId, 1f);
         composite.SetTexture(NightVisionId, picture);
+        composite.SetTexture(FusedId, fusedPicture != null ? fusedPicture : Texture2D.blackTexture);
+        composite.SetVector(TubeFusedId, fusedPicture != null ? _fusedTubes : Vector4.zero);
+        Vector4 field = Interop.EyepieceFusion.FieldInMainUv;
+        Vector2 share = Interop.EyepieceFusion.FusedRect;
+        composite.SetVector(FusedRectId, fusedPicture != null && field.w > 0f
+            ? new Vector4(field.x, field.y, share.x * field.z / field.w, share.y * field.z) : Vector4.zero);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
         composite.SetTexture(GlowId, lit != null ? lit : Texture2D.blackTexture);
         Graphics.Blit(from, to, composite);
         composite.SetTexture(NightVisionId, Texture2D.blackTexture);
+        composite.SetTexture(FusedId, Texture2D.blackTexture);
+        composite.SetVector(TubeFusedId, Vector4.zero);
+        composite.SetVector(FusedRectId, Vector4.zero);
         composite.SetTexture(GlowId, Texture2D.blackTexture);
         if (lit != null)
             RenderTexture.ReleaseTemporary(lit);
