@@ -15,9 +15,13 @@ namespace EFTNewCamera;
 //   (LaserReplay).
 internal static class TwoRenders
 {
-    // (Not the ENVG-B with one eyepiece swung away: the one left is brought to the middle as a binocular's are, the camera
-    // where it is, NightVisionEyes.RenderLenses; the user's, 2026-11-17.)
-    internal static bool Now => NightVisionEyepieces.DownOrFlipping && NightVisionEyepieces.MonocularWorn;
+    // Also the ENVG-B with one eyepiece swung away (NightVisionEyepieces.PodMonocular), but the camera left where it is (it
+    // goes over to the aiming eye only to aim; the one left brought to the middle as a binocular's are,
+    // NightVisionEyes.RenderLenses; the user's, 2026-11-17): the bare eye aiming is then the camera, its gun the camera's.
+    internal static bool Now => NightVisionEyepieces.DownOrFlipping
+        && (NightVisionEyepieces.MonocularWorn || NightVisionEyepieces.PodMonocular(out _, out _));
+    // The camera at the goggle's eye (the PVS-14).
+    private static bool AtGoggleEye => Now && NightVisionEyepieces.MonocularWorn;
 
     // F12 单筒：裸眼瞄准时分划的透明度: the bare eye's sight lens seen through (0 solid).
     internal static float BareLensSeeThrough = 0.5f;
@@ -33,12 +37,12 @@ internal static class TwoRenders
     private static float BareEye => -_goggleEye;
     // As the goggle flips down the eyes go out to their places from where the camera would be, and back as it flips up.
     private static float Apart => Mathf.SmoothStep(0f, 1f, NightVisionEyepieces.Flip);
-    internal static float Place(float across) => Now ? Mathf.Lerp(across, _goggleEye, Apart) : across;
-    private static Vector3 BareShift(Quaternion turn) => turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
+    internal static float Place(float across) => AtGoggleEye ? Mathf.Lerp(across, _goggleEye, Apart) : across;
+    private static Vector3 BareShift(Quaternion turn) => AtGoggleEye ? turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f) : Vector3.zero;
 
     // The eyes from the head's middle while seen this way: as far as the goggle's eyepiece stands, so that the aiming eye
     // (and the gun placed for it, CameraPosition) is behind it as the mount is set (the user's, 2026-11-17).
-    internal static float EyeFromMiddle(float otherwise) => Now ? Mathf.Abs(_goggleEye) : otherwise;
+    internal static float EyeFromMiddle(float otherwise) => AtGoggleEye ? Mathf.Abs(_goggleEye) : otherwise;
 
     // From NightVisionEyes.RenderLenses: the goggle's lens across from the head's middle.
     internal static void SeeLens(float across)

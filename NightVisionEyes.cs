@@ -188,6 +188,9 @@ internal static partial class NightVisionEyepieces
         // to the one left, then the one left alone over the whole frame looked like the whole device moved); both swung all
         // the way away, the game draws the device (LensesOn).
         bool podMono = PodMonocular(out int lone, out _);
+        // (Which side the bare eye is, for its gun and sight while it aims: TwoRenders.cs.)
+        if (podMono)
+            TwoRenders.SeeLens((lone == CentreLensA ? a : b) + CameraPosition.Horizontal);
         bool asMonocular = _device.Monocular;
         int monocular = -1;
         // The one swung up, for the device drawn into the main camera (NightVisionDirect.OnRaisedPod).
