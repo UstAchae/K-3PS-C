@@ -179,6 +179,8 @@ internal static class TwoRenders
         buffer.Blit(ApartTempId, _depthFill, material, DepthWeighPass);
         buffer.GenerateMips(_depthFill);
         buffer.Blit(_depthFill, _goggleDepthNow, material, DepthPullPass);
+        if (_capIndex >= 0)
+            buffer.Blit(UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, CaptureTexture(ref _capGoggle, w, h, RenderTextureFormat.ARGBHalf, "Justachae capture goggle frame"));
         buffer.ReleaseTemporaryRT(ApartTempId);
         _apartFrame = Time.frameCount;
     }
@@ -438,6 +440,7 @@ internal static class TwoRenders
         if (!Now || _gunsFrame == Time.frameCount)
             return;
         _gunsFrame = Time.frameCount;
+        CapturePlan();
         Camera? main = Camera.main;
         if (main == null || !main.isActiveAndEnabled)
             return;
@@ -753,11 +756,87 @@ internal static class TwoRenders
         _apartBuffer?.Clear();
         NightVisionEyepieces.EmptyGunForward();
         Diagnose();
+        CaptureNow();
     }
 
     // DIAGNOSTICS (both guns, 2026-11-16; to come out once the cause is found): every two seconds while a monocular is
     // down, the shares, whether the steps ran, and what the map of which eye's gun each pixel was given holds, read back.
     private static int _diagNext, _diagBefore, _diagTake;
+
+    // CAPTURE (diagnostics, 2026-11-17; to come out once the shimmer is found): while the bare eye aims, every ten seconds
+    // four frames in a row, raw: the bare eye's gun taken apart, the goggle eye's frame filled (before the eyepieces), its
+    // depth filled, the frame after the eyepieces before the gun is laid over, and the final frame; written to
+    // .codex-work/nvgdump/both as set_frame_name_WxH_format.raw.
+    private static int _capNext = 300, _capIndex = -1, _capSet;
+    private static RenderTexture? _capGoggle, _capFinal, _capBefore;
+    private const string CaptureFolder = "D:/games/SPT-4.1.6/.codex-work/nvgdump/both";
+
+    private static void CapturePlan()
+    {
+        if (_capIndex >= 0 && ++_capIndex > 3)
+            _capIndex = -1;
+        if (_capIndex < 0 && BothGuns && BareAims && Time.frameCount >= _capNext)
+        {
+            _capIndex = 0;
+            _capNext = Time.frameCount + 600;
+            _capSet++;
+        }
+    }
+
+    private static RenderTexture CaptureTexture(ref RenderTexture? kept, int w, int h, RenderTextureFormat format, string name)
+    {
+        if (kept == null || kept.width != w || kept.height != h)
+        {
+            if (kept != null)
+            {
+                kept.Release();
+                Object.Destroy(kept);
+            }
+            kept = new RenderTexture(w, h, 0, format) { name = name, hideFlags = HideFlags.DontSave };
+            kept.Create();
+        }
+        return kept;
+    }
+
+    private static void CaptureNow()
+    {
+        if (_capIndex < 0 || _gunsFrame != Time.frameCount)
+            return;
+        try
+        {
+            System.IO.Directory.CreateDirectory(CaptureFolder);
+        }
+        catch
+        {
+            return;
+        }
+        int set = _capSet, frame = _capIndex;
+        void Save(RenderTexture? texture, string name)
+        {
+            if (texture == null)
+                return;
+            string path = $"{CaptureFolder}/s{set}_f{frame}_{name}_{texture.width}x{texture.height}_{texture.format}.raw";
+            UnityEngine.Rendering.AsyncGPUReadback.Request(texture, 0, request =>
+            {
+                if (request.hasError)
+                    return;
+                try
+                {
+                    System.IO.File.WriteAllBytes(path, request.GetData<byte>().ToArray());
+                }
+                catch
+                {
+                }
+            });
+        }
+        Save(_bareView, "bare");
+        Save(_capGoggle, "goggle");
+        Save(_goggleDepthNow, "depth");
+        Save(_capBefore, "before");
+        Save(_capFinal, "final");
+        if (frame == 0)
+            NewCameraPlugin.Log?.LogInfo($"Both guns capture: set {set} at frame {Time.frameCount}, jitter ({GunJitter.x * 1707f:F3}, {GunJitter.y * 960f:F3}) px");
+    }
     private static void Diagnose()
     {
         if (!BothGuns || !Now || Time.frameCount < _diagNext)
@@ -996,6 +1075,11 @@ internal static class TwoRenders
             laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
             laying.SetVector(GunJitterId, new Vector4(GunJitter.x, GunJitter.y, 0f, 0f));
             Graphics.Blit(frame, into, laying, GunAndLensPass);
+            if (_capIndex >= 0)
+            {
+                Graphics.Blit(frame, CaptureTexture(ref _capBefore, into.width, into.height, RenderTextureFormat.ARGBHalf, "Justachae capture before laying"));
+                Graphics.Blit(into, CaptureTexture(ref _capFinal, into.width, into.height, RenderTextureFormat.ARGBHalf, "Justachae capture final"));
+            }
             RenderTexture.ReleaseTemporary(frame);
             return;
         }
