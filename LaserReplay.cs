@@ -35,11 +35,16 @@ internal static class LaserReplay
 
         _drawCamera = camera;
         _replayingLaser = true;
+        bool opticBare = OpticPicture.IsCamera(camera) && !NightVisionEyepieces.SightSeenWithNightVision;
         try
         {
             foreach (MonoBehaviour laser in DeferredLasers)
             {
                 if (laser == null || !laser.isActiveAndEnabled)
+                    continue;
+                // An IR laser not drawn into a sight's picture that is not seen with night vision (the bare eye at it): BRNVG
+                // gives IR beams their light whatever the goggle is, and there it showed red to the bare eye.
+                if (opticBare && laser is LaserBeam beam && beam.BeamMaterial != null && beam.BeamMaterial.name == "LaserBeamIk")
                     continue;
 
                 Transform emitter = laser.transform;

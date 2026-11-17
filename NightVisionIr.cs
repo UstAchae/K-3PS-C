@@ -667,6 +667,9 @@ internal static partial class NightVisionEyepieces
         return 1;
     }
 
+    // For LaserReplay: the sight's picture is seen with night vision (else no IR laser drawn into it).
+    internal static bool SightSeenWithNightVision => OpticSeesNightVision();
+
     // The sight's own night vision on: its picture is the game's own night-vision one.
     private static bool OpticOwnNightVision()
     {
