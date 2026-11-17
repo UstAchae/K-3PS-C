@@ -42,8 +42,6 @@ internal static partial class NightVisionEyepieces
     // A device with eyepieces down, or on its way down or up (TwoRenders.cs: the frame rendered from each eye then).
     internal static bool DownOrFlipping => _body != null && _lensNodes.Length > 0 && (Active || _flip > 0.001f);
     internal static bool MonocularWorn => _body != null && _device.Monocular;
-    // Seen as a monocular now: one worn, or a binocular with an eyepiece swung away (PodMonocular).
-    internal static bool MonocularNow => MonocularWorn || PodMonocular(out _, out _);
     internal static float Flip => _flip;
 
     private struct Tube
@@ -318,9 +316,9 @@ internal static partial class NightVisionEyepieces
     private static float PodBare(int tube) => Mathf.SmoothStep(0f, 1f, PodAngle(tube) / PodFadeDegrees - 1f);
 
     // A binocular with one eyepiece swung away on its pod (the ENVG-B's) and the other still before its eye, or both on their
-    // way away until the last is all the way: seen as a monocular from the one left (lone, the less far of the two;
-    // TwoRenders.cs). apart: how far the eyes have gone out to their places, over the first stretch of the other's swing,
-    // and back over the last of the second's.
+    // way away until the last is all the way: the one left (lone, the less far of the two) seen alone, brought to the middle
+    // as a binocular's eyepieces are (NightVisionEyes.RenderLenses). apart: how far the other has swung, over the first
+    // stretch of its swing, and back over the last of the second's.
     internal static bool PodMonocular(out int lone, out float apart)
     {
         lone = -1;

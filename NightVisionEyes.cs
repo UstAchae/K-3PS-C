@@ -183,13 +183,11 @@ internal static partial class NightVisionEyepieces
             TwoRenders.SeeLens(a + CameraPosition.Horizontal);
         // A monocular is before one eye only: over the other eye's half the device fades out toward the edge. Which eye, by where its lens
         // is from the head's middle, not from the camera: gone over to the aiming eye, the camera is right behind a lens before that eye.
-        // A binocular with one eyepiece swung away on its pod (the ENVG-B's): seen as a monocular from the one left, as the
-        // PVS-14 is (TwoRenders.cs: the camera at that eye, both eyes' guns); both swung all the way away, the game draws the
-        // device (LensesOn).
+        // A binocular with one eyepiece swung away on its pod (the ENVG-B's): the one left seen alone over the whole frame,
+        // brought to the middle as both are when down, the camera where it is (the user's, 2026-11-17: it went over to that
+        // eye before); both swung all the way away, the game draws the device (LensesOn).
         bool podMono = PodMonocular(out int lone, out _);
-        if (podMono)
-            TwoRenders.SeeLens((lone == CentreLensA ? a : b) + CameraPosition.Horizontal);
-        bool asMonocular = _device.Monocular || podMono;
+        bool asMonocular = _device.Monocular;
         int monocular = -1;
         // The one swung up, for the device drawn into the main camera (NightVisionDirect.OnRaisedPod).
         RaisedPod = RaisedCupPod = null;

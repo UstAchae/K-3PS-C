@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.84";
+    public const string PluginVersion = "1.8.85";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -181,9 +181,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<float> bareGunSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "单筒：裸眼瞄准时分划的透明度", 0.5f,
             new ConfigDescription("戴单筒夜视仪（PVS-14）、用没戴夜视仪的那只眼瞄准时，那只眼看到的倍镜分划（镜片里的画面）有多透明：0 是实心，1 是看不见，默认 0.5。透过它看到的是后面的画面，在目镜区域里就是夜视画面。枪本身是实心的。",
                 new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
-        ConfigEntry<float> bareGunTransparency = SettingsLayout.Bind(Config, "头戴式成像装备", "单筒：非瞄准眼看到的分划的透明度", 0.5f,
-            new ConfigDescription("戴单筒夜视仪（PVS-14）、用戴夜视仪的那只眼瞄准时，没戴夜视仪的那只眼从旁边看到的倍镜镜片（分划和镜片里的画面）叠在画面上，这里是它有多透明：0 是实心，1 是看不见，默认 0.5。不会叠在正在瞄准的镜片上。只画瞄准眼看到的那一把枪。",
-                new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
         ConfigEntry<bool> nearBlur = SettingsLayout.Bind(Config, "头戴式成像装备", "近处虚化", true,
             new ConfigDescription("夜视仪的物镜对焦在远处，近处的手、枪和机瞄是虚的，越近越虚，几米外是清楚的，和真实夜视仪的物镜一样。原版夜视和 Borkel's Realistic NVGs 的画面都会这样，热成像不受影响。关掉后目镜里近处也是清楚的。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
@@ -219,7 +216,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             NightVisionEyepieces.LensReflections = reflections.Value;
             NightVisionEyepieces.EyeShift = eyeShift.Value;
             TwoRenders.BareLensSeeThrough = bareGunSeeThrough.Value;
-            TwoRenders.OtherLensSeeThrough = bareGunTransparency.Value;
             NightVisionEyepieces.DeviceSeeThrough = deviceSeeThrough.Value;
             NightVisionEyepieces.RaiseMount = raiseMount.Value;
             NightVisionEyepieces.LowerMount = lowerMount.Value;
@@ -231,7 +227,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 
         eyeShift.SettingChanged += (_, _) => Refresh();
         bareGunSeeThrough.SettingChanged += (_, _) => Refresh();
-        bareGunTransparency.SettingChanged += (_, _) => Refresh();
         deviceSeeThrough.SettingChanged += (_, _) => Refresh();
         picture.SettingChanged += (_, _) => Refresh();
         raiseMount.SettingChanged += (_, _) => Refresh();
