@@ -225,7 +225,17 @@ internal static partial class NightVisionEyepieces
         rightShift = KeptClear(rightLens, position, rightShift);
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
-        float split = asMonocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
+        // By each eyepiece's glass's centre (its lens floor), not its node (the ENVG-B's stand off its glass): halfway between
+        // where each eye sees its own eyepiece's middle (the user's, 2026-11-17).
+        Vector3 GlassOf(int tube) => tube < _lensFloors.Length ? FromCamera(_lensRest[tube], position).MultiplyPoint3x4(_lensFloors[tube]) : (Vector3)FromCamera(_lensRest[tube], position).GetColumn(3);
+        Vector3 leftGlass = GlassOf(a <= b ? CentreLensA : CentreLensB), rightGlass = GlassOf(a <= b ? CentreLensB : CentreLensA);
+        float split = asMonocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftGlass - leftShift) + Across(camera, rightGlass - rightShift)), 0.2f, 0.8f);
+        if (!asMonocular && _splitNotedFor != _body)
+        {
+            _splitNotedFor = _body;
+            float byNodes = 0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift));
+            NewCameraPlugin.Log?.LogInfo($"NVG eyes: the halves meet at {split:F3} by the eyepieces' glass ({Across(camera, leftGlass - leftShift):F3}, {Across(camera, rightGlass - rightShift):F3}); by their nodes it was {byNodes:F3} ({Across(camera, leftPlace - leftShift):F3}, {Across(camera, rightPlace - rightShift):F3}).");
+        }
         // One eyepiece swung away: the one left takes the whole frame (half each, the two lenses' pictures met at the middle,
         // and what the other mod lays into both, its HUD's letters, split there out of line).
         if (podMono)
@@ -267,6 +277,7 @@ internal static partial class NightVisionEyepieces
             DrawDirect(camera, leftShift, rightShift, split, new Vector4(0f, -1f, fade, 0f));
         FusionField(camera, a <= b ? CentreLensB : CentreLensA, position + rightShift);
     }
+    private static Transform? _splitNotedFor;
     private const float RayFar = 2f;                               // m: the lines of sight's frame (only their direction counts)
     private static float RayNear => Mathf.Max(EyeNear, RayFar / 2e5f);
 

@@ -92,12 +92,15 @@ Shader "Justachae/NVG/Tube" {
    }
    sampler2D _Other, _LensLayer, _LensMask, _BareLasers;
    // The bare eye's sight's lens while the goggle eye aims: not over the goggle eye's gun (put in where it is, whole).
-   sampler2D _GunWhich14;
+   sampler2D _GunWhich14, _AimLensMask;
    float _LensUnderAiming;
    float _GunShare, _LensShare;
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
     // The bare eye's sight's lens while it aims: only the sight's picture there for that eye.
+    // The goggle eye aiming through its sight: there it sees its sight's picture alone, nothing of the bare eye's laid over.
+    if (tex2D(_AimLensMask, i.uv).r > 0.5)
+     return c;
     if (tex2D(_LensMask, i.uv).r > 0.5 && (_LensUnderAiming <= 0 || tex2D(_GunWhich14, i.uv).r < 0.25 || tex2D(_GunWhich14, i.uv).r > 0.75)) {
      c.rgb = lerp(c.rgb, tex2D(_LensLayer, i.uv).rgb, _LensShare);
      return c;

@@ -390,7 +390,8 @@ internal static class TwoRenders
 
     // ---------------------------------------------------------------- laying the bare eye's gun over (NvgTube.shader, pass 2)
 
-    private static RenderTexture? _lensLayer, _lensSolid;
+    private static RenderTexture? _lensLayer, _lensSolid, _aimLensMask;
+    private static readonly int AimLensMaskId = Shader.PropertyToID("_AimLensMask");
     private static UnityEngine.Rendering.CommandBuffer? _lensBuffer;
     private static readonly int OtherId = Shader.PropertyToID("_Other"), LensLayerId = Shader.PropertyToID("_LensLayer"),
         LensMaskId = Shader.PropertyToID("_LensMask"), GunShareId = Shader.PropertyToID("_GunShare"), LensShareId = Shader.PropertyToID("_LensShare"),
@@ -420,6 +421,7 @@ internal static class TwoRenders
         // over the goggle eye's gun.
         laying.SetFloat(LensShareId, BareAims ? LensOpacity * _shareBare : BareGunOpacity);
         laying.SetFloat(LensUnderAimingId, BareAims ? 0f : 1f);
+        laying.SetTexture(AimLensMaskId, lens && !BareAims ? _aimLensMask : Texture2D.blackTexture);
         laying.SetTexture(GunWhich14Id, NightVisionEyepieces.GunWhichTexture ?? (Texture)Texture2D.blackTexture);
         laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
         Graphics.Blit(frame, into, laying, GunAndLensPass);
@@ -461,6 +463,16 @@ internal static class TwoRenders
         buffer.SetRenderTarget(solid);
         buffer.ClearRenderTarget(false, true, Color.clear);
         buffer.DrawRenderer(lensRenderer, material, 0, LensSolidPass);
+        // While the goggle eye aims: where the game lays the sight's lens for it (from the camera), kept clear of the bare
+        // eye's gun, lasers and lens (TakeEye).
+        if (!BareAims)
+        {
+            RenderTexture aimed = Kept(ref _aimLensMask, into.width, into.height, RenderTextureFormat.R8, "Justachae aimed sight lens mask");
+            buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix, projection);
+            buffer.SetRenderTarget(aimed);
+            buffer.ClearRenderTarget(false, true, Color.clear);
+            buffer.DrawRenderer(lensRenderer, material, 0, LensSolidPass);
+        }
         buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
         Graphics.ExecuteCommandBuffer(buffer);
