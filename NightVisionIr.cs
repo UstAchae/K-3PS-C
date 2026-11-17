@@ -113,8 +113,10 @@ internal static partial class NightVisionEyepieces
     // camera culls, before this frame's lasers are drawn (OnCameraPreRenderIr, which clears them every frame).
     internal static void LasersAfterUpscale(CommandBuffer buffer, RenderTexture target)
     {
+        _diagFills++;
         if (_irNaked == null || _irAdd == null || !LasersLifted || LiftedInFrame)
             return;
+        _diagAdds++;
         buffer.Blit(_irNaked, target, _irAdd, TwoRenders.LasersCutAtLens ? LaserAddCutPass : LaserAddPass);
     }
 
@@ -228,7 +230,7 @@ internal static partial class NightVisionEyepieces
     // DIAGNOSTICS (lasers, 2026-11-17; to come out once found): every two seconds, each laser held back on the player or the
     // gun, as it stands: visible or IR, on, its intensity and colour, what BRNVG takes the goggle to be, the replay, and
     // its beam and point as last drawn (the bare eye's copy is moved from these).
-    private static int _laserDiagNext;
+    private static int _laserDiagNext, _diagFills, _diagAdds, _diagNaked;
     private static System.Reflection.FieldInfo? _brnvgOn;
     private static bool _brnvgLooked;
     internal static void LaserDiag()
@@ -244,7 +246,8 @@ internal static partial class NightVisionEyepieces
         object? brnvg = _brnvgOn?.GetValue(null);
         var sb = new System.Text.StringBuilder();
         TwoRenders.BareLaserShift(Camera.main != null ? Camera.main : null!, out Vector3 bareShift);
-        sb.Append($"Lasers: held {LaserReplay.Held.Count}, replayed {(LaserReplay.ReplayedFrame == Time.frameCount ? LaserReplay.ReplayedCount : 0)} this frame, BRNVG NVG on {brnvg}, IR wanted {IrWanted}, lifted {LasersLifted}, goggle down {DownOrFlipping}, records {_irLaserRecords.Count} (this frame {_irMeshesFrame == Time.frameCount}), bare shift {bareShift.magnitude * 1000f:F0} mm");
+        sb.Append($"Lasers: held {LaserReplay.Held.Count}, replayed {(LaserReplay.ReplayedFrame == Time.frameCount ? LaserReplay.ReplayedCount : 0)} this frame, BRNVG NVG on {brnvg}, IR wanted {IrWanted}, lifted {LasersLifted}, goggle down {DownOrFlipping}, records {_irLaserRecords.Count} (this frame {_irMeshesFrame == Time.frameCount}), bare shift {bareShift.magnitude * 1000f:F0} mm; upscaled {Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera)}, in frame {LiftedInFrame}; last 120 frames: upscaler buffer filled {_diagFills}, lasers added after it {_diagAdds}, lasers drawn apart {_diagNaked}");
+        _diagFills = _diagAdds = _diagNaked = 0;
         foreach (MonoBehaviour held in LaserReplay.Held)
         {
             if (held is not LaserBeam lb)
@@ -481,6 +484,7 @@ internal static partial class NightVisionEyepieces
                         _irLasers.DrawMesh(m.Mesh, m.Matrix, m.Material, 0, 0, m.Block);
                 }
                 _nakedFrame = Time.frameCount;
+                _diagNaked++;
                 // No upscaler: lifted only to be cut behind the bare eye's sight lens, added back here.
                 if (inFrame)
                     _irLasers.Blit(_irNaked, BuiltinRenderTextureType.CameraTarget, _irAdd!, cut ? LaserAddCutPass : LaserAddPass);
