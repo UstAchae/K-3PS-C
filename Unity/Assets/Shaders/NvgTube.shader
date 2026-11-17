@@ -573,6 +573,7 @@ Shader "Justachae/NVG/Tube" {
    static const float2 around[8] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1), float2(1, 1), float2(-1, 1), float2(1, -1), float2(-1, -1) };
    UNITY_DECLARE_DEPTH_TEXTURE(_DirectHD);
    float _GoggleShare;
+   sampler2D _DirectGunLens;
    // The goggle eye's gun put in here (NvgDirect.shader, pass 13: its depth is what the camera has).
    float4 _GunTexel;   // the camera's own pixels (TwoRenders.FillApart: before the upscale)
    sampler2D _GunWhich;   // which eye's gun was put in here (NvgDirect.shader, pass 17): 1 the bare eye's, 0.5 the goggle eye's
@@ -602,9 +603,12 @@ Shader "Justachae/NVG/Tube" {
     // Where the bare eye's gun was put in, what the goggle eye sees is not in the frame: left out (weight 0), filled from
     // around (pass 17), so that the objective's blur does not spread the bare eye's gun into the goggle's picture.
     float w = bareHere ? 0 : 1;
+    // Behind the aiming bare eye's sight lens (_DirectGunLens): that eye sees through its sight there, and what the goggle
+    // eye's picture adds is what lies beyond, not its own gun (the user's, 2026-11-17).
+    float share = tex2Dlod(_DirectGunLens, float4(i.uv, 0, 0)).r > 0.5 ? 0 : _GoggleShare;
     if (!goggleCovers || !goggleHere && ng <= 0 && mg <= 0)
      return float4(behind * w, w);
-    return float4(lerp(behind, own, _GoggleShare) * w, w);
+    return float4(lerp(behind, own, share) * w, w);
    }
    ENDCG
   }
@@ -640,7 +644,8 @@ Shader "Justachae/NVG/Tube" {
    #include "UnityCG.cginc"
    sampler2D _MainTex;
    float _PartsShare;
-   float4 frag (v2f_img i) : SV_Target { return float4(tex2D(_MainTex, i.uv).rgb, _PartsShare); }
+   sampler2D _DirectGunLens;   // (not behind the aiming bare eye's sight lens, as pass 16)
+   float4 frag (v2f_img i) : SV_Target { return float4(tex2D(_MainTex, i.uv).rgb, tex2D(_DirectGunLens, i.uv).r > 0.5 ? 0 : _PartsShare); }
    ENDCG
   }
   // 19: the camera's depth as the goggle eye has it, weighted: where the bare eye's gun was put in (_GunWhich 1) left out, to be
@@ -654,9 +659,12 @@ Shader "Justachae/NVG/Tube" {
    #pragma target 3.5
    #include "UnityCG.cginc"
    UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
-   sampler2D _GunWhich;
+   sampler2D _GunWhich, _DirectGunLens;
    float4 frag (v2f_img i) : SV_Target {
-    float w = tex2Dlod(_GunWhich, float4(i.uv, 0, 0)).r > 0.75 ? 0 : 1;
+    float which = tex2Dlod(_GunWhich, float4(i.uv, 0, 0)).r;
+    bool goggleGun = which > 0.25 && which < 0.75, lens = tex2Dlod(_DirectGunLens, float4(i.uv, 0, 0)).r > 0.5;
+    // (Behind the aiming bare eye's sight lens the goggle eye's gun is not seen, pass 16: its depth left out too.)
+    float w = which > 0.75 || goggleGun && lens ? 0 : 1;
     return float4(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(i.uv, 0, 0)) * w, w, 0, 0);
    }
    ENDCG
