@@ -268,7 +268,7 @@ internal static partial class NightVisionEyepieces
         tube.SetFloat(TubeGainId, GameLensGain);
         tube.SetFloat(TubeCompressId, GameLensCompress);
         RenderTexture tubed = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
-        Graphics.Blit(frame, tubed, tube);
+        Graphics.Blit(frame, tubed, tube, 0);   // (its pass 0 only: the shader has the two eyes' passes after it)
         Graphics.Blit(tubed, made, filter);
         RenderTexture.ReleaseTemporary(tubed);
         return made;
@@ -298,7 +298,7 @@ internal static partial class NightVisionEyepieces
         tube.SetFloat(TubeGainId, gain);
         tube.SetFloat(TubeCompressId, 0f);
         dimmed = RenderTexture.GetTemporary(picture.width, picture.height, 0, picture is RenderTexture rt ? rt.format : RenderTextureFormat.ARGB32);
-        Graphics.Blit(picture, dimmed, tube);
+        Graphics.Blit(picture, dimmed, tube, 0);
         if (!_tubesGainNoted)
         {
             _tubesGainNoted = true;

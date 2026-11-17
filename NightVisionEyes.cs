@@ -226,6 +226,10 @@ internal static partial class NightVisionEyepieces
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
         float split = asMonocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift)), 0.2f, 0.8f);
+        // One eyepiece swung away: the one left takes the whole frame (half each, the two lenses' pictures met at the middle,
+        // and what the other mod lays into both, its HUD's letters, split there out of line).
+        if (podMono)
+            split = (lone == CentreLensA) == (a <= b) ? 1f + Overscan : -Overscan;
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);

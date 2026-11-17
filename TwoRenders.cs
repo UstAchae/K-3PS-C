@@ -41,6 +41,10 @@ internal static class TwoRenders
     internal static float Place(float across) => Now ? Mathf.Lerp(across, _goggleEye, Apart) : across;
     private static Vector3 BareShift(Quaternion turn) => turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f);
 
+    // The eyes from the head's middle while seen this way: as far as the goggle's eyepiece stands, so that the aiming eye
+    // (and the gun placed for it, CameraPosition) is behind it as the mount is set (the user's, 2026-11-17).
+    internal static float EyeFromMiddle(float otherwise) => Now ? Mathf.Abs(_goggleEye) : otherwise;
+
     // From NightVisionEyes.RenderLenses: the goggle's lens across from the head's middle.
     internal static void SeeLens(float across)
     {
@@ -202,7 +206,7 @@ internal static class TwoRenders
         if (main == null || !main.isActiveAndEnabled || !GatherGun())
             return;
         // Over to the bare eye as the aiming eye goes over to it (CameraPosition: eased as the gun changes shoulders).
-        float toward = CameraPosition.AimingEyeAcross / Mathf.Max(CameraPosition.AimEye, 1e-4f) * Mathf.Sign(BareEye);
+        float toward = CameraPosition.AimingEyeAcross / Mathf.Max(EyeFromMiddle(CameraPosition.AimEye), 1e-4f) * Mathf.Sign(BareEye);
         _shareBare = Mathf.Clamp01(0.5f + 0.5f * toward);
         HideGun(true);
         FillApart(main);
