@@ -65,10 +65,15 @@ internal static partial class NightVisionEyepieces
     // not drawn in its frame, where the upscaler would blend them over frames (they have no motion vectors) and break
     // them up: they are drawn apart, against its depth and not jittered, and added once the upscale is done.
     // Lifted too while the bare eye aims through its sight (TwoRenders.LasersCutAtLens): added back but behind its lens.
-    private static bool LasersLifted => NewCameraSwitch.Enabled && (Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera) || TwoRenders.LasersCutAtLens)
+    // Only while the upscaler's buffer is in fact filled for the camera (last frame or this): the TAA layer's flag stays
+    // as it was when the upscaler stops (the goggle up, after a while), and lasers drawn apart then were never added back,
+    // the visible laser gone (diagnostics of 1.8.78: 120 drawn apart, 0 added, the buffer not filled).
+    private static int _upscaleFillFrame = -10;
+    private static bool UpscalerFilling => _upscaleFillFrame >= Time.frameCount - 1;
+    private static bool LasersLifted => NewCameraSwitch.Enabled && (Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera) && UpscalerFilling || TwoRenders.LasersCutAtLens)
         && LoadShaders() && _irLightShader != null;
     // Lifted only to be cut there (no upscaler): added back in the camera's own frame.
-    private static bool LiftedInFrame => !Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera);
+    private static bool LiftedInFrame => !Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera) || !UpscalerFilling;
     private const int LaserAddPass = 2, LaserAddCutPass = 5;   // NvgIrLight.shader
     private static RenderTexture? _bareLasers, _irCut;
     private static int _bareLasersFrame = -1;
@@ -89,6 +94,7 @@ internal static partial class NightVisionEyepieces
     {
         if (externalCommandBuffer == null || !__instance.CompareTag("MainCamera"))
             return;
+        _upscaleFillFrame = Time.frameCount;
         if (__instance.GetSourceDestination(out RenderTexture source, out _) && source != null)
             LasersAfterUpscale(externalCommandBuffer, source);
     }
