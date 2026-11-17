@@ -91,6 +91,10 @@ internal static class TwoRenders
     private static readonly int GoggleShareId = Shader.PropertyToID("_GoggleShare");
     // Which eye's gun is put in whole (NvgDirect.shader, gunOf): the aiming eye's.
     internal static bool BareAims => _shareBare > 0.5f;
+    // The main camera's jitter this frame (uv), as it was when the guns were drawn (NightVisionDirect.DrawGun): taken out of
+    // the bare eye's gun as it is laid over after the frame is smoothed (NvgTube.shader, pass 14).
+    internal static Vector2 GunJitter;
+    private static readonly int GunJitterId = Shader.PropertyToID("_GunJitter");
 
     // The two eyes' guns taken apart at the camera's own pixels, after all is drawn and before the image effects (the
     // upscale among them mixes the chessboard's pixels, and the diagnostics of 1.8.55 showed the frame at 2560x1440 with the
@@ -759,7 +763,7 @@ internal static class TwoRenders
         if (!BothGuns || !Now || Time.frameCount < _diagNext)
             return;
         _diagNext = Time.frameCount + 120;
-        string head = $"Both guns: shareBare {_shareBare:F2}, bare opacity {BareGunOpacity:F2}, goggle opacity {GoggleGunOpacity:F2}, transparency {BareGunTransparency:F2}, aiming eye across {CameraPosition.AimingEyeAcross:F3}, goggle eye {_goggleEye:F3}, apart {Apart:F2}, gunsFrame now {_gunsFrame == Time.frameCount}; last 120 frames: taken apart {_diagBefore}, laid over {_diagTake}";
+        string head = $"Both guns: shareBare {_shareBare:F2}, bare opacity {BareGunOpacity:F2}, goggle opacity {GoggleGunOpacity:F2}, transparency {BareGunTransparency:F2}, aiming eye across {CameraPosition.AimingEyeAcross:F3}, goggle eye {_goggleEye:F3}, apart {Apart:F2}, jitter ({GunJitter.x * 1707f:F3}, {GunJitter.y * 960f:F3}) px, gunsFrame now {_gunsFrame == Time.frameCount}; last 120 frames: taken apart {_diagBefore}, laid over {_diagTake}";
         _diagBefore = _diagTake = 0;
         RenderTexture? which = NightVisionEyepieces.GunWhichTexture;
         RenderTexture? apart = BothGuns ? _bareView : _gunApart;
@@ -990,6 +994,7 @@ internal static class TwoRenders
             laying.SetFloat(LensUnderAimingId, BothGuns && !BareAims ? 1f : 0f);
             laying.SetTexture(GunWhich14Id, NightVisionEyepieces.GunWhichTexture ?? (Texture)Texture2D.blackTexture);
             laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
+            laying.SetVector(GunJitterId, new Vector4(GunJitter.x, GunJitter.y, 0f, 0f));
             Graphics.Blit(frame, into, laying, GunAndLensPass);
             RenderTexture.ReleaseTemporary(frame);
             return;

@@ -431,6 +431,7 @@ Shader "Justachae/NVG/Tube" {
    // The bare eye's sight's lens while the goggle eye aims: not over the goggle eye's gun (put in where it is, whole).
    sampler2D _GunWhich14;
    float _LensUnderAiming;
+   float4 _GunJitter;
    float _GunShare, _LensShare;
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
@@ -440,9 +441,12 @@ Shader "Justachae/NVG/Tube" {
      return c;
     }
     // The bare eye's gun (pass 15: in alpha where it is), and its lasers as that eye sees them.
-    float4 g = tex2D(_Other, i.uv);
+    // Its picture and lasers were taken from the frame before the frame is smoothed over frames, with the camera's jitter
+    // of this frame in them: taken out (_GunJitter, uv), or they shimmered as heat does.
+    float2 at = i.uv - _GunJitter.xy;
+    float4 g = tex2D(_Other, at);
     c.rgb = lerp(c.rgb, g.rgb, _GunShare * saturate(g.a));
-    c.rgb += tex2D(_BareLasers, i.uv).rgb * _GunShare;
+    c.rgb += tex2D(_BareLasers, at).rgb * _GunShare;
     return c;
    }
    ENDCG

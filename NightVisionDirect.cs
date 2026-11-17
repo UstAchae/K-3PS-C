@@ -711,6 +711,8 @@ internal static partial class NightVisionEyepieces
         // Gathered once (skinned parts baked once), drawn from each eye: the bare eye's (moved by the opposite of its
         // offset) and, both guns seen, the goggle eye's (the camera's own place), each into G-buffers of its own.
         _gunDraws.Clear();
+        Matrix4x4 jittered = main.projectionMatrix, steady = main.nonJitteredProjectionMatrix;
+        TwoRenders.GunJitter = new Vector2((jittered.m02 - steady.m02) * 0.5f, (jittered.m12 - steady.m12) * 0.5f);
         Renderer? aimedLens = TwoRenders.SightLens;
         foreach (Renderer r in renderers)
         {
