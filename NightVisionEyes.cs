@@ -238,12 +238,17 @@ internal static partial class NightVisionEyepieces
             float byNodes = 0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift));
             NewCameraPlugin.Log?.LogInfo($"NVG eyes: the halves meet at {split:F3} by the eyepieces' glass ({Across(camera, leftGlass - leftShift):F3}, {Across(camera, rightGlass - rightShift):F3}); by their nodes it was {byNodes:F3} ({Across(camera, leftPlace - leftShift):F3}, {Across(camera, rightPlace - rightShift):F3}).");
         }
-        // One eyepiece swung away: the halves meet not halfway but where the other eye sees its own eyepiece's place (gone up
-        // with its pod), so the one left is seen whole from its own eye (cut at halfway, its HUD's letters split there).
+        // One eyepiece swung away: the halves meet past the far side of the one left, its cup and housing about its glass
+        // (twice the glass's radius), as its own eye sees it: it is seen whole (cut nearer, it was cut through, the user's,
+        // 2026-11-17), the other eye's half from there on.
         if (podMono)
+        {
+            int loneTube = lone;
+            float rim = (loneTube < _lensFloors.Length ? _lensFloors[loneTube].w : 0.02f) * _body!.lossyScale.x * PodLoneRims;
             split = (lone == CentreLensA) == (a <= b)
-                ? Mathf.Max(split, Mathf.Min(Across(camera, rightGlass - rightShift), 1f))
-                : Mathf.Min(split, Mathf.Max(Across(camera, leftGlass - leftShift), 0f));
+                ? Mathf.Max(split, Mathf.Min(Across(camera, leftGlass + right * rim - leftShift), 1f + Overscan))
+                : Mathf.Min(split, Mathf.Max(Across(camera, rightGlass - right * rim - rightShift), -Overscan));
+        }
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
@@ -349,6 +354,8 @@ internal static partial class NightVisionEyepieces
     private static bool _fusionFieldNoted;
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.
+    private const float PodLoneRims = 2f;   // the eyepiece left seen out to this many of its glass's radii from its middle
+
     private static float Across(Camera camera, Vector3 to)
     {
         Transform view = camera.transform;
