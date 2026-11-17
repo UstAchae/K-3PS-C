@@ -75,7 +75,8 @@ internal static partial class NightVisionEyepieces
     // Lifted only to be cut there (no upscaler): added back in the camera's own frame.
     private static bool LiftedInFrame => !Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera) || !UpscalerFilling;
     private const int LaserAddPass = 2, LaserAddCutPass = 5;   // NvgIrLight.shader
-    private static RenderTexture? _bareLasers, _irCut;
+    private static RenderTexture? _bareLasers, _irCut, _bareLaserDepth;
+    private const int BareLaserDepthPass = 20;   // NvgDirect.shader
     private static int _bareLasersFrame = -1;
     // The visible lasers on the gun as the bare eye sees them, this frame (TwoRenders.TakeEye lays them over with its gun).
     internal static Texture? BareLasers => _bareLasersFrame == Time.frameCount ? _bareLasers : null;
@@ -523,10 +524,19 @@ internal static partial class NightVisionEyepieces
             if (bare && _bareLasers != null && GunDepth is RenderTexture gunDepth
                 && gunDepth.width == _bareLasers.width && gunDepth.height == _bareLasers.height)
             {
-                _irLasers.SetRenderTarget(_bareLasers, gunDepth);
-                // Against that gun's depth by the projection it was drawn with (unjittered, the device's planes).
-                _irLasers.SetViewProjectionMatrices(camera.worldToCameraMatrix, BareGunProjection);
-                _irLasers.ClearRenderTarget(false, true, Color.clear);
+                // Against that gun's depth, made over to the camera's own projection (NvgDirect pass 20), drawn by the camera's
+                // unjittered projection: by the gun's (the device's far plane, 2 m) the beam was cut off there.
+                if (_bareLaserDepth == null || _bareLaserDepth.width != _bareLasers.width || _bareLaserDepth.height != _bareLasers.height)
+                {
+                    if (_bareLaserDepth != null)
+                        Object.Destroy(_bareLaserDepth);
+                    _bareLaserDepth = new RenderTexture(_bareLasers.width, _bareLasers.height, 24, RenderTextureFormat.Depth) { name = "Justachae NVG bare eye's gun depth for its lasers", hideFlags = HideFlags.DontSave };
+                }
+                _irLasers.SetRenderTarget(_bareLasers, _bareLaserDepth);
+                _irLasers.ClearRenderTarget(true, true, Color.clear);
+                if (_directQuad != null && _directMaterial != null)
+                    _irLasers.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, BareLaserDepthPass);
+                _irLasers.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.nonJitteredProjectionMatrix);
                 Matrix4x4 toBare = Matrix4x4.Translate(-bareShift);
                 foreach (KeyValuePair<LaserBeam, IrLaser> laser in _irLaserRecords)
                 {

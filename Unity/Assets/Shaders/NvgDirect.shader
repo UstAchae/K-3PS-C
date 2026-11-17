@@ -672,5 +672,29 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 1; }
    ENDCG
   }
+  // 20: the bare eye's gun's own depth (_DirectGD, by the device's near and far planes) as the main camera's projection has it,
+  // into a depth target of its own: the bare eye's lasers are drawn against it by the camera's projection, so that its gun
+  // hides what of them is behind it and they still reach past the device's far plane (2 m: they were cut off there).
+  Pass {
+   Cull Off ZWrite On ZTest Always ColorMask 0
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   struct depthOut { float4 c : SV_Target; float depth : SV_Depth; };
+   depthOut frag (v2f i) {
+    float2 uv = i.screen.xy / i.screen.w;
+    float raw = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
+    depthOut o;
+    o.c = 0;
+    #if defined(UNITY_REVERSED_Z)
+    o.depth = shown(raw) ? mainDepth(inverseDepth(raw)) : 0;
+    #else
+    o.depth = shown(raw) ? mainDepth(inverseDepth(raw)) : 1;
+    #endif
+    return o;
+   }
+   ENDCG
+  }
  }
 }
