@@ -183,9 +183,10 @@ internal static partial class NightVisionEyepieces
             TwoRenders.SeeLens(a + CameraPosition.Horizontal);
         // A monocular is before one eye only: over the other eye's half the device fades out toward the edge. Which eye, by where its lens
         // is from the head's middle, not from the camera: gone over to the aiming eye, the camera is right behind a lens before that eye.
-        // A binocular with one eyepiece swung away on its pod (the ENVG-B's): the one left seen alone over the whole frame,
-        // brought to the middle as both are when down, the camera where it is (the user's, 2026-11-17: it went over to that
-        // eye before); both swung all the way away, the game draws the device (LensesOn).
+        // A binocular with one eyepiece swung away on its pod (the ENVG-B's): seen as when both are down, each eye's half
+        // from that eye brought in toward the middle, the camera where it is (the user's, 2026-11-17: the camera went over
+        // to the one left, then the one left alone over the whole frame looked like the whole device moved); both swung all
+        // the way away, the game draws the device (LensesOn).
         bool podMono = PodMonocular(out int lone, out _);
         bool asMonocular = _device.Monocular;
         int monocular = -1;
@@ -234,10 +235,12 @@ internal static partial class NightVisionEyepieces
             float byNodes = 0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift));
             NewCameraPlugin.Log?.LogInfo($"NVG eyes: the halves meet at {split:F3} by the eyepieces' glass ({Across(camera, leftGlass - leftShift):F3}, {Across(camera, rightGlass - rightShift):F3}); by their nodes it was {byNodes:F3} ({Across(camera, leftPlace - leftShift):F3}, {Across(camera, rightPlace - rightShift):F3}).");
         }
-        // One eyepiece swung away: the one left takes the whole frame (half each, the two lenses' pictures met at the middle,
-        // and what the other mod lays into both, its HUD's letters, split there out of line).
+        // One eyepiece swung away: the halves meet not halfway but where the other eye sees its own eyepiece's place (gone up
+        // with its pod), so the one left is seen whole from its own eye (cut at halfway, its HUD's letters split there).
         if (podMono)
-            split = (lone == CentreLensA) == (a <= b) ? 1f + Overscan : -Overscan;
+            split = (lone == CentreLensA) == (a <= b)
+                ? Mathf.Max(split, Mathf.Min(Across(camera, rightGlass - rightShift), 1f))
+                : Mathf.Min(split, Mathf.Max(Across(camera, leftGlass - leftShift), 0f));
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
