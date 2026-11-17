@@ -630,12 +630,18 @@ Shader "Justachae/NVG/Tube" {
     float4 s = tex2Dlod(_MainTex, float4(i.uv, 0, 0));
     if (s.a > 0.99)
      return float4(s.rgb / s.a, 1);
-    for (int level = 1; level < 12; level++) {
+    // From the coarsest level to the finest, each laid over by how much of it was kept (the first level found alone came
+    // in blocks that jumped as the gun moved, and the objective's blur spread them round it like heat).
+    float3 filled = 0;
+    float any = 0;
+    for (int level = 11; level >= 0; level--) {
      float4 m = tex2Dlod(_MainTex, float4(i.uv, 0, level));
-     if (m.a > 0.002)
-      return float4(m.rgb / m.a, 1);
+     if (m.a > 0.0001) {
+      filled = any > 0 ? lerp(filled, m.rgb / m.a, saturate(m.a)) : m.rgb / m.a;
+      any = 1;
+     }
     }
-    return float4(0, 0, 0, 1);
+    return float4(filled, 1);
    }
    ENDCG
   }
@@ -686,12 +692,16 @@ Shader "Justachae/NVG/Tube" {
     float2 s = tex2Dlod(_MainTex, float4(i.uv, 0, 0)).rg;
     if (s.y > 0.99)
      return s.x / s.y;
-    for (int level = 1; level < 12; level++) {
+    // As the picture is filled (pass 17): coarsest to finest, each by how much of it was kept.
+    float filled = 0, any = 0;
+    for (int level = 11; level >= 0; level--) {
      float2 m = tex2Dlod(_MainTex, float4(i.uv, 0, level)).rg;
-     if (m.y > 0.002)
-      return m.x / m.y;
+     if (m.y > 0.0001) {
+      filled = any > 0 ? lerp(filled, m.x / m.y, saturate(m.y)) : m.x / m.y;
+      any = 1;
+     }
     }
-    return 0;
+    return filled;
    }
    ENDCG
   }
