@@ -143,7 +143,7 @@ Shader "Justachae/NVG/Direct" {
  // Both guns seen: which eye's gun this pixel is given (1 the bare eye's, 2 the goggle eye's, 0 neither) and its depth. The
  // aiming eye's gun wherever it is, whole (sharp; it is solid); the other's on its half of the chessboard where the aiming
  // eye's is not (it is seen through: taken apart with what lies behind it, TwoRenders.cs). One gun alone: as gunPicked.
- float _DirectBareAims;
+ float _DirectBareAims, _GunParity;
  int gunOf (float2 pixel, float2 uv, out float raw) {
   float rawB = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
   bool bare = shown(rawB) && _DirectGunShown > 0 && tex2Dlod(_DirectGunLens, float4(pixel * _DirectGunTexel.xy, 0, 0)).r <= 0.5;
@@ -151,7 +151,9 @@ Shader "Justachae/NVG/Direct" {
   if (_DirectGoggleShown <= 0)
    return bare && (_DirectGunShown >= 0.999 || checker(pixel)) ? 1 : 0;
   float rawG = SAMPLE_DEPTH_TEXTURE(_DirectHD, uv);
-  bool goggle = shown(rawG), even = checker(pixel);
+  // The chessboard turned over every frame (_GunParity): over two frames each pixel has the bare eye's gun drawn once,
+  // and TwoRenders.cs gathers them over frames.
+  bool goggle = shown(rawG), even = fmod(floor(pixel.x) + floor(pixel.y) + _GunParity, 2) < 0.5;
   if (_DirectBareAims > 0.5) {
    // The bare eye aims: its gun on one kind of the chessboard, the goggle eye's (seen through) on the other, what lies
    // behind wherever either is not: under the bare eye's gun the goggle eye's own view is kept on half the pixels (made
@@ -665,6 +667,34 @@ Shader "Justachae/NVG/Direct" {
       discard;
      #endif
     }
+    float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
+    return float4(now - old, 0, 1);
+   }
+   ENDCG
+  }
+  // 19: the bare eye's gun's own motion on the screen (both guns seen), into a target of its own, for gathering its picture
+  // over frames (TwoRenders.cs): only its front (its own depth).
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex motionVert
+   #pragma fragment frag
+   #pragma target 3.5
+   float4x4 _DirectNowVP, _DirectOldVP, _DirectOldM;
+   struct m2f { float4 pos : SV_POSITION; float4 screen : TEXCOORD0; float4 now : TEXCOORD1; float4 old : TEXCOORD2; };
+   m2f motionVert (float4 v : POSITION) {
+    m2f o;
+    o.pos = UnityObjectToClipPos(v);
+    o.screen = ComputeScreenPos(o.pos);
+    o.now = mul(_DirectNowVP, mul(unity_ObjectToWorld, v));
+    o.old = mul(_DirectOldVP, mul(_DirectOldM, v));
+    return o;
+   }
+   float4 frag (m2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    float own = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
+    if (!shown(own) || abs(own - i.pos.z) > max(own * 0.002, 0.0000003))
+     discard;
     float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
     return float4(now - old, 0, 1);
    }

@@ -102,10 +102,29 @@ internal static class TwoRenders
     // left the goggle eye's alone, its gun seen through by its share. Filled each frame it is wanted, emptied at its end.
     private static UnityEngine.Rendering.CommandBuffer? _apartBuffer;
     private static Camera? _apartCamera;
-    private static RenderTexture? _bareView, _goggleFill;
+    private static RenderTexture? _bareView, _goggleFill, _bareNow;
+    private static readonly RenderTexture?[] _bareGathered = new RenderTexture?[2];
+    private static int _gatheredFrame = -10;
+    private const int BareGatherPass = 21;   // NvgTube.shader
+    private static readonly int BareHistoryId = Shader.PropertyToID("_BareHistory"), BareMotionId = Shader.PropertyToID("_BareMotion"), BareHistoryOnId = Shader.PropertyToID("_BareHistoryOn");
+
+    private static RenderTexture KeptSized(ref RenderTexture? kept, int w, int h, string name)
+    {
+        if (kept == null || kept.width != w || kept.height != h)
+        {
+            if (kept != null)
+            {
+                kept.Release();
+                Object.Destroy(kept);
+            }
+            kept = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBHalf) { name = name, hideFlags = HideFlags.DontSave };
+            kept.Create();
+        }
+        return kept;
+    }
     // For the guns' forward parts (NightVisionDirect.DrawGunForward): the bare eye's gun's picture this frame, the goggle
     // eye's gun's share, the material that lays a copy back by a share.
-    internal static RenderTexture? BareViewNow => BothGuns && _apartFrame == Time.frameCount ? _bareView : null;
+    internal static RenderTexture? BareViewNow => BothGuns && _apartFrame == Time.frameCount ? _bareNow : null;
     internal static float GoggleOpacityNow => GoggleGunOpacity;
     internal static Material? TubeMaterial => _material;
     internal const int PartsLayPass = 18;   // NvgTube.shader
@@ -145,6 +164,18 @@ internal static class TwoRenders
         buffer.GetTemporaryRT(ApartTempId, w, h, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
         buffer.Blit(UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, ApartTempId);
         buffer.Blit(ApartTempId, _bareView, material, BareViewPass);
+        // Gathered over frames (pass 21) into the one of two kept pictures not holding last frame's.
+        RenderTexture? motion = NightVisionEyepieces.BareMotion;
+        int at = Time.frameCount & 1;
+        RenderTexture gathered = KeptSized(ref _bareGathered[at], w, h, "Justachae bare eye's gun gathered " + at);
+        RenderTexture? last = _bareGathered[1 - at];
+        bool history = motion != null && last != null && last.width == w && last.height == h && _gatheredFrame == Time.frameCount - 1;
+        buffer.SetGlobalTexture(BareHistoryId, history ? last! : (Texture)Texture2D.blackTexture);
+        buffer.SetGlobalTexture(BareMotionId, motion != null ? motion : (Texture)Texture2D.blackTexture);
+        buffer.SetGlobalFloat(BareHistoryOnId, history ? 1f : 0f);
+        buffer.Blit(_bareView, gathered, material, BareGatherPass);
+        _bareNow = gathered;
+        _gatheredFrame = Time.frameCount;
         if (_goggleFill == null || _goggleFill.width != w || _goggleFill.height != h)
         {
             if (_goggleFill != null)
@@ -830,6 +861,7 @@ internal static class TwoRenders
             });
         }
         Save(_bareView, "bare");
+        Save(_bareNow, "gathered");
         Save(_capGoggle, "goggle");
         Save(_goggleDepthNow, "depth");
         Save(_capBefore, "before");
@@ -1065,7 +1097,7 @@ internal static class TwoRenders
             bool lens = DrawLensLayer(into, laying);
             RenderTexture frame = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
             Graphics.Blit(into, frame);
-            laying.SetTexture(OtherId, BothGuns ? _bareView : _gunApart);
+            laying.SetTexture(OtherId, BothGuns ? (_bareNow != null ? _bareNow : _bareView) : _gunApart);
             laying.SetTexture(LensLayerId, lens ? _lensLayer : Texture2D.blackTexture);
             laying.SetTexture(LensMaskId, lens ? _lensSolid : Texture2D.blackTexture);
             laying.SetFloat(GunShareId, BothGuns ? BareGunOpacity : _shareBare);

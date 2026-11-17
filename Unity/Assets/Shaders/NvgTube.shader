@@ -707,5 +707,44 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 21: the bare eye's gun (pass 15, this frame's: its pixels drawn on half the chessboard, the others made from them) gathered
+  // over frames: what it had last frame, followed along its own motion (_BareMotion) and kept within what this frame has about
+  // the pixel, eased toward this frame's. It is laid over after the frame is smoothed over frames, so its light's grain and
+  // the chessboard (turned over every frame) are smoothed here.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _BareHistory, _BareMotion, _GunWhich;
+   float4 _GunTexel;
+   float _BareHistoryOn;
+   float4 frag (v2f_img i) : SV_Target {
+    float4 now = tex2Dlod(_MainTex, float4(i.uv, 0, 0));
+    if (now.a < 0.5 || _BareHistoryOn < 0.5)
+     return now;
+    float3 lo = now.rgb, hi = now.rgb;
+    [unroll] for (int y = -1; y <= 1; y++)
+     [unroll] for (int x = -1; x <= 1; x++) {
+      float4 n = tex2Dlod(_MainTex, float4(i.uv + float2(x, y) * _GunTexel.xy, 0, 0));
+      if (n.a > 0.5) {
+       lo = min(lo, n.rgb);
+       hi = max(hi, n.rgb);
+      }
+     }
+    float2 was = i.uv - tex2Dlod(_BareMotion, float4(i.uv, 0, 0)).xy;
+    if (any(was < 0) || any(was > 1))
+     return now;
+    float4 h = tex2Dlod(_BareHistory, float4(was, 0, 0));
+    if (h.a < 0.5)
+     return now;
+    // This frame's own drawn pixels count more than those made from them.
+    bool drawn = tex2Dlod(_GunWhich, float4(i.uv, 0, 0)).r > 0.75;
+    return float4(lerp(clamp(h.rgb, lo, hi), now.rgb, drawn ? 0.3 : 0.15), now.a);
+   }
+   ENDCG
+  }
  }
 }
