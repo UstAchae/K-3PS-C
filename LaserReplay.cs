@@ -17,6 +17,8 @@ internal static class LaserReplay
     private static int _laserFrame = -1;
     private static bool _replayingLaser;
     private static readonly List<MonoBehaviour> DeferredLasers = new();
+    internal static List<MonoBehaviour> Held => DeferredLasers;   // (diagnostics)
+    internal static int ReplayedFrame = -1, ReplayedCount;
 
     // The lasers' LateUpdate, the method patched; null when the game has no LaserBeam.
     internal static MethodInfo? FindLateUpdate()
@@ -47,6 +49,12 @@ internal static class LaserReplay
                 if (AimArms.GunCarried && !alreadyMoved)
                     AimArms.CarryWithGun(emitter);
                 _laserLateUpdate.Invoke(laser, null);
+                if (ReplayedFrame != Time.frameCount)
+                {
+                    ReplayedFrame = Time.frameCount;
+                    ReplayedCount = 0;
+                }
+                ReplayedCount++;
                 if (AimArms.GunCarried && !alreadyMoved)
                     emitter.SetPositionAndRotation(saved, savedRotation);
             }

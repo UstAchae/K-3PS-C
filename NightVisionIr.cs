@@ -224,6 +224,49 @@ internal static partial class NightVisionEyepieces
     // frame. With the eyepieces in, visible lasers are seen at their own light (the tube amplifies it): drawn as they were, but for a
     // sight's picture that is the game's own night-vision one (its own night vision on), as the game has it.
     private static float _laserAsItWas = -1f;
+
+    // DIAGNOSTICS (lasers, 2026-11-17; to come out once found): every two seconds, each laser held back on the player or the
+    // gun, as it stands: visible or IR, on, its intensity and colour, what BRNVG takes the goggle to be, the replay, and
+    // its beam and point as last drawn (the bare eye's copy is moved from these).
+    private static int _laserDiagNext;
+    private static System.Reflection.FieldInfo? _brnvgOn;
+    private static bool _brnvgLooked;
+    internal static void LaserDiag()
+    {
+        if (Time.frameCount < _laserDiagNext)
+            return;
+        _laserDiagNext = Time.frameCount + 120;
+        if (!_brnvgLooked)
+        {
+            _brnvgLooked = true;
+            _brnvgOn = AccessTools.TypeByName("BorkelRNVG.Helpers.NvgHelper") is System.Type t ? AccessTools.Field(t, "IsNvgOn") : null;
+        }
+        object? brnvg = _brnvgOn?.GetValue(null);
+        var sb = new System.Text.StringBuilder();
+        TwoRenders.BareLaserShift(Camera.main != null ? Camera.main : null!, out Vector3 bareShift);
+        sb.Append($"Lasers: held {LaserReplay.Held.Count}, replayed {(LaserReplay.ReplayedFrame == Time.frameCount ? LaserReplay.ReplayedCount : 0)} this frame, BRNVG NVG on {brnvg}, IR wanted {IrWanted}, lifted {LasersLifted}, goggle down {DownOrFlipping}, records {_irLaserRecords.Count} (this frame {_irMeshesFrame == Time.frameCount}), bare shift {bareShift.magnitude * 1000f:F0} mm");
+        foreach (MonoBehaviour held in LaserReplay.Held)
+        {
+            if (held is not LaserBeam lb)
+                continue;
+            Color colour = LaserBeamBlock(lb) is MaterialPropertyBlock block ? block.GetColor(LaserColorId) : Color.clear;
+            Transform t = lb.transform;
+            bool hit = Physics.Raycast(t.position + t.forward * lb.RayStart, t.forward, out RaycastHit h, lb.MaxDistance, lb.Mask);
+            string hitText = hit ? h.distance.ToString("F2") + " m" : "none";
+            sb.Append('\n').Append($"  {lb.name} ({lb.BeamMaterial?.name}): on {lb.isActiveAndEnabled}, intensity {lb.IntensityFactor:F3}, colour {colour}, emitter {t.position} fwd {t.forward}, hit {hitText}");
+            if (_irLaserRecords.TryGetValue(lb, out IrLaser rec))
+            {
+                if (rec.Beam is IrMesh beam && beam.Mesh != null)
+                    sb.Append($"; beam at {(Vector3)beam.Matrix.GetColumn(3)} size {beam.Mesh.bounds.size}");
+                if (rec.Point is IrMesh point)
+                    sb.Append($"; point at {(Vector3)point.Matrix.GetColumn(3)}");
+                sb.Append($"; seen {rec.Seen}");
+            }
+            else
+                sb.Append("; no record");
+        }
+        NewCameraPlugin.Log?.LogInfo(sb.ToString());
+    }
     private static readonly int LaserColorId = Shader.PropertyToID("_Color");
 
     private static void LaserAsItIsPrefix(LaserBeam __instance)
