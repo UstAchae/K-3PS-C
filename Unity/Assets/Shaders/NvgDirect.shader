@@ -623,5 +623,49 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
+  // 18: the goggle eye's gun's own motion on the screen (both guns seen), as pass 3 for the device: the frame is smoothed over
+  // frames along the motion, and the game's copy of the gun, kept to its shadow, writes none; left to what lay behind, the
+  // gun and what was laid round it drifted. Only its front (its own depth), not before the device, not where the bare eye's
+  // gun was put in or behind the aiming bare eye's sight lens (those show what lies behind, and keep its motion).
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex motionVert
+   #pragma fragment frag
+   #pragma target 3.5
+   float4x4 _DirectNowVP, _DirectOldVP, _DirectOldM;
+   sampler2D _GunWhich;
+   struct m2f { float4 pos : SV_POSITION; float4 screen : TEXCOORD0; float4 now : TEXCOORD1; float4 old : TEXCOORD2; };
+   m2f motionVert (float4 v : POSITION) {
+    m2f o;
+    o.pos = UnityObjectToClipPos(v);
+    o.screen = ComputeScreenPos(o.pos);
+    o.now = mul(_DirectNowVP, mul(unity_ObjectToWorld, v));
+    o.old = mul(_DirectOldVP, mul(_DirectOldM, v));
+    return o;
+   }
+   float4 frag (m2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    if (tex2Dlod(_GunWhich, float4(uv, 0, 0)).r > 0.75 || tex2Dlod(_DirectGunLens, float4(uv, 0, 0)).r > 0.5)
+     discard;
+    float own = SAMPLE_DEPTH_TEXTURE(_DirectHD, uv);
+    if (!shown(own) || abs(own - i.pos.z) > max(own * 0.002, 0.0000003))
+     discard;
+    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
+    if (coverage(uv, rawL, rawR, toRight) > 0) {
+     float device = pickedDepth(rawL, rawR, toRight), gun = mainDepth(inverseDepth(own));
+     #if defined(UNITY_REVERSED_Z)
+     if (device > gun)
+      discard;
+     #else
+     if (device < gun)
+      discard;
+     #endif
+    }
+    float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
+    return float4(now - old, 0, 1);
+   }
+   ENDCG
+  }
  }
 }

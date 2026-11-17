@@ -236,6 +236,52 @@ internal static partial class NightVisionEyepieces
     private static Matrix4x4 _oldVP;
     private static int _motionFrame = -100;
 
+    // The goggle eye's gun's motion (both guns seen; NvgDirect.shader, pass 18), while it is seen more than through: from
+    // its pieces as drawn this frame (DrawGun) against where they stood last frame.
+    private static readonly Dictionary<Renderer, Matrix4x4> _oldGunPieces = new Dictionary<Renderer, Matrix4x4>();
+    private static Matrix4x4 _gunOldVP;
+    private static int _gunMotionFrame = -100;
+    private const int GunMotionPass = 18;
+
+    private static void DrawGunMotion(CommandBuffer buffer, Camera main, Matrix4x4 turned, Matrix4x4 projection, bool gun)
+    {
+        if (!gun || !_forwardGoggleToo || _gunDraws.Count == 0 || _directMaterial == null)
+        {
+            _gunMotionFrame = -100;
+            return;
+        }
+        Matrix4x4 nowVP = main.nonJitteredProjectionMatrix * turned;
+        bool continued = _gunMotionFrame == Time.frameCount - 1;
+        _gunMotionFrame = Time.frameCount;
+        if (!continued)
+        {
+            _oldGunPieces.Clear();
+            _gunOldVP = nowVP;
+        }
+        if (TwoRenders.GoggleOpacityNow >= 0.5f)
+        {
+            buffer.SetViewProjectionMatrices(turned, projection);
+            buffer.SetGlobalMatrix(DirectNowVP, nowVP);
+            buffer.SetGlobalMatrix(DirectOldVP, _gunOldVP);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.MotionVectors);
+            foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunDraws)
+            {
+                if (mesh == null || renderer == null)
+                    continue;
+                buffer.SetGlobalMatrix(DirectOldM, _oldGunPieces.TryGetValue(renderer, out Matrix4x4 was) ? was : matrix);
+                buffer.DrawMesh(mesh, matrix, _directMaterial, sub, GunMotionPass);
+            }
+            buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        }
+        foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunDraws)
+        {
+            if (renderer != null)
+                _oldGunPieces[renderer] = matrix;
+        }
+        _gunOldVP = nowVP;
+    }
+
     private static void DrawMotion(CommandBuffer buffer, Camera main, Matrix4x4 turned, Matrix4x4 projection, Vector3 leftShift, Vector3 rightShift)
     {
         Matrix4x4 nowVP = main.nonJitteredProjectionMatrix * turned;
@@ -552,7 +598,10 @@ internal static partial class NightVisionEyepieces
         // The device's own motion on the screen: it goes with the head, and left to itself it had what lay behind it, so what is
         // carried from frame to frame by the motion (the reflections, the upscaler) drifted over it like mist.
         if ((main.depthTextureMode & DepthTextureMode.MotionVectors) != 0)
+        {
             DrawMotion(_directMotion, main, turned, projection, leftShift, rightShift);
+            DrawGunMotion(_directMotion, main, turned, projection, gun);
+        }
         // Once all is lit: the fade.
         buffer = _directEnd;
         buffer.SetGlobalVector(DirectTexel, new Vector4(1f / Mathf.Max(width, 1), 1f / Mathf.Max(height, 1), 0f, 0f));
