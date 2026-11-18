@@ -219,7 +219,11 @@ internal static partial class NightVisionEyepieces
         // camera when it has come forward to a sight (NightVisionScope.cs). Where the game draws the device, from the camera.
         // A monocular comes in none of the way once aimed: as the camera goes over to the aiming eye, and back as it returns.
         Vector3 back = view.forward * ScopePullback;
-        float comesIn = EyeShift * _split;
+        // A monocular's bare eye aiming (TwoRenders.cs; the camera stays where it is): as the aim comes up the eyes go all
+        // the way to their own places, so nothing of the device as the camera sees it is left, only as each eye sees it:
+        // the goggle's eye straight behind its eyepiece, the bare eye from its side (the user's, 2026-11-18).
+        float eyesOwn = TwoRenders.BareAimShare * CameraPosition.ViewAimed;
+        float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
         bool monocularLeft = a + CameraPosition.Horizontal <= 0f;
