@@ -23,8 +23,9 @@ internal static class TwoRenders
     // NightVisionEyes.RenderLenses; the user's, 2026-11-17): the bare eye aiming is then the camera, its gun the camera's.
     internal static bool Now => NightVisionEyepieces.DownOrFlipping
         && (NightVisionEyepieces.MonocularWorn || NightVisionEyepieces.PodMonocular(out _, out _));
-    // The camera at the goggle's eye (the PVS-14).
-    private static bool AtGoggleEye => Now && NightVisionEyepieces.MonocularWorn;
+    // The camera at the goggle's eye: no longer (the user's, 2026-11-18: the PVS-14 as the others, the camera where it is,
+    // NightVisionEyes.RenderLenses). The bare eye aiming is then the camera itself, gone over to it for the aim.
+    private static bool AtGoggleEye => false;
 
     // F12 单筒：裸眼瞄准时分划的透明度: the bare eye's sight lens seen through (0 solid).
     internal static float BareLensSeeThrough = 0.5f;
@@ -125,8 +126,9 @@ internal static class TwoRenders
         shift = Vector3.zero;
         if (camera == null || !BareGunNow)
             return false;
+        // (None while that eye is the camera: its lasers are the camera's own.)
         shift = BareShift(camera.transform.rotation);
-        return true;
+        return shift.sqrMagnitude > 1e-10f;
     }
 
     // The aimed sight's lens, whichever eye aims (never drawn by its own material with the guns' parts).

@@ -191,7 +191,11 @@ internal static partial class NightVisionEyepieces
         // (Which side the bare eye is, for its gun and sight while it aims: TwoRenders.cs.)
         if (podMono)
             TwoRenders.SeeLens((lone == CentreLensA ? a : b) + CameraPosition.Horizontal);
-        bool asMonocular = _device.Monocular;
+        // A monocular (the PVS-14) as the others (the user's, 2026-11-18: the camera went over to its eyepiece, which no other
+        // goggle does): the camera where it is, its eye's half from that eye brought in toward its eyepiece by the set
+        // share, the other eye's half from that eye, as far the other side of the head's middle, brought in alike.
+        bool monocularHalves = _device.Monocular && _direct;
+        bool asMonocular = _device.Monocular && !monocularHalves;
         int monocular = -1;
         // The one swung up, for the device drawn into the main camera (NightVisionDirect.OnRaisedPod).
         RaisedPod = RaisedCupPod = null;
@@ -218,13 +222,23 @@ internal static partial class NightVisionEyepieces
         float comesIn = EyeShift * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
+        bool monocularLeft = a + CameraPosition.Horizontal <= 0f;
+        if (monocularHalves)
+        {
+            // (The other eye: across from the camera, its eyepiece's place mirrored in the head's middle.)
+            Vector3 own = EyeShiftOf(a), other = EyeShiftOf(-a - 2f * CameraPosition.Horizontal);
+            leftShift = monocularLeft ? own : other;
+            rightShift = monocularLeft ? other : own;
+        }
         Vector3 leftPlace = a <= b ? placeA : placeB, rightPlace = a <= b ? placeB : placeA;
         // An eye is never let past its eyepiece: brought so near (the mount slid toward the face, the head turned), the
         // camera went in past the lens's mouth and the lenses had nothing to show from there (the tube's inside, the
         // scene beyond its far end). Held back along the tube's axis to EyeClear in front of the eyepiece's mouth.
         Transform leftLens = _lensRest[a <= b ? CentreLensA : CentreLensB], rightLens = _lensRest[a <= b ? CentreLensB : CentreLensA];
-        leftShift = KeptClear(leftLens, position, leftShift);
-        rightShift = KeptClear(rightLens, position, rightShift);
+        if (!monocularHalves || monocularLeft)
+            leftShift = KeptClear(leftLens, position, leftShift);
+        if (!monocularHalves || !monocularLeft)
+            rightShift = KeptClear(rightLens, position, rightShift);
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
         // By each eyepiece's glass's centre (its lens floor), not its node (the ENVG-B's stand off its glass): halfway between
@@ -232,7 +246,7 @@ internal static partial class NightVisionEyepieces
         Vector3 GlassOf(int tube) => tube < _lensFloors.Length ? FromCamera(_lensRest[tube], position).MultiplyPoint3x4(_lensFloors[tube]) : (Vector3)FromCamera(_lensRest[tube], position).GetColumn(3);
         Vector3 leftGlass = GlassOf(a <= b ? CentreLensA : CentreLensB), rightGlass = GlassOf(a <= b ? CentreLensB : CentreLensA);
         float split = asMonocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftGlass - leftShift) + Across(camera, rightGlass - rightShift)), 0.2f, 0.8f);
-        if (!asMonocular && _splitNotedFor != _body)
+        if (!asMonocular && !monocularHalves && _splitNotedFor != _body)
         {
             _splitNotedFor = _body;
             float byNodes = 0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift));
@@ -241,6 +255,13 @@ internal static partial class NightVisionEyepieces
         // One eyepiece swung away: the halves meet past the far side of the one left, its cup and housing about its glass
         // (twice the glass's radius), as its own eye sees it: it is seen whole (cut nearer, it was cut through, the user's,
         // 2026-11-17), the other eye's half from there on.
+        if (monocularHalves)
+        {
+            float rim = (CentreLensA < _lensFloors.Length ? _lensFloors[CentreLensA].w : 0.02f) * _body!.lossyScale.x * PodLoneRims;
+            split = monocularLeft
+                ? Mathf.Clamp(Across(camera, leftGlass + right * rim - leftShift), -Overscan, 1f + Overscan)
+                : Mathf.Clamp(Across(camera, rightGlass - right * rim - rightShift), -Overscan, 1f + Overscan);
+        }
         if (podMono)
         {
             int loneTube = lone;
