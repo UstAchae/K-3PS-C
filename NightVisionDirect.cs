@@ -234,6 +234,10 @@ internal static partial class NightVisionEyepieces
     private static readonly int DirectNowVP = Shader.PropertyToID("_DirectNowVP"), DirectOldVP = Shader.PropertyToID("_DirectOldVP"), DirectOldM = Shader.PropertyToID("_DirectOldM"), DirectHalf = Shader.PropertyToID("_DirectHalf");
     private static readonly Dictionary<Renderer, Matrix4x4> _oldPieces = new Dictionary<Renderer, Matrix4x4>();
     private static readonly Vector3[] _oldShifts = new Vector3[2];
+    // From where each part was drawn last frame, in each half (PieceShift: it changes as a pod swings and as the aim comes
+    // up; worked out again from this frame's swing, the motion written was wrong while either changed, and the frame's
+    // smoothing drew stripes across the device: the user's video, 2026-11-18).
+    private static readonly Dictionary<Renderer, Vector3>[] _oldPieceShifts = { new Dictionary<Renderer, Vector3>(), new Dictionary<Renderer, Vector3>() };
     private static Matrix4x4 _oldVP;
     private static int _motionFrame = -100;
 
@@ -336,6 +340,8 @@ internal static partial class NightVisionEyepieces
         if (!continued)
         {
             _oldPieces.Clear();
+            _oldPieceShifts[0].Clear();
+            _oldPieceShifts[1].Clear();
             _oldVP = nowVP;
             _oldShifts[0] = leftShift;
             _oldShifts[1] = rightShift;
@@ -349,9 +355,11 @@ internal static partial class NightVisionEyepieces
             buffer.SetGlobalFloat(DirectHalf, half);
             foreach (Piece piece in _pieces)
             {
-                // (Each part from where it is drawn: PieceShift.)
-                Matrix4x4 fromEye = Matrix4x4.Translate(-PieceShift(piece.Renderer.transform, half, leftShift, rightShift)),
-                    fromOldEye = Matrix4x4.Translate(-PieceShift(piece.Renderer.transform, half, _oldShifts[0], _oldShifts[1]));
+                // (Each part from where it is drawn, PieceShift, and from where it was last frame.)
+                Vector3 shiftNow = PieceShift(piece.Renderer.transform, half, leftShift, rightShift);
+                Matrix4x4 fromEye = Matrix4x4.Translate(-shiftNow),
+                    fromOldEye = Matrix4x4.Translate(-(_oldPieceShifts[half].TryGetValue(piece.Renderer, out Vector3 shiftWas) ? shiftWas : shiftNow));
+                _oldPieceShifts[half][piece.Renderer] = shiftNow;
                 Matrix4x4 old = _oldPieces.TryGetValue(piece.Renderer, out Matrix4x4 was) ? was : piece.FromCamera;
                 buffer.SetGlobalMatrix(DirectOldM, fromOldEye * old);
                 for (int s = 0; s < piece.Mesh.subMeshCount; s++)
@@ -514,7 +522,11 @@ internal static partial class NightVisionEyepieces
             return own;
         // Over the first third of the swing: while the halves still differ, what crosses the line between them is drawn
         // twice over, a little apart (stripes across the pod as it swung, the user's video, 2026-11-18).
-        float toOther = Mathf.SmoothStep(0f, 1f, (side < 0 ? _sideGone[1 - half] : Mathf.Max(_sideGone[0], _sideGone[1])) * AgreeBy);
+        // (The body: toward the other side as that side's eyepiece goes, but not once this side's own has gone too: both
+        // are the camera's then, and going over to the other and back the body slid as the second eyepiece swung.)
+        float toOther = side < 0
+            ? Mathf.SmoothStep(0f, 1f, _sideGone[1 - half] * AgreeBy) * (1f - _sideGone[half])
+            : Mathf.SmoothStep(0f, 1f, Mathf.Max(_sideGone[0], _sideGone[1]) * AgreeBy);
         return toOther <= 0f ? own : Vector3.Lerp(own, other, toOther);
     }
 

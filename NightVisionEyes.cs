@@ -292,7 +292,17 @@ internal static partial class NightVisionEyepieces
             // was missing: the user's, 2026-11-18); the other eye's view of it only as that eye aims (NvgDirect, _DirectOver).
             split = monocularLeft ? 2f + Overscan : -1f - Overscan;
         }
-        binocular.SetFloat(SplitId, split);
+        // The eyepieces' picture (the composite's own split): with one eyepiece swung away the one left has the whole frame,
+        // eased over the first third of the other's swing (cut where the device's halves meet, half its night vision was
+        // missing: the user's, 2026-11-18). The device's halves keep the split above.
+        float pictureSplit = split;
+        if (podMono)
+        {
+            bool loneLeft = (lone == CentreLensA) == (a <= b);
+            float away = Mathf.SmoothStep(0f, 1f, PodGone(loneLeft ? rightTube : leftTube) * 3f);
+            pictureSplit = Mathf.Lerp(split, loneLeft ? 1f + Overscan : -Overscan, away);
+        }
+        binocular.SetFloat(SplitId, pictureSplit);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
         // Each pixel's line of sight, by the view turned but not moved (as if at the world's origin): with the place in it, far out
