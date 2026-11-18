@@ -44,12 +44,11 @@ internal static class CameraPosition
         _side = Mathf.MoveTowards(_side, left ? -1f : 1f, 2f * Time.deltaTime / SideSeconds);
         float u = 0.5f * (_side + 1f);
         float side = 2f * u * u * (3f - 2f * u) - 1f;
-        // Seen with both eyes through a monocular (TwoRenders.cs): the eyes where its eyepiece stands, as it is set.
-        float eye = TwoRenders.EyeFromMiddle(AimEye);
+        float eye = AimEye;
         float pose = Mathf.Lerp(Across, side * eye, Smooth(_aimed));
         AimingEyeAcross = side * eye;
-        // The experiment (TwoRenders.cs): at the goggle's eye while a monocular is seen from each eye.
-        Horizontal = TwoRenders.Place(Mathf.Lerp(Across, side * eye, Smooth(_viewAimed)));
+        // A monocular's bare eye aiming (TwoRenders.cs): the camera stays where it is, that eye's gun is drawn in from it.
+        Horizontal = Mathf.Lerp(Across, side * eye, Smooth(_viewAimed) * (1f - TwoRenders.BareAimShare));
         PoseAcross = pose - Horizontal;
     }
 

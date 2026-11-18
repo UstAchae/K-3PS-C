@@ -23,9 +23,14 @@ internal static class TwoRenders
     // NightVisionEyes.RenderLenses; the user's, 2026-11-17): the bare eye aiming is then the camera, its gun the camera's.
     internal static bool Now => NightVisionEyepieces.DownOrFlipping
         && (NightVisionEyepieces.MonocularWorn || NightVisionEyepieces.PodMonocular(out _, out _));
-    // The camera at the goggle's eye: no longer (the user's, 2026-11-18: the PVS-14 as the others, the camera where it is,
-    // NightVisionEyes.RenderLenses). The bare eye aiming is then the camera itself, gone over to it for the aim.
-    private static bool AtGoggleEye => false;
+    // The camera does not go over to the goggle's eye as it flips down (the user's, 2026-11-18: the PVS-14 as the others,
+    // NightVisionEyes.RenderLenses), and does not go over to the bare eye when that eye aims (the user's): it stays where
+    // it is, its own gun as it sees it, and the bare eye's gun, drawn from that eye, fades in over it. Aiming with the
+    // goggle's eye it goes over to it, as with any goggle.
+    // How much the aiming eye is the bare one, 0 to 1 (it goes over as the gun changes shoulders, and with the flip).
+    internal static float BareAimShare => Now
+        ? Mathf.Clamp01(0.5f + 0.5f * CameraPosition.AimingEyeAcross / Mathf.Max(CameraPosition.AimEye, 1e-4f) * Mathf.Sign(BareEye)) * Apart
+        : 0f;
 
     // F12 单筒：裸眼瞄准时分划的透明度: the bare eye's sight lens seen through (0 solid).
     internal static float BareLensSeeThrough = 0.5f;
@@ -45,12 +50,8 @@ internal static class TwoRenders
     private static float BareEye => -_goggleEye;
     // As the goggle flips down the eyes go out to their places from where the camera would be, and back as it flips up.
     private static float Apart => Mathf.SmoothStep(0f, 1f, NightVisionEyepieces.Flip);
-    internal static float Place(float across) => AtGoggleEye ? Mathf.Lerp(across, _goggleEye, Apart) : across;
-    private static Vector3 BareShift(Quaternion turn) => AtGoggleEye ? turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f) : Vector3.zero;
-
-    // The eyes from the head's middle while seen this way: as far as the goggle's eyepiece stands, so that the aiming eye
-    // (and the gun placed for it, CameraPosition) is behind it as the mount is set (the user's, 2026-11-17).
-    internal static float EyeFromMiddle(float otherwise) => AtGoggleEye ? Mathf.Abs(_goggleEye) : otherwise;
+    // From the camera to the bare eye while it aims: the aiming eye's place (the gun is placed for it) from the camera's.
+    private static Vector3 BareShift(Quaternion turn) => turn * new Vector3(CameraPosition.AimingEyeAcross - CameraPosition.Horizontal, 0f, 0f);
 
     // From NightVisionEyes.RenderLenses: the goggle's lens across from the head's middle.
     internal static void SeeLens(float across)
@@ -126,7 +127,7 @@ internal static class TwoRenders
         shift = Vector3.zero;
         if (camera == null || !BareGunNow)
             return false;
-        // (None while that eye is the camera: its lasers are the camera's own.)
+        // (None where that eye is the camera.)
         shift = BareShift(camera.transform.rotation);
         return shift.sqrMagnitude > 1e-10f;
     }
@@ -219,7 +220,7 @@ internal static class TwoRenders
         if (main == null || !main.isActiveAndEnabled || !GatherGun())
             return;
         // Over to the bare eye as the aiming eye goes over to it (CameraPosition: eased as the gun changes shoulders).
-        float toward = CameraPosition.AimingEyeAcross / Mathf.Max(EyeFromMiddle(CameraPosition.AimEye), 1e-4f) * Mathf.Sign(BareEye);
+        float toward = CameraPosition.AimingEyeAcross / Mathf.Max(CameraPosition.AimEye, 1e-4f) * Mathf.Sign(BareEye);
         _shareBare = Mathf.Clamp01(0.5f + 0.5f * toward);
         _aim = CameraPosition.ViewAimed;
         // The goggle eye aims: the game's own gun.
