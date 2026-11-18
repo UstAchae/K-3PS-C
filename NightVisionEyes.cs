@@ -187,7 +187,7 @@ internal static partial class NightVisionEyepieces
         // from that eye brought in toward the middle, the camera where it is (the user's, 2026-11-17: the camera went over
         // to the one left, then the one left alone over the whole frame looked like the whole device moved); both swung all
         // the way away, the game draws the device (LensesOn).
-        bool podMono = PodMonocular(out int lone, out _);
+        bool podMono = PodMonocular(out int lone, out float podAway);
         // (Which side the bare eye is, for its gun and sight while it aims: TwoRenders.cs.)
         if (podMono)
             TwoRenders.SeeLens((lone == CentreLensA ? a : b) + CameraPosition.Horizontal);
@@ -228,6 +228,17 @@ internal static partial class NightVisionEyepieces
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
+        // One eyepiece swung away (the ENVG-B's): only the side of the one left is brought in toward the middle; the other
+        // side goes back to how the camera itself sees the device, as far as its eyepiece has swung (eased with the swing,
+        // so nothing jumps: the whole device given to one eye at once flashed over, the user's, 2026-11-18). The halves
+        // still meet halfway between where each side sees its eyepiece's place, which moves with it.
+        if (podMono && _direct)
+        {
+            if ((lone == CentreLensA) == (a <= b))
+                rightShift = Vector3.Lerp(rightShift, -back, podAway);
+            else
+                leftShift = Vector3.Lerp(leftShift, -back, podAway);
+        }
         bool monocularLeft = a + CameraPosition.Horizontal <= 0f;
         if (monocularHalves)
         {
@@ -267,11 +278,6 @@ internal static partial class NightVisionEyepieces
             // was missing: the user's, 2026-11-18); the other eye's view of it only as that eye aims (NvgDirect, _DirectOver).
             split = monocularLeft ? 2f + Overscan : -1f - Overscan;
         }
-        // One eyepiece swung away: as a monocular, the whole device as the eye of the one left sees it, all over the frame
-        // (the halves meeting past that eyepiece, the raised one was cut through there: the user's, 2026-11-18); the other
-        // eye's view of it only as that eye aims (NvgDirect, _DirectOver).
-        if (podMono)
-            split = (lone == CentreLensA) == (a <= b) ? 2f + Overscan : -1f - Overscan;
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
