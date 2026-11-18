@@ -95,6 +95,10 @@ Shader "Justachae/NVG/Tube" {
    sampler2D _GunWhich14, _AimLensMask;
    float _LensUnderAiming;
    float _GunShare, _LensShare;
+   // A sight's window on the bare eye's gun (a holographic or red-dot sight's glass, _WindowMask): that eye sees through
+   // it bare, so there the frame from before the eyepieces (_SceneBare, no night vision) is laid over their picture by
+   // the lens's share: the two eyes' views one over the other, as at a scope's lens.
+   sampler2D _WindowMask, _SceneBare;
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
     // The bare eye's sight's lens while it aims: only the sight's picture there for that eye.
@@ -109,6 +113,8 @@ Shader "Justachae/NVG/Tube" {
     // (Drawn unjittered: NightVisionDirect.DrawGun.)
     float2 at = i.uv;
     float4 g = tex2D(_Other, at);
+    if (tex2D(_WindowMask, at).r > 0.5)
+     c.rgb = lerp(c.rgb, tex2D(_SceneBare, at).rgb, _LensShare * (1 - saturate(g.a)));
     c.rgb = lerp(c.rgb, g.rgb, _GunShare * saturate(g.a));
     c.rgb += tex2D(_BareLasers, at).rgb * _GunShare;
     return c;

@@ -508,7 +508,38 @@ internal static class TwoEyes
             _ownDepth = frameDepth;
             Shader.SetGlobalTexture(CameraDepthId, _goggleDepth);
         }
+        // The frame as it is before the eyepieces (no night vision), for what the bare eye sees through a sight's window.
+        _sceneFrame = -1;
+        if (NightVisionEyepieces.GunHasGlass)
+        {
+            Graphics.Blit(scene, Kept(ref _sceneBare, scene.width, scene.height, scene.format, "Justachae frame before the eyepieces"));
+            _sceneFrame = Time.frameCount;
+        }
         _layFrame = Time.frameCount;
+    }
+    private static RenderTexture? _sceneBare, _windowMask;
+    private static int _sceneFrame = -1;
+    private static readonly int WindowMaskId = Shader.PropertyToID("_WindowMask"), SceneBareId = Shader.PropertyToID("_SceneBare");
+
+    // Where the bare eye's gun's sights' windows are (their glass, from that eye), for TakeEye.
+    private static bool DrawWindowMask(RenderTexture into, Material material)
+    {
+        Camera? camera = Camera.main;
+        if (camera == null || _sceneFrame != Time.frameCount || _sceneBare == null)
+            return false;
+        RenderTexture mask = Kept(ref _windowMask, into.width, into.height, RenderTextureFormat.R8, "Justachae bare eye's sight windows");
+        Matrix4x4 turned = camera.worldToCameraMatrix;
+        turned.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));
+        var buffer = _lensBuffer ??= new UnityEngine.Rendering.CommandBuffer { name = "Justachae bare eye's sight lens" };
+        buffer.Clear();
+        buffer.SetRenderTarget(mask);
+        buffer.ClearRenderTarget(false, true, Color.clear);
+        // (The gun's parts are kept from the camera, turned with the world: NightVisionDirect.DrawGun.)
+        buffer.SetViewProjectionMatrices(turned, camera.nonJitteredProjectionMatrix);
+        bool any = NightVisionEyepieces.DrawGunGlass(buffer, material, LensSolidPass);
+        buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
+        Graphics.ExecuteCommandBuffer(buffer);
+        return any;
     }
 
     // ---------------------------------------------------------------- laying the bare eye's gun over (NvgTube.shader, pass 2)
@@ -549,6 +580,9 @@ internal static class TwoEyes
         laying.SetTexture(AimLensMaskId, Texture2D.blackTexture);
         laying.SetTexture(GunWhich14Id, NightVisionEyepieces.GunWhichTexture ?? (Texture)Texture2D.blackTexture);
         laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
+        bool windows = DrawWindowMask(into, laying);
+        laying.SetTexture(WindowMaskId, windows ? _windowMask : Texture2D.blackTexture);
+        laying.SetTexture(SceneBareId, windows ? _sceneBare : Texture2D.blackTexture);
         Graphics.Blit(frame, into, laying, GunAndLensPass);
         RenderTexture.ReleaseTemporary(frame);
         DrawCollimator(into);

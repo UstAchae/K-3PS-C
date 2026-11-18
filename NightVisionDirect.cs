@@ -734,6 +734,33 @@ internal static partial class NightVisionEyepieces
     private static readonly int DirectGoggleGunDepth = Shader.PropertyToID("_DirectHD"), DirectGoggleShownId = Shader.PropertyToID("_DirectGoggleShown");
     private static readonly List<(Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer)> _gunDraws = new List<(Mesh, Matrix4x4, Material, int, int, Renderer)>();
     private static readonly HashSet<Material> _gunGlass = new HashSet<Material>();
+    // Whether the gun drawn this frame has a sight's glass among its forward parts, and that glass drawn solid from the
+    // bare eye (TwoEyes.DrawWindowMask: where that eye looks through a window).
+    internal static bool GunHasGlass
+    {
+        get
+        {
+            foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunForward)
+            {
+                if (material != null && _gunGlass.Contains(material))
+                    return true;
+            }
+            return false;
+        }
+    }
+
+    internal static bool DrawGunGlass(CommandBuffer buffer, Material solid, int solidPass)
+    {
+        bool any = false;
+        foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunForward)
+        {
+            if (mesh == null || material == null || renderer == null || !_gunGlass.Contains(material))
+                continue;
+            buffer.DrawMesh(mesh, _forwardFromBare * matrix, solid, sub, solidPass);
+            any = true;
+        }
+        return any;
+    }
     private static Matrix4x4 _forwardFromBare = Matrix4x4.identity, _forwardFromGoggle = Matrix4x4.identity;
     private static Vector3 _goggleShiftNow, _goggleShiftOld;
     private static bool _forwardGoggleToo;
