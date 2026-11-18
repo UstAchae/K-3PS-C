@@ -145,6 +145,10 @@ internal static class TwoRenders
         }
     }
 
+    // The bare eye aiming through its sight: behind its lens the goggle eye's picture shows what lies beyond, not the gun,
+    // nor the lasers on it (NightVisionIr.cs: drawn apart and added but there; the user's, 2026-11-18).
+    internal static bool LasersCutAtLens => BareGunNow && BareLens != null;
+
     // The bare eye's gun's sight lens while that eye aims through it (NightVisionDirect.cs leaves the gun out there).
     internal static Renderer? BareLens
     {

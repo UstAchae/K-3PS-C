@@ -69,9 +69,13 @@ internal static partial class NightVisionEyepieces
     // the visible laser gone (diagnostics of 1.8.78: 120 drawn apart, 0 added, the buffer not filled).
     private static int _upscaleFillFrame = -10;
     private static bool UpscalerFilling => _upscaleFillFrame >= Time.frameCount - 1;
-    private static bool LasersLifted => NewCameraSwitch.Enabled && Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera) && UpscalerFilling
+    // Lifted too while the bare eye aims through its sight (TwoRenders.LasersCutAtLens): added back but behind its lens.
+    private static bool LasersLifted => NewCameraSwitch.Enabled && (Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera) && UpscalerFilling || TwoRenders.LasersCutAtLens)
         && LoadShaders() && _irLightShader != null;
-    private const int LaserAddPass = 2;   // NvgIrLight.shader
+    // Lifted only to be cut there (no upscaler at work): added back in the camera's own frame.
+    private static bool LiftedInFrame => !Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera) || !UpscalerFilling;
+    private const int LaserAddPass = 2, LaserAddCutPass = 5;   // NvgIrLight.shader
+    private static RenderTexture? _irCut;
 
     private static readonly System.Reflection.FieldInfo? ResolveDisabledField = AccessTools.Field(typeof(UnityEngine.Rendering.PostProcessing.PostProcessLayer), "_isTAAResolveDisabled");
 
@@ -113,10 +117,10 @@ internal static partial class NightVisionEyepieces
     internal static void LasersAfterUpscale(CommandBuffer buffer, RenderTexture target)
     {
         _diagFills++;
-        if (_irNaked == null || _irAdd == null || !LasersLifted)
+        if (_irNaked == null || _irAdd == null || !LasersLifted || LiftedInFrame)
             return;
         _diagAdds++;
-        buffer.Blit(_irNaked, target, _irAdd, LaserAddPass);
+        buffer.Blit(_irNaked, target, _irAdd, TwoRenders.LasersCutAtLens ? LaserAddCutPass : LaserAddPass);
     }
 
     private static readonly int IrClipToWorldId = Shader.PropertyToID("_IrClipToWorld");
@@ -409,6 +413,9 @@ internal static partial class NightVisionEyepieces
                 Object.Destroy(_irLayer);
             if (_irNaked != null)
                 Object.Destroy(_irNaked);
+            if (_irCut != null)
+                Object.Destroy(_irCut);
+            _irCut = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG IR lasers to cut", hideFlags = HideFlags.DontSave };
             _irLayer = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG IR layer", hideFlags = HideFlags.DontSave };
             _irNaked = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf) { name = "Justachae NVG lasers to the naked eye", hideFlags = HideFlags.DontSave };
         }
@@ -461,8 +468,9 @@ internal static partial class NightVisionEyepieces
         {
             _irLasers ??= new CommandBuffer { name = "Justachae NVG IR lasers" };
             _irLasers.Clear();
+            bool inFrame = lifted && LiftedInFrame, cut = TwoRenders.LasersCutAtLens;
             // Under an upscaler not jittered: put in after the upscale, they are not blended over frames.
-            if (lifted)
+            if (lifted && !inFrame)
                 _irLasers.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.nonJitteredProjectionMatrix);
             // As the frame shows them (night vision as it is for it), all of them, added after the upscale (LasersAfterUpscale).
             if (lifted)
@@ -475,11 +483,22 @@ internal static partial class NightVisionEyepieces
                 }
                 _nakedFrame = Time.frameCount;
                 _diagNaked++;
+                // No upscaler: lifted only to be cut behind the bare eye's sight lens, added back here.
+                if (inFrame)
+                    _irLasers.Blit(_irNaked, BuiltinRenderTextureType.CameraTarget, _irAdd!, cut ? LaserAddCutPass : LaserAddPass);
             }
             // The IR lasers as night vision shows them, for the lenses.
             if (ir && _irOnlyMeshes.Count > 0)
             {
-                _irLasers.SetRenderTarget(_irLayer, BuiltinRenderTextureType.CameraTarget);
+                // Cut behind the bare eye's sight lens: drawn apart, then added into the layer but there.
+                bool cutIr = cut && _irCut != null;
+                if (cutIr)
+                {
+                    _irLasers.SetRenderTarget(_irCut, BuiltinRenderTextureType.CameraTarget);
+                    _irLasers.ClearRenderTarget(false, true, Color.clear);
+                }
+                else
+                    _irLasers.SetRenderTarget(_irLayer, BuiltinRenderTextureType.CameraTarget);
                 _irLasers.SetGlobalFloat(NightVisionOnId, 1f);
                 foreach (IrMesh m in _irOnlyMeshes)
                 {
@@ -487,6 +506,8 @@ internal static partial class NightVisionEyepieces
                         _irLasers.DrawMesh(m.Mesh, m.Matrix, m.Material, 0, 0, m.Block);
                 }
                 _irLasers.SetGlobalFloat(NightVisionOnId, 0f);
+                if (cutIr)
+                    _irLasers.Blit(_irCut, _irLayer, _irAdd!, LaserAddCutPass);
             }
             _irLasers.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
             camera.AddCommandBuffer(CameraEvent.AfterForwardAlpha, _irLasers);
