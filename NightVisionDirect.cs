@@ -586,7 +586,7 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalFloat(DirectSplit, split);
         buffer.SetGlobalVector(DirectMonocularId, monocular);
         buffer.SetGlobalFloat(DirectSeeThroughId, Mathf.Clamp01(DeviceSeeThrough));
-        buffer.SetGlobalFloat(DirectStrip, Overscan);
+        buffer.SetGlobalFloat(DirectStrip, Mathf.Lerp(Overscan, MixedStrip, _eyesMixed * _eyesMixed));
         buffer.SetGlobalVector(DirectInset, new Vector4(DirectInsetPixels / Mathf.Max(Screen.width, 1), DirectInsetPixels / Mathf.Max(Screen.height, 1), 0f, 0f));
         for (int side = 0; side < 2; side++)
         {
