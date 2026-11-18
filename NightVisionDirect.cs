@@ -483,6 +483,7 @@ internal static partial class NightVisionEyepieces
     // (NightVisionEyes.RenderLenses).
     private static readonly string?[] _sidePods = new string?[2], _sideCups = new string?[2];
     private static readonly float[] _sideGone = new float[2];
+    private const float AgreeBy = 3f;   // the halves agree once a pod is a third of the way gone
 
     // Which side's pod a part of the device is on: 0 the left's, 1 the right's, -1 neither (the body, the mount).
     private static int PodSideOf(Transform t)
@@ -511,7 +512,9 @@ internal static partial class NightVisionEyepieces
         int side = PodSideOf(part);
         if (side == half)
             return own;
-        float toOther = side < 0 ? _sideGone[1 - half] : Mathf.Max(_sideGone[0], _sideGone[1]);
+        // Over the first third of the swing: while the halves still differ, what crosses the line between them is drawn
+        // twice over, a little apart (stripes across the pod as it swung, the user's video, 2026-11-18).
+        float toOther = Mathf.SmoothStep(0f, 1f, (side < 0 ? _sideGone[1 - half] : Mathf.Max(_sideGone[0], _sideGone[1])) * AgreeBy);
         return toOther <= 0f ? own : Vector3.Lerp(own, other, toOther);
     }
 
@@ -639,7 +642,9 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalFloat(DirectSplit, split);
         buffer.SetGlobalVector(DirectMonocularId, monocular);
         buffer.SetGlobalFloat(DirectSeeThroughId, Mathf.Clamp01(DeviceSeeThrough));
-        buffer.SetGlobalFloat(DirectStrip, Overscan);
+        // The strip the halves are eased into each other over closes as they come to agree (each pixel of it is one
+        // half's or the other's, and what differs between them shows there as stripes while it moves).
+        buffer.SetGlobalFloat(DirectStrip, Mathf.Max(Overscan * (1f - Mathf.Clamp01(Mathf.Max(_sideGone[0], _sideGone[1]) * AgreeBy)), 0.0005f));
         buffer.SetGlobalVector(DirectOverId, new Vector4(_eyesMixed, _goggleEyeRight ? 1f : 0f, TwoRenders.BareSeen, 0f));
         buffer.SetGlobalVector(DirectInset, new Vector4(DirectInsetPixels / Mathf.Max(Screen.width, 1), DirectInsetPixels / Mathf.Max(Screen.height, 1), 0f, 0f));
         for (int side = 0; side < 2; side++)

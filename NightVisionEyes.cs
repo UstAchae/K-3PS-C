@@ -246,6 +246,11 @@ internal static partial class NightVisionEyepieces
             _sidePods[side] = pod != null ? pod.name : null;
             _sideCups[side] = which >= 0 && which < _device.CupPods.Length ? _device.CupPods[which] : null;
         }
+        // (Not while the bare eye aims, _eyesMixed: then each half is its own eye's whole view of the device, the eyes at
+        // their own places, the bare eye's laid over the goggle eye's; with both halves made alike there was no second
+        // view left to lay over, the user's, 2026-11-18.)
+        _sideGone[0] *= 1f - _eyesMixed;
+        _sideGone[1] *= 1f - _eyesMixed;
         leftShift = Vector3.Lerp(leftShift, -back, _sideGone[0]);
         rightShift = Vector3.Lerp(rightShift, -back, _sideGone[1]);
         bool monocularLeft = a + CameraPosition.Horizontal <= 0f;
