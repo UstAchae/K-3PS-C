@@ -275,6 +275,8 @@ internal static class TwoRenders
     {
         HideGun(false);
         _apartBuffer?.Clear();
+        if (_frameDepth != null && _goggleDepth != null && Shader.GetGlobalTexture(CameraDepthId) == _goggleDepth)
+            Shader.SetGlobalTexture(CameraDepthId, _frameDepth);
         NightVisionEyepieces.EmptyGunForward();
         NightVisionEyepieces.LaserDiag();
     }
@@ -421,8 +423,16 @@ internal static class TwoRenders
         buffer.GenerateMips(depthFill);
         buffer.Blit(depthFill, depth, material, DepthPullPass);
         buffer.ReleaseTemporaryRT(ApartTempId);
+        // From here on the frame is the goggle eye's, and so is the depth all that follows reads (the image effects, the
+        // upscaler: with the bare eye's gun's depth, near, on every other pixel under that gun, what smooths the frame over
+        // frames by its depth mottled the picture seen through that gun as the camera moved). The camera's own given back
+        // at the frame's end.
+        if (Shader.GetGlobalTexture(CameraDepthId) is Texture frameDepth && frameDepth != depth)
+            _frameDepth = frameDepth;
+        buffer.SetGlobalTexture(CameraDepthId, depth);
         _apartFrame = Time.frameCount;
     }
+    private static Texture? _frameDepth;
 
     // At the eyepieces' image effect, before the eyepieces: while the bare eye's gun is drawn, their steps by the goggle
     // eye's depth (the objective's blur above all), until TakeEye.

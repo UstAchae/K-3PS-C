@@ -121,36 +121,6 @@ internal static partial class NightVisionEyepieces
             });
         }
         HideTwins();
-        NotePieces();
-    }
-
-    // DIAG (1.8.102, to be removed): once for each device worn, every renderer under its slot and whether it is drawn here
-    // (a part of the PVS-14 is missing from the frame, the user's, 2026-11-18: which is left out, and why).
-    private static Transform? _piecesNotedFor;
-    private static void NotePieces()
-    {
-        Transform slot = DeviceSlot();
-        if (slot == _piecesNotedFor)
-            return;
-        _piecesNotedFor = slot;
-        var sb = new System.Text.StringBuilder();
-        sb.Append($"NVG device parts under {slot.name}: {_slotRenderers.Count} renderers, {_pieces.Count} drawn here.");
-        foreach (Renderer r in _slotRenderers)
-        {
-            if (r == null)
-                continue;
-            bool drawn = _pieces.Exists(p => p.Renderer == r);
-            sb.Append($"\n  {(drawn ? "DRAWN" : "left out")} {r.GetType().Name} {r.name} (enabled {r.enabled}, opaque {Opaque(r)}, layer {r.gameObject.layer}");
-            if (r is MeshRenderer mesh)
-            {
-                PieceSource source = SourceOf(mesh);
-                sb.Append($", finest {source.Finest}, mesh {(source.Filter != null && source.Filter.sharedMesh != null ? source.Filter.sharedMesh.name : "none")}");
-                for (int i = 0; i < source.Materials.Length; i++)
-                    sb.Append($"; material {i} {(source.Materials[i] != null ? source.Materials[i].name + " [" + source.Materials[i].shader.name + "] queue " + source.Materials[i].renderQueue : "null")} g-buffer pass {source.Passes[i]}");
-            }
-            sb.Append(')');
-        }
-        NewCameraPlugin.Log?.LogInfo(sb.ToString());
     }
 
     // Another copy of the same model on the player, outside the device's own slot: left to itself it was seen beside the device

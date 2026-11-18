@@ -267,14 +267,11 @@ internal static partial class NightVisionEyepieces
             // was missing: the user's, 2026-11-18); the other eye's view of it only as that eye aims (NvgDirect, _DirectOver).
             split = monocularLeft ? 2f + Overscan : -1f - Overscan;
         }
+        // One eyepiece swung away: as a monocular, the whole device as the eye of the one left sees it, all over the frame
+        // (the halves meeting past that eyepiece, the raised one was cut through there: the user's, 2026-11-18); the other
+        // eye's view of it only as that eye aims (NvgDirect, _DirectOver).
         if (podMono)
-        {
-            int loneTube = lone;
-            float rim = (loneTube < _lensFloors.Length ? _lensFloors[loneTube].w : 0.02f) * _body!.lossyScale.x * PodLoneRims;
-            split = (lone == CentreLensA) == (a <= b)
-                ? Mathf.Max(split, Mathf.Min(Across(camera, leftGlass + right * rim - leftShift), 1f + Overscan))
-                : Mathf.Min(split, Mathf.Max(Across(camera, rightGlass - right * rim - rightShift), -Overscan));
-        }
+            split = (lone == CentreLensA) == (a <= b) ? 2f + Overscan : -1f - Overscan;
         binocular.SetFloat(SplitId, split);
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
@@ -385,8 +382,6 @@ internal static partial class NightVisionEyepieces
     // NvgDirect.shader, coverage; the user's, 2026-11-18: both eyes' devices seen, as both eyes' guns are).
     private static float _eyesMixed;
     private static bool _goggleEyeRight;
-
-    private const float PodLoneRims = 2f;   // the eyepiece left seen out to this many of its glass's radii from its middle
 
     private static float Across(Camera camera, Vector3 to)
     {
