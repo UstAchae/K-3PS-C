@@ -178,37 +178,25 @@ internal static partial class NightVisionEyepieces
         // The eyes by where the eyepieces stand down before them, whether or not a pod has swung one away.
         Vector3 placeA = FromCamera(_lensRest[CentreLensA], position).GetColumn(3), placeB = FromCamera(_lensRest[CentreLensB], position).GetColumn(3);
         float a = Vector3.Dot(placeA, right), b = Vector3.Dot(placeB, right);
-        // A monocular's two renders (TwoRenders.cs): the goggle's eye behind its lens, across from the head's middle.
+        // Which side a monocular's eye is (TwoEyes.cs): its lens across from the head's middle.
         if (_device.Monocular)
-            TwoRenders.SeeLens(a + CameraPosition.Horizontal);
+            TwoEyes.SeeLens(a + CameraPosition.Horizontal);
         // A monocular is before one eye only: over the other eye's half the device fades out toward the edge. Which eye, by where its lens
         // is from the head's middle, not from the camera: gone over to the aiming eye, the camera is right behind a lens before that eye.
         // A binocular with one eyepiece swung away on its pod (the ENVG-B's): seen as when both are down, each eye's half
         // from that eye brought in toward the middle, the camera where it is (the user's, 2026-11-17: the camera went over
         // to the one left, then the one left alone over the whole frame looked like the whole device moved); both swung all
         // the way away, the game draws the device (LensesOn).
-        bool podMono = PodMonocular(out int lone, out _);
-        // (Which side the bare eye is, for its gun and sight while it aims: TwoRenders.cs.)
+        bool podMono = PodMonocular(out int lone);
+        // (Which side the bare eye is, for its gun and sight while it aims: TwoEyes.cs.)
         if (podMono)
-            TwoRenders.SeeLens((lone == CentreLensA ? a : b) + CameraPosition.Horizontal);
+            TwoEyes.SeeLens((lone == CentreLensA ? a : b) + CameraPosition.Horizontal);
         // A monocular (the PVS-14) as the others (the user's, 2026-11-18: the camera went over to its eyepiece, which no other
         // goggle does): the camera where it is, its eye's half from that eye brought in toward its eyepiece by the set
         // share, the other eye's half from that eye, as far the other side of the head's middle, brought in alike.
         bool monocularHalves = _device.Monocular && _direct;
         bool asMonocular = _device.Monocular && !monocularHalves;
-        int monocular = -1;
-        // The one swung up, for the device drawn into the main camera (NightVisionDirect.OnRaisedPod).
-        RaisedPod = RaisedCupPod = null;
-        if (podMono)
-        {
-            Transform? raised = _lensPods[lone == CentreLensA ? CentreLensB : CentreLensA];
-            int which = raised != null ? System.Array.IndexOf(_device.Pods, raised.name) : -1;
-            RaisedPod = raised != null ? raised.name : null;
-            RaisedCupPod = which >= 0 && which < _device.CupPods.Length ? _device.CupPods[which] : null;
-        }
-        float seeThrough = Mathf.Clamp01(MonocularSeeThrough);
-        float fade = seeThrough <= 0.5f ? seeThrough * 2f : 1f + (seeThrough - 0.5f) * 6f;
-        binocular.SetVector(MonocularId, new Vector4(monocular >= 0 ? 1f : 0f, monocular, fade, 0f));
+        binocular.SetVector(MonocularId, new Vector4(0f, -1f, 0f, 0f));   // (no monocular's fade)
         binocular.SetFloat(LensClearId, LensReflections ? 0f : 1f);
         binocular.SetVector(EyeSpanId, new Vector4(1f, 1f, 0f, 0f));
         binocular.SetFloat(OverscanId, Overscan);
@@ -219,10 +207,10 @@ internal static partial class NightVisionEyepieces
         // camera when it has come forward to a sight (NightVisionScope.cs). Where the game draws the device, from the camera.
         // A monocular comes in none of the way once aimed: as the camera goes over to the aiming eye, and back as it returns.
         Vector3 back = view.forward * ScopePullback;
-        // A monocular's bare eye aiming (TwoRenders.cs; the camera stays where it is): as the aim comes up the eyes go all
+        // A monocular's bare eye aiming (TwoEyes.cs; the camera stays where it is): as the aim comes up the eyes go all
         // the way to their own places, so nothing of the device as the camera sees it is left, only as each eye sees it:
         // the goggle's eye straight behind its eyepiece, the bare eye from its side (the user's, 2026-11-18).
-        float eyesOwn = TwoRenders.BareAimShare * CameraPosition.ViewAimed;
+        float eyesOwn = TwoEyes.BareAimShare * CameraPosition.ViewAimed;
         _eyesMixed = eyesOwn;
         _goggleEyeRight = _device.Monocular ? a + CameraPosition.Horizontal > 0f : podMono && (lone == CentreLensA) != (a <= b);
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
@@ -277,12 +265,6 @@ internal static partial class NightVisionEyepieces
         Vector3 GlassOf(int tube) => tube < _lensFloors.Length ? FromCamera(_lensRest[tube], position).MultiplyPoint3x4(_lensFloors[tube]) : (Vector3)FromCamera(_lensRest[tube], position).GetColumn(3);
         Vector3 leftGlass = GlassOf(a <= b ? CentreLensA : CentreLensB), rightGlass = GlassOf(a <= b ? CentreLensB : CentreLensA);
         float split = asMonocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftGlass - leftShift) + Across(camera, rightGlass - rightShift)), 0.2f, 0.8f);
-        if (!asMonocular && !monocularHalves && _splitNotedFor != _body)
-        {
-            _splitNotedFor = _body;
-            float byNodes = 0.5f * (Across(camera, leftPlace - leftShift) + Across(camera, rightPlace - rightShift));
-            NewCameraPlugin.Log?.LogInfo($"NVG eyes: the halves meet at {split:F3} by the eyepieces' glass ({Across(camera, leftGlass - leftShift):F3}, {Across(camera, rightGlass - rightShift):F3}); by their nodes it was {byNodes:F3} ({Across(camera, leftPlace - leftShift):F3}, {Across(camera, rightPlace - rightShift):F3}).");
-        }
         // One eyepiece swung away: the halves meet past the far side of the one left, its cup and housing about its glass
         // (twice the glass's radius), as its own eye sees it: it is seen whole (cut nearer, it was cut through, the user's,
         // 2026-11-17), the other eye's half from there on.
@@ -336,10 +318,9 @@ internal static partial class NightVisionEyepieces
             binocular.SetVector(EyePosIds[side], new Vector4(eye.x, eye.y, eye.z, eyeBack));
         }
         if (_direct)
-            DrawDirect(camera, leftShift, rightShift, split, new Vector4(0f, -1f, fade, 0f));
+            DrawDirect(camera, leftShift, rightShift, split);
         FusionField(camera, a <= b ? CentreLensB : CentreLensA, position + rightShift);
     }
-    private static Transform? _splitNotedFor;
     private const float RayFar = 2f;                               // m: the lines of sight's frame (only their direction counts)
     private static float RayNear => Mathf.Max(EyeNear, RayFar / 2e5f);
 
@@ -408,7 +389,7 @@ internal static partial class NightVisionEyepieces
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.
     // A monocular's bare eye aiming, 0 to 1 as the aim comes up: the two eyes' views of the device no longer side by side but
-    // one over the other all over the frame, the goggle eye's whole, the bare eye's seen through (TwoRenders.BareSeen;
+    // one over the other all over the frame, the goggle eye's whole, the bare eye's seen through (TwoEyes.BareSeen;
     // NvgDirect.shader, coverage; the user's, 2026-11-18: both eyes' devices seen, as both eyes' guns are).
     private static float _eyesMixed;
     private static bool _goggleEyeRight;

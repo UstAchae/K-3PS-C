@@ -47,8 +47,8 @@ internal static class CameraPosition
         float eye = AimEye;
         float pose = Mathf.Lerp(Across, side * eye, Smooth(_aimed));
         AimingEyeAcross = side * eye;
-        // A monocular's bare eye aiming (TwoRenders.cs): the camera stays where it is, that eye's gun is drawn in from it.
-        Horizontal = Mathf.Lerp(Across, side * eye, Smooth(_viewAimed) * (1f - TwoRenders.BareAimShare));
+        // A monocular's bare eye aiming (TwoEyes.cs): the camera stays where it is, that eye's gun is drawn in from it.
+        Horizontal = Mathf.Lerp(Across, side * eye, Smooth(_viewAimed) * (1f - TwoEyes.BareAimShare));
         PoseAcross = pose - Horizontal;
     }
 

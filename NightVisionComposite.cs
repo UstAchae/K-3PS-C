@@ -143,8 +143,8 @@ internal static partial class NightVisionEyepieces
             to = destination;
         }
         NoteStage(propagator, staged, from);
-        // The experiment (TwoRenders.cs): a gun's render kept, or the goggle eye's gun laid into the scene.
-        TwoRenders.BeforeEyepieces(from, _tubeShader);
+        // A goggle before one eye, the bare eye aiming (TwoEyes.cs): the eyepieces' steps by the goggle eye's depth.
+        TwoEyes.BeforeEyepieces(from, _tubeShader);
 
         RenderTexture? lensed = lens ? RenderTexture.GetTemporary(from.width, from.height, 0, from.format) : null;
         RenderTexture into = lensed != null ? lensed : to;
@@ -173,8 +173,8 @@ internal static partial class NightVisionEyepieces
             if (dimmed != null)
                 RenderTexture.ReleaseTemporary(dimmed);
         }
-        // The experiment (TwoRenders.cs): the bare eye's gun laid over at half.
-        TwoRenders.TakeEye(into, _tubeShader);
+        // (TwoEyes.cs) the bare eye's gun, lasers and sight lens laid over the eyepieces' picture.
+        TwoEyes.TakeEye(into, _tubeShader);
         if (lensed != null)
         {
             Fisheye.Blit(lensed, to);

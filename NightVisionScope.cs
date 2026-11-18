@@ -85,7 +85,7 @@ internal static partial class NightVisionEyepieces
         // 2026-11-18.)
         int lens = CentreLensA;
         bool one = _device.Monocular;
-        if (!one && PodMonocular(out int lone, out _) && lone < _lensRest.Length)
+        if (!one && PodMonocular(out int lone) && lone < _lensRest.Length)
         {
             one = true;
             lens = lone;

@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.115";
+    public const string PluginVersion = "1.8.116";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -215,7 +215,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             NightVisionEyepieces.EyepieceGlow = glow.Value;
             NightVisionEyepieces.LensReflections = reflections.Value;
             NightVisionEyepieces.EyeShift = eyeShift.Value;
-            TwoRenders.BareLensSeeThrough = bareGunSeeThrough.Value;
+            TwoEyes.BareLensSeeThrough = bareGunSeeThrough.Value;
             NightVisionEyepieces.DeviceSeeThrough = deviceSeeThrough.Value;
             NightVisionEyepieces.RaiseMount = raiseMount.Value;
             NightVisionEyepieces.LowerMount = lowerMount.Value;
@@ -612,7 +612,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void OnEnable()
     {
         StartCoroutine(EndOfFrame());
-        TwoRenders.Hook();
+        TwoEyes.Hook();
         Camera.onPreCull += PreCull;
         Camera.onPreRender += PreRender;
         Camera.onPostRender += PostRender;
@@ -626,7 +626,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         {
             yield return end;
             Fisheye.GiveBack();
-            TwoRenders.EndOfFrame();
+            TwoEyes.EndOfFrame();
         }
     }
 

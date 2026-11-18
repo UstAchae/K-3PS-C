@@ -64,13 +64,13 @@ internal static partial class NightVisionEyepieces
     // Under an upscaler that blends frames itself (Unity's TAA pass off: DLSS and the like) the FPS camera's lasers are
     // not drawn in its frame, where the upscaler would blend them over frames (they have no motion vectors) and break
     // them up: they are drawn apart, against its depth and not jittered, and added once the upscale is done.
-    // Lifted too while the bare eye aims through its sight (TwoRenders.LasersCutAtLens): added back but behind its lens.
+    // Lifted too while the bare eye aims through its sight (TwoEyes.LasersCutAtLens): added back but behind its lens.
     // Only while the upscaler's buffer is in fact filled for the camera (last frame or this): the TAA layer's flag stays
     // as it was when the upscaler stops (the goggle up, after a while), and lasers drawn apart then were never added back,
     // the visible laser gone (diagnostics of 1.8.78: 120 drawn apart, 0 added, the buffer not filled).
     private static int _upscaleFillFrame = -10;
     private static bool UpscalerFilling => _upscaleFillFrame >= Time.frameCount - 1;
-    private static bool LasersLifted => NewCameraSwitch.Enabled && (Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera) && UpscalerFilling || TwoRenders.LasersCutAtLens)
+    private static bool LasersLifted => NewCameraSwitch.Enabled && (Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera) && UpscalerFilling || TwoEyes.LasersCutAtLens)
         && LoadShaders() && _irLightShader != null;
     // Lifted only to be cut there (no upscaler): added back in the camera's own frame.
     private static bool LiftedInFrame => !Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera) || !UpscalerFilling;
@@ -78,7 +78,7 @@ internal static partial class NightVisionEyepieces
     private static RenderTexture? _bareLasers, _irCut, _bareLaserDepth;
     private const int BareLaserDepthPass = 20;   // NvgDirect.shader
     private static int _bareLasersFrame = -1;
-    // The visible lasers on the gun as the bare eye sees them, this frame (TwoRenders.TakeEye lays them over with its gun).
+    // The visible lasers on the gun as the bare eye sees them, this frame (TwoEyes.TakeEye lays them over with its gun).
     internal static Texture? BareLasers => _bareLasersFrame == Time.frameCount ? _bareLasers : null;
 
     private static readonly System.Reflection.FieldInfo? ResolveDisabledField = AccessTools.Field(typeof(UnityEngine.Rendering.PostProcessing.PostProcessLayer), "_isTAAResolveDisabled");
@@ -120,11 +120,9 @@ internal static partial class NightVisionEyepieces
     // camera culls, before this frame's lasers are drawn (OnCameraPreRenderIr, which clears them every frame).
     internal static void LasersAfterUpscale(CommandBuffer buffer, RenderTexture target)
     {
-        _diagFills++;
         if (_irNaked == null || _irAdd == null || !LasersLifted || LiftedInFrame)
             return;
-        _diagAdds++;
-        buffer.Blit(_irNaked, target, _irAdd, TwoRenders.LasersCutAtLens ? LaserAddCutPass : LaserAddPass);
+        buffer.Blit(_irNaked, target, _irAdd, TwoEyes.LasersCutAtLens ? LaserAddCutPass : LaserAddPass);
     }
 
     private static readonly int IrClipToWorldId = Shader.PropertyToID("_IrClipToWorld");
@@ -234,49 +232,6 @@ internal static partial class NightVisionEyepieces
     // sight's picture that is the game's own night-vision one (its own night vision on), as the game has it.
     private static float _laserAsItWas = -1f;
 
-    // DIAGNOSTICS (lasers, 2026-11-17; to come out once found): every two seconds, each laser held back on the player or the
-    // gun, as it stands: visible or IR, on, its intensity and colour, what BRNVG takes the goggle to be, the replay, and
-    // its beam and point as last drawn (the bare eye's copy is moved from these).
-    private static int _laserDiagNext, _diagFills, _diagAdds, _diagNaked;
-    private static System.Reflection.FieldInfo? _brnvgOn;
-    private static bool _brnvgLooked;
-    internal static void LaserDiag()
-    {
-        if (Time.frameCount < _laserDiagNext)
-            return;
-        _laserDiagNext = Time.frameCount + 120;
-        if (!_brnvgLooked)
-        {
-            _brnvgLooked = true;
-            _brnvgOn = AccessTools.TypeByName("BorkelRNVG.Helpers.NvgHelper") is System.Type t ? AccessTools.Field(t, "IsNvgOn") : null;
-        }
-        object? brnvg = _brnvgOn?.GetValue(null);
-        var sb = new System.Text.StringBuilder();
-        TwoRenders.BareLaserShift(Camera.main != null ? Camera.main : null!, out Vector3 bareShift);
-        sb.Append($"Lasers: held {LaserReplay.Held.Count}, replayed {(LaserReplay.ReplayedFrame == Time.frameCount ? LaserReplay.ReplayedCount : 0)} this frame, BRNVG NVG on {brnvg}, IR wanted {IrWanted}, lifted {LasersLifted}, goggle down {DownOrFlipping}, records {_irLaserRecords.Count} (this frame {_irMeshesFrame == Time.frameCount}), bare shift {bareShift.magnitude * 1000f:F0} mm; upscaled {Upscaled(EFT.CameraControl.CameraManager.Instance?.Camera)}, in frame {LiftedInFrame}; last 120 frames: upscaler buffer filled {_diagFills}, lasers added after it {_diagAdds}, lasers drawn apart {_diagNaked}");
-        _diagFills = _diagAdds = _diagNaked = 0;
-        foreach (MonoBehaviour held in LaserReplay.Held)
-        {
-            if (held is not LaserBeam lb)
-                continue;
-            Color colour = LaserBeamBlock(lb) is MaterialPropertyBlock block ? block.GetColor(LaserColorId) : Color.clear;
-            Transform t = lb.transform;
-            bool hit = Physics.Raycast(t.position + t.forward * lb.RayStart, t.forward, out RaycastHit h, lb.MaxDistance, lb.Mask);
-            string hitText = hit ? h.distance.ToString("F2") + " m" : "none";
-            sb.Append('\n').Append($"  {lb.name} ({lb.BeamMaterial?.name}): on {lb.isActiveAndEnabled}, intensity {lb.IntensityFactor:F3}, colour {colour}, emitter {t.position} fwd {t.forward}, hit {hitText}");
-            if (_irLaserRecords.TryGetValue(lb, out IrLaser rec))
-            {
-                if (rec.Beam is IrMesh beam && beam.Mesh != null)
-                    sb.Append($"; beam at {(Vector3)beam.Matrix.GetColumn(3)} size {beam.Mesh.bounds.size}");
-                if (rec.Point is IrMesh point)
-                    sb.Append($"; point at {(Vector3)point.Matrix.GetColumn(3)}");
-                sb.Append($"; seen {rec.Seen}");
-            }
-            else
-                sb.Append("; no record");
-        }
-        NewCameraPlugin.Log?.LogInfo(sb.ToString());
-    }
     private static readonly int LaserColorId = Shader.PropertyToID("_Color");
 
     private static void LaserAsItIsPrefix(LaserBeam __instance)
@@ -392,7 +347,7 @@ internal static partial class NightVisionEyepieces
             return;
         CollectIrLasers();
         bool lights = ir && _irLightsFrame == Time.frameCount && _irLights.Count > 0;
-        bool bare = TwoRenders.BareLaserShift(camera, out Vector3 bareShift) && GunDepth != null && _irLaserRecords.Count > 0
+        bool bare = TwoEyes.BareLaserShift(camera, out Vector3 bareShift) && GunDepth != null && _irLaserRecords.Count > 0
             && _irMeshesFrame == Time.frameCount;
         bool lasers = lifted && _irMeshes.Count > 0 || ir && _irOnlyMeshes.Count > 0 || bare;
         // The night-vision ambient's difference (NightVisionAmbient.cs), once the layer's materials are made.
@@ -477,7 +432,7 @@ internal static partial class NightVisionEyepieces
         {
             _irLasers ??= new CommandBuffer { name = "Justachae NVG IR lasers" };
             _irLasers.Clear();
-            bool inFrame = lifted && LiftedInFrame, cut = TwoRenders.LasersCutAtLens;
+            bool inFrame = lifted && LiftedInFrame, cut = TwoEyes.LasersCutAtLens;
             // Under an upscaler not jittered: put in after the upscale, they are not blended over frames.
             if (lifted && !inFrame)
                 _irLasers.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.nonJitteredProjectionMatrix);
@@ -491,7 +446,6 @@ internal static partial class NightVisionEyepieces
                         _irLasers.DrawMesh(m.Mesh, m.Matrix, m.Material, 0, 0, m.Block);
                 }
                 _nakedFrame = Time.frameCount;
-                _diagNaked++;
                 // No upscaler: lifted only to be cut behind the bare eye's sight lens, added back here.
                 if (inFrame)
                     _irLasers.Blit(_irNaked, BuiltinRenderTextureType.CameraTarget, _irAdd!, cut ? LaserAddCutPass : LaserAddPass);

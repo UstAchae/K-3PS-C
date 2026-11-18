@@ -2,27 +2,35 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// A monocular (the PVS-14) down or flipping, seen with both eyes (the user's, 2026-11-15 to 17). The camera stands at the
-// goggle's eye (behind its lens, NightVisionEyes.cs), the bare eye as far the other side of the head's middle; the eyes go
-// out to their places as the goggle flips down. One render of the frame, and one gun: the aiming eye's (the user's,
-// 2026-11-17: both eyes' guns were too much to be worth it). Both eyes are seen only at the sight's lens:
-//   the goggle eye aims: the game's own gun and sight as ever (night vision and the objective's blur on them);
-//   not aiming: the game's own gun, as the camera sees it, whichever shoulder it is on (the user's, 2026-11-18);
-//   the bare eye aims: the camera's gun stays (drawn here too, as the game's, on the other kind of a chessboard, the
-//   game's copy kept to its shadow; left out behind the bare eye's sight lens), and the bare eye's fades in over it as the
-//   aim comes up: its gun (with the hands and arms) is drawn into the G-buffer by NightVisionDirect.cs from that eye,
-//   unjittered, the game's copy kept to its shadow; taken apart before the image effects (FillApart, what lies under it
-//   filled from around for the eyepieces), gathered over frames along its own motion (its light's grain smoothed) and
-//   laid over the eyepieces' picture after (TakeEye): no night vision, no blur on it. Its sight's lens seen through (F12
-//   单筒：裸眼瞄准时分划的透明度) over the goggle eye's picture of what lies behind; the lasers on the gun drawn from it
-//   (LaserReplay).
-internal static class TwoRenders
+// A goggle before one eye only, seen with both eyes: a monocular (the PVS-14), or the ENVG-B with one eyepiece swung away
+// on its pod (NightVisionEyepieces.PodMonocular). As the user set it out, 2026-11-15 to 18.
+//
+// The camera: where it is for any goggle. It does not go over to the goggle's eye as the goggle comes down, nor to the
+// bare eye when that eye aims; aiming with the goggle's eye it goes over to it, as with any goggle (CameraPosition,
+// BareAimShare).
+//
+// The gun:
+//   not aiming, or the goggle's eye aiming: the game's own, as the camera sees it. Nothing is done here.
+//   the bare eye aiming: the camera's gun stays, and that eye's own view of the gun (with the hands, arms and lasers)
+//   fades in over it with the aim, to half (BareSeen). Both are drawn into the frame's G-buffer by NightVisionDirect.cs,
+//   on the two kinds of a chessboard (NvgDirect.shader, gunOf), the game's copy kept to its shadow:
+//     the camera's gun is the frame's own: night vision and the objective's blur on it; left out behind the bare eye's
+//     sight lens;
+//     the bare eye's is drawn unjittered, taken apart before the image effects (FillApart: the frame, its depth and the
+//     camera's motion left as the goggle's eye has them, made whole from the pixels next to each), gathered over frames
+//     along its own motion, and laid over the eyepieces' picture after (TakeEye): no night vision, no blur on it. Its
+//     sight's lens is laid from that eye too (DrawLensLayer), seen through (F12 单筒：裸眼瞄准时分划的透明度) over the
+//     goggle eye's picture of what lies behind.
+//
+// The device itself is NightVisionEyes.cs and NightVisionDirect.cs (PieceShift, NvgDirect's coverage, _DirectOver): each
+// eye's view of it, the bare eye's laid over the goggle eye's by half while that eye aims.
+internal static class TwoEyes
 {
     // Also the ENVG-B with one eyepiece swung away (NightVisionEyepieces.PodMonocular), but the camera left where it is (it
     // goes over to the aiming eye only to aim; the one left brought to the middle as a binocular's are,
     // NightVisionEyes.RenderLenses; the user's, 2026-11-17): the bare eye aiming is then the camera, its gun the camera's.
     internal static bool Now => NightVisionEyepieces.DownOrFlipping
-        && (NightVisionEyepieces.MonocularWorn || NightVisionEyepieces.PodMonocular(out _, out _));
+        && (NightVisionEyepieces.MonocularWorn || NightVisionEyepieces.PodMonocular(out _));
     // The camera does not go over to the goggle's eye as it flips down (the user's, 2026-11-18: the PVS-14 as the others,
     // NightVisionEyes.RenderLenses), and does not go over to the bare eye when that eye aims (the user's): it stays where
     // it is, its own gun as it sees it, and the bare eye's gun, drawn from that eye, fades in over it. Aiming with the
@@ -39,8 +47,6 @@ internal static class TwoRenders
     // the aim has come up (_aim, 0 to 1): the bare eye's gun only while it aims.
     private static float _shareBare, _aim;
     internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f;
-    // The camera's (goggle eye's) gun stays whole; the bare eye's by as much as the aim has come up.
-    internal static float GoggleOpacityNow => 1f;
     private static float BareGunOpacity => _aim * BareSeen;
     // How much of what the bare eye sees (its gun, its lasers, the device from its side) is seen over the goggle eye's:
     // half (the user's, 2026-11-18).
@@ -189,8 +195,8 @@ internal static class TwoRenders
         {
             var fill = HarmonyLib.AccessTools.Method(typeof(SSAAPropagator), nameof(SSAAPropagator.FillCommandBuffer));
             new HarmonyLib.Harmony(NewCameraPlugin.PluginGuid + ".bareLens").Patch(fill,
-                prefix: new HarmonyLib.HarmonyMethod(typeof(TwoRenders), nameof(LensOutPrefix)),
-                finalizer: new HarmonyLib.HarmonyMethod(typeof(TwoRenders), nameof(LensOutFinalizer)));
+                prefix: new HarmonyLib.HarmonyMethod(typeof(TwoEyes), nameof(LensOutPrefix)),
+                finalizer: new HarmonyLib.HarmonyMethod(typeof(TwoEyes), nameof(LensOutFinalizer)));
         }
         catch (System.Exception e)
         {
@@ -278,7 +284,6 @@ internal static class TwoRenders
         if (_frameDepth != null && _goggleDepth != null && Shader.GetGlobalTexture(CameraDepthId) == _goggleDepth)
             Shader.SetGlobalTexture(CameraDepthId, _frameDepth);
         NightVisionEyepieces.EmptyGunForward();
-        NightVisionEyepieces.LaserDiag();
     }
 
     // ---------------------------------------------------------------- the game's copy of the gun, and the sight's lens
@@ -340,9 +345,7 @@ internal static class TwoRenders
 
     private const int LensSolidPass = 1, GunAndLensPass = 2, BareViewPass = 3, GoggleViewPass = 4, GoggleFillPass = 5,
         DepthWeighPass = 7, DepthPullPass = 8, BareGatherPass = 9;
-    internal const int PartsLayPass = 6;
     private static Material? _material;
-    internal static Material? TubeMaterial => _material;
     private static Material? MaterialFor(Shader? tubeShader) =>
         tubeShader == null ? null : _material ??= new Material(tubeShader) { name = "Justachae two eyes", hideFlags = HideFlags.DontSave };
 
@@ -397,7 +400,7 @@ internal static class TwoRenders
         var buffer = _apartBuffer;
         buffer.Clear();
         buffer.SetGlobalVector(GunTexelId, new Vector4(1f / w, 1f / h, w, h));
-        buffer.SetGlobalFloat(GoggleShareId, GoggleOpacityNow);
+        buffer.SetGlobalFloat(GoggleShareId, 1f);   // (the camera's gun stays whole)
         buffer.GetTemporaryRT(ApartTempId, w, h, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
         buffer.Blit(UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, ApartTempId);
         buffer.Blit(ApartTempId, bareView, material, BareViewPass);

@@ -153,7 +153,7 @@ Shader "Justachae/NVG/Direct" {
  sampler2D _DirectG0, _DirectG1, _DirectG2, _DirectG3;
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectGD);
  float _DirectGunShown;
- // Both guns seen (TwoRenders.BothGuns): the goggle eye's too, on the other pixels.
+ // Both guns seen (TwoEyes.BothGuns): the goggle eye's too, on the other pixels.
  sampler2D _DirectH0, _DirectH1, _DirectH2, _DirectH3;
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectHD);
  float _DirectGoggleShown;
@@ -169,7 +169,7 @@ Shader "Justachae/NVG/Direct" {
 
  // Both guns seen: which eye's gun this pixel is given (1 the bare eye's, 2 the goggle eye's, 0 neither) and its depth. The
  // aiming eye's gun wherever it is, whole (sharp; it is solid); the other's on its half of the chessboard where the aiming
- // eye's is not (it is seen through: taken apart with what lies behind it, TwoRenders.cs). One gun alone: as gunPicked.
+ // eye's is not (it is seen through: taken apart with what lies behind it, TwoEyes.cs). One gun alone: as gunPicked.
  float _DirectBareAims, _GunParity;
  int gunOf (float2 pixel, float2 uv, out float raw) {
   float rawB = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
@@ -179,12 +179,12 @@ Shader "Justachae/NVG/Direct" {
    return bare && (_DirectGunShown >= 0.999 || checker(pixel)) ? 1 : 0;
   float rawG = SAMPLE_DEPTH_TEXTURE(_DirectHD, uv);
   // The chessboard turned over every frame (_GunParity): over two frames each pixel has the bare eye's gun drawn once,
-  // and TwoRenders.cs gathers them over frames.
+  // and TwoEyes.cs gathers them over frames.
   bool goggle = shown(rawG), even = fmod(floor(pixel.x) + floor(pixel.y) + _GunParity, 2) < 0.5;
   if (_DirectBareAims > 0.5) {
    // The bare eye aims: its gun on one kind of the chessboard, the goggle eye's (seen through) on the other, what lies
    // behind wherever either is not: under the bare eye's gun the goggle eye's own view is kept on half the pixels (made
-   // whole from them, TwoRenders.cs), not guessed (filled from around, it showed round the gun as a blurred outline).
+   // whole from them, TwoEyes.cs), not guessed (filled from around, it showed round the gun as a blurred outline).
    if (even) return bare ? 1 : 0;
    if (goggle) { raw = rawG; return 2; }
   } else {
@@ -522,7 +522,7 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 13: the guns (TwoRenders.cs: the bare eye's, _DirectG0..3, _DirectGD, and the goggle eye's, _DirectH0..3, _DirectHD, each
+  // 13: the guns (TwoEyes.cs: the bare eye's, _DirectG0..3, _DirectGD, and the goggle eye's, _DirectH0..3, _DirectHD, each
   // drawn into G-buffers of its own) put into the main camera's, each pixel the one gunOf picks.
   Pass {
    // Before whatever the frame has there (the other eye's gun, the frame's own, is not in this eye's way), but the device.
@@ -597,7 +597,7 @@ Shader "Justachae/NVG/Direct" {
    float4 frag () : SV_Target { return 1; }
    ENDCG
   }
-  // 16: which eye's gun pass 13 put in at each pixel, as it decides it: 1 the bare eye's, 0.5 the goggle eye's (TwoRenders.cs
+  // 16: which eye's gun pass 13 put in at each pixel, as it decides it: 1 the bare eye's, 0.5 the goggle eye's (TwoEyes.cs
   // takes the two apart by it; their depths are too near alike to tell them by).
   Pass {
    Cull Off ZWrite Off ZTest Always
@@ -672,7 +672,7 @@ Shader "Justachae/NVG/Direct" {
    ENDCG
   }
   // 18: the bare eye's gun's own motion on the screen (both guns seen), into a target of its own, for gathering its picture
-  // over frames (TwoRenders.cs): only its front (its own depth).
+  // over frames (TwoEyes.cs): only its front (its own depth).
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM

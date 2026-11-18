@@ -29,7 +29,7 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
-  // 1: a lens's mesh, solid (TwoRenders.cs: where the bare eye's sight lens is).
+  // 1: a lens's mesh, solid (TwoEyes.cs: where the bare eye's sight lens is).
   Pass {
    Cull Off ZWrite Off ZTest Always Blend Off
    CGPROGRAM
@@ -165,7 +165,7 @@ Shader "Justachae/NVG/Tube" {
     return abs(gun - scene) <= max(gun * 0.002, 0.00002);
    }
    static const float2 around[8] = { float2(1, 0), float2(-1, 0), float2(0, 1), float2(0, -1), float2(1, 1), float2(-1, 1), float2(1, -1), float2(-1, -1) };
-   float4 _GunTexel;   // the camera's own pixels (TwoRenders.FillApart: before the upscale)
+   float4 _GunTexel;   // the camera's own pixels (TwoEyes.FillApart: before the upscale)
    sampler2D _GunWhich;   // which eye's gun was put in here (NvgDirect.shader, pass 16): 1 the bare eye's, 0.5 the goggle eye's
    bool bareAt (float2 uv) { return tex2Dlod(_GunWhich, float4(uv, 0, 0)).r > 0.75; }
    float4 frag (v2f_img i) : SV_Target {
@@ -243,7 +243,7 @@ Shader "Justachae/NVG/Tube" {
    float _GoggleShare;
    sampler2D _DirectGunLens;
    // The goggle eye's gun put in here (NvgDirect.shader, pass 13: its depth is what the camera has).
-   float4 _GunTexel;   // the camera's own pixels (TwoRenders.FillApart: before the upscale)
+   float4 _GunTexel;   // the camera's own pixels (TwoEyes.FillApart: before the upscale)
    sampler2D _GunWhich;   // which eye's gun was put in here (NvgDirect.shader, pass 16): 1 the bare eye's, 0.5 the goggle eye's
    bool bareAt (float2 uv) { return tex2Dlod(_GunWhich, float4(uv, 0, 0)).r > 0.75; }
    bool goggleAt (float2 uv) { float w = tex2Dlod(_GunWhich, float4(uv, 0, 0)).r; return w > 0.25 && w < 0.75; }

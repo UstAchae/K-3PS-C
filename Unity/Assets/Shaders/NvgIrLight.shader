@@ -10,7 +10,7 @@
 //    frame's, followed along the motion vectors and kept within what this frame has about the pixel. The layer is
 //    drawn from the jittered G-buffer but added after the upscale, which does not steady it.
 // 5: as 2, but not where the bare eye's sight lens is (_DirectGunLens, NightVisionDirect.cs): behind it the goggle eye's
-//    gun's lasers are not seen (TwoRenders.LasersCutAtLens).
+//    gun's lasers are not seen (TwoEyes.LasersCutAtLens).
 // 4: the night-vision ambient's difference on the frame's surfaces (NightVisionAmbient.cs), added into the layer: each
 //    surface's diffuse colour and occlusion from the G-buffer, times the difference of the two ambient probes along its
 //    normal (_NvSh*, packed as Unity packs a probe), as Unity's deferred shading lights a surface by the ambient.

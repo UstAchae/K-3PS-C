@@ -35,11 +35,10 @@ internal static partial class NightVisionEyepieces
     internal static bool EyepieceGlow = true;   // the lenses' light spread over the glass and eyecups (F12)
     internal static float EyeShift = 0.8f;      // how far each half of the device comes in, as a share of the way from its centre lens
     internal static bool LensReflections = true;    // the device's glass drawn at the eyes, with what it reflects (F12)
-    internal static float MonocularSeeThrough = 0.5f;   // a monocular to the other eye: 0 not faded, 0.5 as it was, 1 faded fastest (F12)
 
     internal static bool Active { get; private set; }
     internal static bool ThermalShown => Active && _device.Thermal;
-    // A device with eyepieces down, or on its way down or up (TwoRenders.cs: the frame rendered from each eye then).
+    // A device with eyepieces down, or on its way down or up (TwoEyes.cs: the frame rendered from each eye then).
     internal static bool DownOrFlipping => _body != null && _lensNodes.Length > 0 && (Active || _flip > 0.001f);
     internal static bool MonocularWorn => _body != null && _device.Monocular;
     internal static float Flip => _flip;
@@ -118,7 +117,6 @@ internal static partial class NightVisionEyepieces
     private static readonly string[] EnvgbPods = { "envgb_pod_L", "envgb_pod_R" };
     private static readonly string[] EnvgbCupPods = { "envgb_eyecup_pod_L", "envgb_eyecup_pod_R" };
     // This frame's eyepiece swung up while the other is down (null otherwise), by its pod's name and its eyecup's.
-    private static string? RaisedPod, RaisedCupPod;
 
     // The ENVG-B's two entries, its eyecups on and off: all they share is set here, once, each giving only what its
     // eyecups make different (where the opening narrowest is, the rim over it, the card over that).
@@ -317,26 +315,21 @@ internal static partial class NightVisionEyepieces
 
     // A binocular with one eyepiece swung away on its pod (the ENVG-B's) and the other still before its eye, or both on their
     // way away until the last is all the way: the one left (lone, the less far of the two) seen alone, brought to the middle
-    // as a binocular's eyepieces are (NightVisionEyes.RenderLenses). apart: how far the other has swung, over the first
-    // stretch of its swing, and back over the last of the second's.
-    internal static bool PodMonocular(out int lone, out float apart)
+    // as a binocular's eyepieces are (NightVisionEyes.RenderLenses).
+    internal static bool PodMonocular(out int lone)
     {
         lone = -1;
-        apart = 0f;
         if (_body == null || _device.Monocular || _lensPods.Length <= Mathf.Max(CentreLensA, CentreLensB))
             return false;
         bool downA = PodDown(CentreLensA), downB = PodDown(CentreLensB);
         if (downA && downB)
             return false;
         lone = PodAngle(CentreLensA) <= PodAngle(CentreLensB) ? CentreLensA : CentreLensB;
-        int raised = lone == CentreLensA ? CentreLensB : CentreLensA;
-        float home = !downA && !downB ? PodBare(lone) : 0f;
-        if (home >= 0.999f)
+        if (!downA && !downB && PodBare(lone) >= 0.999f)
         {
             lone = -1;
             return false;
         }
-        apart = PodGone(raised) * (1f - home);
         return true;
     }
     private static Vector4[] _lensFloors = Array.Empty<Vector4>();   // each lens's centre on the floor in its node's frame, w its radius
