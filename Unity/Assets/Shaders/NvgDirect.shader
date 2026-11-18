@@ -89,27 +89,33 @@ Shader "Justachae/NVG/Direct" {
  float4 _DirectOver;
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
   float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
-  toRight = t;
+  bool inL = within(_DirectLens0, uv, _EyeInvVP0), inR = within(_DirectLens1, uv, _EyeInvVP1);
+  bool hasL = shown(rawL), hasR = shown(rawR);
+  float c = 0, side = t;
   if (_DirectOver.x > 0) {
    bool goggleRight = _DirectOver.y > 0.5;
-   bool inL = within(_DirectLens0, uv, _EyeInvVP0), inR = within(_DirectLens1, uv, _EyeInvVP1);
-   // Through the goggle eye's lens nothing of either: the composite shows the lens there whole.
-   if (goggleRight ? inR : inL) return 0;
-   float sL = shown(rawL) && !inL ? lerp(1 - t, goggleRight ? _DirectOver.z : 1, _DirectOver.x) : 0;
-   float sR = shown(rawR) && !inR ? lerp(t, goggleRight ? 1 : _DirectOver.z, _DirectOver.x) : 0;
+   float sL = hasL && !inL ? lerp(1 - t, goggleRight ? _DirectOver.z : 1, _DirectOver.x) : 0;
+   float sR = hasR && !inR ? lerp(t, goggleRight ? 1 : _DirectOver.z, _DirectOver.x) : 0;
    float own = goggleRight ? sR : sL, other = goggleRight ? sL : sR;
-   if (own > 0 && own >= other) { toRight = goggleRight ? 1 : 0; return own; }
-   if (other > 0) { toRight = goggleRight ? 0 : 1; return other; }
-   return 0;
+   // Through the goggle eye's lens nothing of either: the composite shows the lens there whole.
+   bool throughLens = goggleRight ? inR : inL;
+   if (!throughLens) {
+    if (own > 0 && own >= other) { side = goggleRight ? 1 : 0; c = own; }
+    else if (other > 0) { side = goggleRight ? 0 : 1; c = other; }
+   }
+  } else {
+   // Through either eye's lens here, nothing of the device: the lenses' picture is made from this frame, and the composite
+   // shows the lens there whole.
+   bool throughLens = (t < 1 && inL) || (t > 0 && inR);
+   bool left = t < 1 && hasL, right = t > 0 && hasR;
+   if (!throughLens) {
+    if (left && right) c = 1;
+    else if (left) { side = 0; c = 1 - t; }
+    else if (right) { side = 1; c = t; }
+   }
   }
-  // Through either eye's lens here, nothing of the device: the lenses' picture is made from this frame, and the composite shows the
-  // lens there whole.
-  if ((t < 1 && within(_DirectLens0, uv, _EyeInvVP0)) || (t > 0 && within(_DirectLens1, uv, _EyeInvVP1))) return 0;
-  bool left = t < 1 && shown(rawL), right = t > 0 && shown(rawR);
-  if (left && right) return 1;
-  if (left) { toRight = 0; return 1 - t; }
-  if (right) { toRight = 1; return t; }
-  return 0;
+  toRight = side;
+  return c;
  }
 
  // A half fading away is kept whole at some pixels and left out at the others, more of them left out the further it fades. Mixed
