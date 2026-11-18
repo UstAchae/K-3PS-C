@@ -301,7 +301,11 @@ Shader "Justachae/NVG/Direct" {
     float c = coverage(uv, rawL, rawR, toRight);
     float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
     bool strip = t > 0 && t < 1, fading = fadingAt(uv);
-    if (c <= 0 || !strip && !fading || !notCovered(uv, rawL, rawR))
+    // (The bare eye's view of the device laid over the goggle eye's, _DirectOver: seen through anywhere in the frame, kept at
+    // some pixels and left out at others there too; left as it was, the pattern showed, most of all where the leaning frame
+    // is turned.)
+    bool over = _DirectOver.x > 0 && c < 1;
+    if (c <= 0 || !strip && !fading && !over || !notCovered(uv, rawL, rawR))
      discard;
     if (fading) {
      // This pixel's own light, and the other kind's from the four next to it (all of the other kind on a chessboard). Next to a
