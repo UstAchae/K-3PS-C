@@ -345,15 +345,16 @@ Shader "Justachae/NVG/Direct" {
    #pragma vertex motionVert
    #pragma fragment frag
    #pragma target 3.5
-   float4x4 _DirectNowVP, _DirectOldVP, _DirectOldM;
+   float4x4 _DirectNowVP, _DirectOldVP, _DirectOldM, _DirectOldMSame;
    float _DirectHalf;
-   struct m2f { float4 pos : SV_POSITION; float4 screen : TEXCOORD0; float4 now : TEXCOORD1; float4 old : TEXCOORD2; };
+   struct m2f { float4 pos : SV_POSITION; float4 screen : TEXCOORD0; float4 now : TEXCOORD1; float4 old : TEXCOORD2; float4 oldSame : TEXCOORD3; };
    m2f motionVert (float4 v : POSITION) {
     m2f o;
     o.pos = UnityObjectToClipPos(v);
     o.screen = ComputeScreenPos(o.pos);
     o.now = mul(_DirectNowVP, mul(unity_ObjectToWorld, v));
     o.old = mul(_DirectOldVP, mul(_DirectOldM, v));
+    o.oldSame = mul(_DirectOldVP, mul(_DirectOldMSame, v));
     return o;
    }
    float4 frag (m2f i) : SV_Target {
@@ -366,7 +367,13 @@ Shader "Justachae/NVG/Direct" {
     float own = _DirectHalf < 0.5 ? rawL : rawR;
     if (abs(own - i.pos.z) > max(own * 0.002, 0.0000003))
      discard;
-    float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
+    // Where the device is seen through (kept at some pixels, left out at the others): its motion without the going over of
+    // the eye it is drawn from (_DirectOldMSame: last frame's place from this frame's eye). With it, as the aim came up
+    // the kept pixels had some 70 pixels a frame beside 1 at the ones left out, and what the frame carries over frames by
+    // the motion drew stripes across it (raw captures, 2026-11-18).
+    float side;
+    float2 before = coverage(uv, rawL, rawR, side) < 0.999 ? i.oldSame.xy / i.oldSame.w : i.old.xy / i.old.w;
+    float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (before + 1) * 0.5;
     // By the camera's own matrices, up being up: no turning over, as the game's motion goes the same way in both directions.
     return float4(now - old, 0, 1);
    }

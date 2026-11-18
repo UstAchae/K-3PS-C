@@ -231,7 +231,7 @@ internal static partial class NightVisionEyepieces
         return true;
     }
 
-    private static readonly int DirectNowVP = Shader.PropertyToID("_DirectNowVP"), DirectOldVP = Shader.PropertyToID("_DirectOldVP"), DirectOldM = Shader.PropertyToID("_DirectOldM"), DirectHalf = Shader.PropertyToID("_DirectHalf");
+    private static readonly int DirectNowVP = Shader.PropertyToID("_DirectNowVP"), DirectOldVP = Shader.PropertyToID("_DirectOldVP"), DirectOldM = Shader.PropertyToID("_DirectOldM"), DirectOldMSame = Shader.PropertyToID("_DirectOldMSame"), DirectHalf = Shader.PropertyToID("_DirectHalf");
     private static readonly Dictionary<Renderer, Matrix4x4> _oldPieces = new Dictionary<Renderer, Matrix4x4>();
     private static readonly Vector3[] _oldShifts = new Vector3[2];
     // From where each part was drawn last frame, in each half (PieceShift: it changes as a pod swings and as the aim comes
@@ -362,6 +362,7 @@ internal static partial class NightVisionEyepieces
                 _oldPieceShifts[half][piece.Renderer] = shiftNow;
                 Matrix4x4 old = _oldPieces.TryGetValue(piece.Renderer, out Matrix4x4 was) ? was : piece.FromCamera;
                 buffer.SetGlobalMatrix(DirectOldM, fromOldEye * old);
+                buffer.SetGlobalMatrix(DirectOldMSame, fromEye * old);
                 for (int s = 0; s < piece.Mesh.subMeshCount; s++)
                     buffer.DrawMesh(piece.Mesh, fromEye * piece.FromCamera, _directMaterial!, s, MotionPass);
             }
@@ -492,9 +493,6 @@ internal static partial class NightVisionEyepieces
     private static readonly string?[] _sidePods = new string?[2], _sideCups = new string?[2];
     private static readonly float[] _sideGone = new float[2];
     private const float AgreeBy = 3f;   // the halves agree once a pod is a third of the way gone
-
-    // (diagnostics, 1.8.112)
-    internal static string CaptureNote() => $"sides gone ({_sideGone[0]:F3}, {_sideGone[1]:F3}), eyes mixed {_eyesMixed:F3}, pods ({_sidePods[0]}, {_sidePods[1]}), pieces {_pieces.Count}";
 
     // Which side's pod a part of the device is on: 0 the left's, 1 the right's, -1 neither (the body, the mount).
     private static int PodSideOf(Transform t)
@@ -741,11 +739,6 @@ internal static partial class NightVisionEyepieces
             DrawMotion(_directMotion, main, turned, projection, leftShift, rightShift);
         // (The bare eye's gun's own motion whether or not the camera keeps motion vectors.)
         DrawGunMotion(_directMotion, main, turned, projection, gun, motionVectors);
-        if (TwoRenders.Capturing && motionVectors)   // (diagnostics, 1.8.112)
-        {
-            _directMotion.Blit(BuiltinRenderTextureType.MotionVectors, TwoRenders.CaptureMotionTarget(width, height));
-            _directMotion.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-        }
         // Once all is lit: the fade.
         buffer = _directEnd;
         buffer.SetGlobalVector(DirectTexel, new Vector4(1f / Mathf.Max(width, 1), 1f / Mathf.Max(height, 1), 0f, 0f));
@@ -755,11 +748,6 @@ internal static partial class NightVisionEyepieces
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, EvenPass);
         buffer.ReleaseTemporaryRT(DirectLitNow);
-        if (TwoRenders.Capturing)   // (diagnostics, 1.8.112)
-        {
-            buffer.Blit(BuiltinRenderTextureType.CameraTarget, TwoRenders.CaptureLitTarget(width, height));
-            buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-        }
     }
 
     // The bare eye's gun (and its hands and arms), drawn from that eye into G-buffers of its own, as the device is; put into
