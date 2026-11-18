@@ -7,7 +7,9 @@ namespace EFTNewCamera;
 // out to their places as the goggle flips down. One render of the frame, and one gun: the aiming eye's (the user's,
 // 2026-11-17: both eyes' guns were too much to be worth it). Both eyes are seen only at the sight's lens:
 //   the goggle eye aims: the game's own gun and sight as ever (night vision and the objective's blur on them);
-//   the bare eye aims: its gun (with the hands and arms) is drawn into the G-buffer by NightVisionDirect.cs from that eye,
+//   not aiming: the game's own gun, as the camera sees it, whichever shoulder it is on (the user's, 2026-11-18);
+//   the bare eye aims (from the moment the aim begins; the eye it is drawn from goes over from the camera to the bare eye
+//   as the aim comes up, and back, so it comes out of the camera's own gun and returns to it): its gun (with the hands and arms) is drawn into the G-buffer by NightVisionDirect.cs from that eye,
 //   unjittered, the game's copy kept to its shadow; taken apart before the image effects (FillApart, what lies under it
 //   filled from around for the eyepieces), gathered over frames along its own motion (its light's grain smoothed) and
 //   laid over the eyepieces' picture after (TakeEye): no night vision, no blur on it. Its sight's lens seen through (F12
@@ -26,9 +28,10 @@ internal static class TwoRenders
     // F12 单筒：裸眼瞄准时分划的透明度: the bare eye's sight lens seen through (0 solid).
     internal static float BareLensSeeThrough = 0.5f;
     private static float LensOpacity => 1f - Mathf.Clamp01(BareLensSeeThrough);
-    // Which eye aims (_shareBare: 1 the bare eye; it goes over as the gun changes shoulders, CameraPosition).
-    private static float _shareBare;
-    internal static bool BareAims => _shareBare > 0.5f;
+    // Which eye aims (_shareBare: 1 the bare eye; it goes over as the gun changes shoulders, CameraPosition), and how far
+    // the aim has come up (_aim, 0 to 1): the bare eye's gun only while it aims.
+    private static float _shareBare, _aim;
+    internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f;
     // The bare eye's gun drawn this frame (it aims).
     private static bool BareGunNow => Now && BareAims && _gunsFrame == Time.frameCount && _gunRenderers.Count > 0;
 
@@ -38,7 +41,8 @@ internal static class TwoRenders
     // As the goggle flips down the eyes go out to their places from where the camera would be, and back as it flips up.
     private static float Apart => Mathf.SmoothStep(0f, 1f, NightVisionEyepieces.Flip);
     internal static float Place(float across) => AtGoggleEye ? Mathf.Lerp(across, _goggleEye, Apart) : across;
-    private static Vector3 BareShift(Quaternion turn) => AtGoggleEye ? turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f) : Vector3.zero;
+    // From the camera to the eye the bare eye's gun is drawn from: over to the bare eye as the aim comes up.
+    private static Vector3 BareShift(Quaternion turn) => AtGoggleEye ? turn * new Vector3((BareEye - _goggleEye) * Apart * _aim, 0f, 0f) : Vector3.zero;
 
     // The eyes from the head's middle while seen this way: as far as the goggle's eyepiece stands, so that the aiming eye
     // (and the gun placed for it, CameraPosition) is behind it as the mount is set (the user's, 2026-11-17).
@@ -208,6 +212,7 @@ internal static class TwoRenders
         // Over to the bare eye as the aiming eye goes over to it (CameraPosition: eased as the gun changes shoulders).
         float toward = CameraPosition.AimingEyeAcross / Mathf.Max(EyeFromMiddle(CameraPosition.AimEye), 1e-4f) * Mathf.Sign(BareEye);
         _shareBare = Mathf.Clamp01(0.5f + 0.5f * toward);
+        _aim = CameraPosition.ViewAimed;
         // The goggle eye aims: the game's own gun.
         if (!BareAims)
         {
@@ -425,7 +430,8 @@ internal static class TwoRenders
         laying.SetFloat(GunShareId, 1f);
         laying.SetTexture(LensLayerId, lens ? _lensLayer : Texture2D.blackTexture);
         laying.SetTexture(LensMaskId, lens ? _lensSolid : Texture2D.blackTexture);
-        laying.SetFloat(LensShareId, LensOpacity);
+        // (Seen through by as much as the aim has come up.)
+        laying.SetFloat(LensShareId, Mathf.Lerp(1f, LensOpacity, _aim));
         laying.SetFloat(LensUnderAimingId, 0f);
         laying.SetTexture(AimLensMaskId, Texture2D.blackTexture);
         laying.SetTexture(GunWhich14Id, Texture2D.blackTexture);
