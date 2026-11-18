@@ -254,6 +254,8 @@ internal static class TwoRenders
             return;
         _gunsFrame = Time.frameCount;
         Camera? main = Camera.main;
+        if (main != null && main.isActiveAndEnabled)
+            CapturePlan(main);
         if (main == null || !main.isActiveAndEnabled || !GatherGun())
             return;
         // Over to the bare eye as the aiming eye goes over to it (CameraPosition: eased as the gun changes shoulders).
@@ -273,12 +275,102 @@ internal static class TwoRenders
     // From NewCameraPlugin.EndOfFrame.
     internal static void EndOfFrame()
     {
+        CaptureNow();
         HideGun(false);
         _apartBuffer?.Clear();
         if (_frameDepth != null && _goggleDepth != null && Shader.GetGlobalTexture(CameraDepthId) == _goggleDepth)
             Shader.SetGlobalTexture(CameraDepthId, _frameDepth);
         NightVisionEyepieces.EmptyGunForward();
         NightVisionEyepieces.LaserDiag();
+    }
+
+    // CAPTURE (diagnostics, 1.8.112, 2026-11-18; to come out once the stripes across the device are found): with an
+    // eyepiece of the ENVG-B swung away, while the camera turns or the aim changes, six frames in a row, raw, four times
+    // at most: the frame once lit at the camera's own pixels (before the game's smoothing), the camera's motion, the frame
+    // as it reaches the eyepieces (after the smoothing and upscale), and after them. Written to .codex-work/nvgdump/stripes
+    // as s<set>_f<frame>_<name>_<W>x<H>_<format>.raw.
+    private const string CaptureFolder = "D:/games/SPT-4.1.6/.codex-work/nvgdump/stripes";
+    private const int CaptureFrames = 6, CaptureSets = 4;
+    private static int _capIndex = -1, _capSet, _capNext = 300, _capFrame = -1;
+    private static Quaternion _capTurn = Quaternion.identity;
+    private static float _capAim;
+    private static RenderTexture? _capScene, _capFinal, _capLit, _capMotion;
+    internal static bool Capturing => _capIndex >= 0 && _capFrame == Time.frameCount;
+    internal static RenderTexture CaptureLitTarget(int w, int h) => CaptureTexture(ref _capLit, w, h, RenderTextureFormat.ARGBHalf, "Justachae capture lit");
+    internal static RenderTexture CaptureMotionTarget(int w, int h) => CaptureTexture(ref _capMotion, w, h, RenderTextureFormat.RGHalf, "Justachae capture motion");
+
+    private static void CapturePlan(Camera main)
+    {
+        Quaternion turn = main.transform.rotation;
+        float turned = Quaternion.Angle(turn, _capTurn), aim = CameraPosition.ViewAimed, aimed = Mathf.Abs(aim - _capAim);
+        _capTurn = turn;
+        _capAim = aim;
+        if (_capIndex >= 0 && ++_capIndex >= CaptureFrames)
+            _capIndex = -1;
+        if (_capIndex < 0 && _capSet < CaptureSets && Time.frameCount >= _capNext && (turned > 0.15f || aimed > 0.01f)
+            && NightVisionEyepieces.PodMonocular(out _, out _))
+        {
+            _capIndex = 0;
+            _capNext = Time.frameCount + 180;
+            _capSet++;
+        }
+        if (_capIndex >= 0)
+        {
+            _capFrame = Time.frameCount;
+            NewCameraPlugin.Log?.LogInfo($"Stripes capture: set {_capSet} frame {_capIndex} at {Time.frameCount}, turned {turned:F3} deg, aim {aim:F3} (changed {aimed:F3}), bare aims {BareAims}, camera {main.pixelWidth}x{main.pixelHeight}; {NightVisionEyepieces.CaptureNote()}");
+        }
+    }
+
+    private static RenderTexture CaptureTexture(ref RenderTexture? kept, int w, int h, RenderTextureFormat format, string name)
+    {
+        if (kept == null || kept.width != w || kept.height != h)
+        {
+            if (kept != null)
+            {
+                kept.Release();
+                Object.Destroy(kept);
+            }
+            kept = new RenderTexture(w, h, 0, format) { name = name, hideFlags = HideFlags.DontSave, filterMode = FilterMode.Point };
+            kept.Create();
+        }
+        return kept;
+    }
+
+    private static void CaptureNow()
+    {
+        if (!Capturing)
+            return;
+        try
+        {
+            System.IO.Directory.CreateDirectory(CaptureFolder);
+        }
+        catch
+        {
+            return;
+        }
+        int set = _capSet, frame = _capIndex;
+        void Save(RenderTexture? rt, string name)
+        {
+            if (rt == null)
+                return;
+            string path = $"{CaptureFolder}/s{set}_f{frame}_{name}_{rt.width}x{rt.height}_{rt.format}.raw";
+            UnityEngine.Rendering.AsyncGPUReadback.Request(rt, 0, request =>
+            {
+                if (request.hasError)
+                    return;
+                try
+                {
+                    System.IO.File.WriteAllBytes(path, request.GetData<byte>().ToArray());
+                }
+                catch
+                {
+                }
+            });
+        }
+        Save(_capLit, "lit");
+        Save(_capMotion, "motion");
+        Save(_capScene, "scene");
+        Save(_capFinal, "final");
     }
 
     // ---------------------------------------------------------------- the game's copy of the gun, and the sight's lens
@@ -439,6 +531,8 @@ internal static class TwoRenders
     internal static void BeforeEyepieces(RenderTexture scene, Shader? tubeShader)
     {
         _layFrame = -1;
+        if (Capturing)
+            Graphics.Blit(scene, CaptureTexture(ref _capScene, scene.width, scene.height, RenderTextureFormat.ARGBHalf, "Justachae capture scene"));
         if (MaterialFor(tubeShader) == null || !Now || _gunsFrame != Time.frameCount || !BareAims || _apartFrame != Time.frameCount || _bareNow == null)
             return;
         if (BareAims && _goggleDepth != null && Shader.GetGlobalTexture(CameraDepthId) is Texture frameDepth && frameDepth != _goggleDepth)
@@ -469,6 +563,8 @@ internal static class TwoRenders
             Shader.SetGlobalTexture(CameraDepthId, _ownDepth);
             _ownDepth = null;
         }
+        if (Capturing)
+            Graphics.Blit(into, CaptureTexture(ref _capFinal, into.width, into.height, RenderTextureFormat.ARGBHalf, "Justachae capture final"));
         if (_layFrame != Time.frameCount || MaterialFor(tubeShader) is not Material laying)
             return;
         _layFrame = -1;
