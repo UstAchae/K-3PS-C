@@ -345,8 +345,10 @@ internal static class TwoEyes
 
     private static bool _gunHidden;
     private static readonly System.Collections.Generic.List<(Renderer, UnityEngine.Rendering.ShadowCastingMode)> _castings = new System.Collections.Generic.List<(Renderer, UnityEngine.Rendering.ShadowCastingMode)>();
-    private static Renderer? _lensKept;
-    private static Material? _lensMaterialKept;
+    private static Renderer? _lensKept, _collimatorKept;
+    private static Material? _lensMaterialKept, _collimatorMaterialKept;
+    private static readonly HarmonyLib.AccessTools.FieldRef<SSAAPropagator, Material> CollimatorMaterial =
+        HarmonyLib.AccessTools.FieldRefAccess<SSAAPropagator, Material>("_collimatorMaterial");
     private static readonly HarmonyLib.AccessTools.FieldRef<SSAAPropagator, Renderer> LensRenderer =
         HarmonyLib.AccessTools.FieldRefAccess<SSAAPropagator, Renderer>("_opticLensRenderer");
     private static readonly HarmonyLib.AccessTools.FieldRef<SSAAPropagator, Renderer> CollimatorRenderer =
@@ -388,11 +390,13 @@ internal static class TwoEyes
         {
             _lensKept = LensRenderer(propagator);
             _lensMaterialKept = LensMaterial(propagator);
+            _collimatorKept = CollimatorRenderer(propagator);
+            _collimatorMaterialKept = CollimatorMaterial(propagator);
         }
         else if (!hide)
         {
-            _lensKept = null;
-            _lensMaterialKept = null;
+            _lensKept = _collimatorKept = null;
+            _lensMaterialKept = _collimatorMaterialKept = null;
         }
     }
 
@@ -547,6 +551,37 @@ internal static class TwoEyes
         laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
         Graphics.Blit(frame, into, laying, GunAndLensPass);
         RenderTexture.ReleaseTemporary(frame);
+        DrawCollimator(into);
+    }
+
+    // A collimator's (a holographic or red-dot sight's) mark, which the game lays in after the upscale from the camera, by
+    // the sight's own material: kept from the game while the bare eye aims (LensOutPrefix) and laid here from that eye,
+    // over its gun, as the game lays it (only with no sight lens: the game draws the one or the other). Without it the
+    // sight's window had no mark at all.
+    private static void DrawCollimator(RenderTexture into)
+    {
+        Camera? camera = Camera.main;
+        Renderer? mark = _collimatorKept;
+        Material? material = _collimatorMaterialKept;
+        if (camera == null || mark == null || material == null || _lensKept != null || !mark.gameObject.activeInHierarchy)
+            return;
+        Vector3 shift = BareShift(camera.transform.rotation);
+        Vector3 eye = camera.transform.position + shift, place = camera.transform.position;
+        Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
+        var buffer = _lensBuffer ??= new UnityEngine.Rendering.CommandBuffer { name = "Justachae bare eye's sight lens" };
+        buffer.Clear();
+        buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix * Matrix4x4.Translate(-shift), projection);
+        buffer.SetGlobalVector(CameraPlaceId, new Vector4(eye.x, eye.y, eye.z, 1f));
+        buffer.EnableShaderKeyword("TAA");
+        buffer.EnableShaderKeyword("NON_JITTERED");
+        buffer.SetGlobalMatrix(NonJitteredProjId, GL.GetGPUProjectionMatrix(projection, true));
+        buffer.SetRenderTarget(into);
+        buffer.DrawRenderer(mark, material);
+        buffer.DisableShaderKeyword("NON_JITTERED");
+        buffer.DisableShaderKeyword("TAA");
+        buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
+        buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
+        Graphics.ExecuteCommandBuffer(buffer);
     }
 
     // The bare eye's gun's sight lens, drawn from that eye with the game's own lens material (its picture is the sight

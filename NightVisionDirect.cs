@@ -760,6 +760,21 @@ internal static partial class NightVisionEyepieces
     }
     private static Camera? _gunForwardCamera;
 
+    // A see-through material's forward pass (ForwardPass gives none to a material that has a G-buffer pass too).
+    private static int ForwardPassOf(Material? material)
+    {
+        if (material == null)
+            return -1;
+        for (int i = 0; i < material.passCount; i++)
+        {
+            string mode = material.shader.FindPassTagValue(i, new ShaderTagId("LightMode")).name ?? "";
+            if (mode.Length == 0 || string.Equals(mode, "ForwardBase", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mode, "Always", System.StringComparison.OrdinalIgnoreCase) || string.Equals(mode, "SRPDefaultUnlit", System.StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
+    }
+
     // A material's forward pass, for a part with none for the G-buffer.
     private static int ForwardPass(Material? material)
     {
@@ -875,8 +890,14 @@ internal static partial class NightVisionEyepieces
                 int[] passes = new int[materials.Length], forward = new int[materials.Length];
                 for (int i = 0; i < materials.Length; i++)
                 {
-                    passes[i] = GBufferPass(materials[i]);
-                    forward[i] = ForwardPass(materials[i]);
+                    // (What the game draws see-through, a sight's window, by its queue: not into the G-buffer, where it
+                    // would be solid, a holographic sight's window black; by its forward pass if it has one.)
+                    bool seeThrough = materials[i] != null && materials[i].renderQueue > 2500;
+                    passes[i] = seeThrough ? -1 : GBufferPass(materials[i]);
+                    forward[i] = seeThrough ? ForwardPassOf(materials[i]) : ForwardPass(materials[i]);
+                    // DIAG (1.8.120, to come out): each part of the gun that is not drawn into the G-buffer, once.
+                    if (materials[i] != null && passes[i] < 0)
+                        NewCameraPlugin.Log?.LogInfo($"Two eyes: gun part {r.name} material {materials[i].name} [{materials[i].shader.name}] queue {materials[i].renderQueue}: see-through {seeThrough}, forward pass {forward[i]}, off {r.forceRenderingOff}");
                 }
                 source = (materials, passes, forward);
                 if (_gunSources.Count > 512)
