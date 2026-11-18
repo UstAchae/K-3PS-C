@@ -255,7 +255,7 @@ internal static partial class NightVisionEyepieces
 
     private static void DrawGunMotion(CommandBuffer buffer, Camera main, Matrix4x4 turned, Matrix4x4 projection, bool gun, bool motionVectors)
     {
-        if (!gun || !_forwardGoggleToo || _gunDraws.Count == 0 || _directMaterial == null)
+        if (!gun || _gunDraws.Count == 0 || _directMaterial == null)
         {
             _gunMotionFrame = -100;
             return;
@@ -290,8 +290,9 @@ internal static partial class NightVisionEyepieces
             buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
             _bareMotionFrame = Time.frameCount;
         }
-        if (motionVectors)
+        if (motionVectors && _forwardGoggleToo)
         {
+            Matrix4x4 goggleNow = Matrix4x4.Translate(-_goggleShiftNow), goggleOld = Matrix4x4.Translate(-(continued ? _goggleShiftOld : _goggleShiftNow));
             buffer.SetViewProjectionMatrices(turned, projection);
             buffer.SetGlobalMatrix(DirectNowVP, nowVP);
             buffer.SetGlobalMatrix(DirectOldVP, _gunOldVP);
@@ -300,8 +301,8 @@ internal static partial class NightVisionEyepieces
             {
                 if (mesh == null || renderer == null)
                     continue;
-                buffer.SetGlobalMatrix(DirectOldM, _oldGunPieces.TryGetValue(renderer, out Matrix4x4 was) ? was : matrix);
-                buffer.DrawMesh(mesh, matrix, _directMaterial, sub, GunMotionPass);
+                buffer.SetGlobalMatrix(DirectOldM, goggleOld * (_oldGunPieces.TryGetValue(renderer, out Matrix4x4 was) ? was : matrix));
+                buffer.DrawMesh(mesh, goggleNow * matrix, _directMaterial, sub, GunMotionPass);
             }
             buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
             buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
@@ -327,6 +328,7 @@ internal static partial class NightVisionEyepieces
         }
         _gunOldVP = nowVP;
         _bareShiftOld = _bareShiftNow;
+        _goggleShiftOld = _goggleShiftNow;
     }
 
     private static void DrawMotion(CommandBuffer buffer, Camera main, Matrix4x4 turned, Matrix4x4 projection, Vector3 leftShift, Vector3 rightShift)
@@ -731,7 +733,8 @@ internal static partial class NightVisionEyepieces
     private static readonly int[] DirectGoggleGun = { Shader.PropertyToID("_DirectH0"), Shader.PropertyToID("_DirectH1"), Shader.PropertyToID("_DirectH2"), Shader.PropertyToID("_DirectH3") };
     private static readonly int DirectGoggleGunDepth = Shader.PropertyToID("_DirectHD"), DirectGoggleShownId = Shader.PropertyToID("_DirectGoggleShown");
     private static readonly List<(Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer)> _gunDraws = new List<(Mesh, Matrix4x4, Material, int, int, Renderer)>();
-    private static Matrix4x4 _forwardFromBare = Matrix4x4.identity;
+    private static Matrix4x4 _forwardFromBare = Matrix4x4.identity, _forwardFromGoggle = Matrix4x4.identity;
+    private static Vector3 _goggleShiftNow, _goggleShiftOld;
     private static bool _forwardGoggleToo;
     private static readonly RenderTexture?[] _gunDepths = new RenderTexture?[1];
     // The bare eye's gun's own depth (its lasers drawn against it, NightVisionIr.cs).
@@ -793,7 +796,7 @@ internal static partial class NightVisionEyepieces
         // against its gun's own depth, by the projection it was drawn with (the device's near and far planes), or what
         // stands behind its body showed through it; the camera's gun's into the frame.
         RenderTexture? bareView = TwoEyes.BareViewNow, bareDepth = _gunDepths[0];
-        bool apart = _forwardGoggleToo && bareView != null && bareDepth != null && bareView.width == bareDepth.width && bareView.height == bareDepth.height;
+        bool apart = bareView != null && bareDepth != null && bareView.width == bareDepth.width && bareView.height == bareDepth.height;
         for (int eye = 0; eye < (_forwardGoggleToo ? 2 : 1); eye++)
         {
             bool intoBare = apart && eye == 0;
@@ -804,7 +807,7 @@ internal static partial class NightVisionEyepieces
             }
             else
                 buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-            Matrix4x4 eyeMove = eye == 0 ? _forwardFromBare : Matrix4x4.identity;
+            Matrix4x4 eyeMove = eye == 0 ? _forwardFromBare : _forwardFromGoggle;
             foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunForward)
             {
                 if (mesh == null || material == null || renderer == null)
@@ -822,7 +825,7 @@ internal static partial class NightVisionEyepieces
 
     private static bool DrawGun(CommandBuffer buffer, Camera main, Vector3 place, Matrix4x4 turned, Matrix4x4 projection, int width, int height)
     {
-        List<Renderer>? renderers = TwoEyes.GunHere(main.transform.rotation, out Vector3 shift, out float shown);
+        List<Renderer>? renderers = TwoEyes.GunHere(main.transform.rotation, out Vector3 shift, out Vector3 goggleShift, out float shown);
         buffer.SetGlobalFloat(DirectGunShownId, 0f);
         buffer.SetGlobalFloat(DirectGoggleShownId, 0f);
         _gunForward.Clear();
@@ -896,12 +899,22 @@ internal static partial class NightVisionEyepieces
                 _gunDraws.Add((mesh, matrix, source.materials[s], s, source.passes[s], r));
             }
         }
-        bool goggleToo = true;   // both eyes' guns drawn (TwoEyes.cs)
+        bool goggleToo = TwoEyes.GoggleGunToo;   // the camera's gun too, unless the bare eye leads (TwoEyes.cs)
         Matrix4x4 fromEye = Matrix4x4.Translate(-shift);
         _forwardFromBare = fromEye;
+        // The goggle eye's gun, from that eye (the camera stands between the two eyes).
+        Matrix4x4 fromGoggle = Matrix4x4.Translate(-goggleShift);
+        _forwardFromGoggle = fromGoggle;
+        _goggleShiftNow = goggleShift;
         _forwardGoggleToo = goggleToo;
         RenderTexture depthTexture = DirectTexture(_gunDepths, 0, width, height, 32, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG gun depth");
-        RenderTexture? goggleDepth = null;
+        // (The camera's gun's depth made, and emptied, even when that gun is not drawn: the shaders read it.)
+        RenderTexture? goggleDepth = DirectTexture(_goggleGunDepths, 0, width, height, 32, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG goggle eye's gun depth");
+        if (!goggleToo)
+        {
+            buffer.SetRenderTarget(goggleDepth);
+            buffer.ClearRenderTarget(true, false, Color.clear);
+        }
         int drawn = 0;
         for (int eye = 0; eye < (goggleToo ? 2 : 1); eye++)
         {
@@ -909,12 +922,12 @@ internal static partial class NightVisionEyepieces
             RenderTargetIdentifier[] targets = eye == 0 ? _gunTargets : _goggleGunTargets;
             for (int t = 0; t < 4; t++)
                 targets[t] = DirectTexture(textures, t, width, height, 0, DirectFormats[t], t < 2 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear, (eye == 0 ? "Justachae NVG gun " : "Justachae NVG goggle eye's gun ") + t);
-            RenderTexture depth = eye == 0 ? depthTexture : (goggleDepth = DirectTexture(_goggleGunDepths, 0, width, height, 32, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear, "Justachae NVG goggle eye's gun depth"));
+            RenderTexture depth = eye == 0 ? depthTexture : goggleDepth;
             buffer.SetRenderTarget(targets, depth);
             buffer.ClearRenderTarget(true, true, Color.clear);
             buffer.SetViewProjectionMatrices(turned, eye == 0 ? bareProjection : projection);
             buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
-            Matrix4x4 eyeMove = eye == 0 ? fromEye : Matrix4x4.identity;
+            Matrix4x4 eyeMove = eye == 0 ? fromEye : fromGoggle;
             foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunDraws)
             {
                 if (renderer == null)
@@ -926,9 +939,8 @@ internal static partial class NightVisionEyepieces
         }
         for (int t = 0; t < 4; t++)
             buffer.SetGlobalTexture(DirectGoggleGun[t], goggleToo ? _goggleGunTextures[t]! : Texture2D.blackTexture);
-        if (goggleDepth != null)
-            buffer.SetGlobalTexture(DirectGoggleGunDepth, goggleDepth);
-        buffer.SetGlobalFloat(DirectGoggleShownId, goggleDepth != null ? 1f : 0f);
+        buffer.SetGlobalTexture(DirectGoggleGunDepth, goggleDepth);
+        buffer.SetGlobalFloat(DirectGoggleShownId, goggleToo ? 1f : 0f);
         buffer.SetGlobalFloat(DirectBareAimsId, TwoEyes.BareAims ? 1f : 0f);
         // (The chessboard is not turned over from frame to frame, _GunParity left at 0: under the bare eye's gun, seen
         // through, the goggle eye's picture was its own at a pixel one frame and made from those next to it the next.)
