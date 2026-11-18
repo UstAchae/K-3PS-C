@@ -118,14 +118,14 @@ internal static class TwoRenders
         return _gunRenderers;
     }
 
-    // While the bare eye's gun is drawn: the lasers on the gun go over to it as the aim comes up (LaserReplay moves their
-    // emitters by the opposite of that eye's offset for the main camera, the beam and the point it lands on alike).
+    // While the bare eye's gun is drawn: the lasers on the gun as that eye sees them too (NightVisionIr.cs: drawn apart,
+    // moved by the opposite of its offset, and laid over with its gun, by its share; the camera's gun keeps its own).
     internal static bool BareLaserShift(Camera camera, out Vector3 shift)
     {
         shift = Vector3.zero;
         if (camera == null || !BareGunNow)
             return false;
-        shift = BareShift(camera.transform.rotation) * _aim;
+        shift = BareShift(camera.transform.rotation);
         return true;
     }
 
@@ -444,7 +444,7 @@ internal static class TwoRenders
         laying.SetFloat(LensUnderAimingId, 0f);
         laying.SetTexture(AimLensMaskId, Texture2D.blackTexture);
         laying.SetTexture(GunWhich14Id, NightVisionEyepieces.GunWhichTexture ?? (Texture)Texture2D.blackTexture);
-        laying.SetTexture(BareLasersId, Texture2D.blackTexture);
+        laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
         Graphics.Blit(frame, into, laying, GunAndLensPass);
         RenderTexture.ReleaseTemporary(frame);
     }
