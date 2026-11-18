@@ -41,7 +41,10 @@ internal static class TwoRenders
     internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f;
     // The camera's (goggle eye's) gun stays whole; the bare eye's by as much as the aim has come up.
     internal static float GoggleOpacityNow => 1f;
-    private static float BareGunOpacity => _aim;
+    private static float BareGunOpacity => _aim * BareSeen;
+    // How much of what the bare eye sees (its gun, its lasers, the device from its side) is seen over the goggle eye's:
+    // half (the user's, 2026-11-18).
+    internal const float BareSeen = 0.5f;
     // The bare eye's gun drawn this frame (it aims).
     private static bool BareGunNow => Now && BareAims && _gunsFrame == Time.frameCount && _gunRenderers.Count > 0;
 

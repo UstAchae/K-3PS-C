@@ -441,7 +441,7 @@ internal static partial class NightVisionEyepieces
         _directMotion?.Clear();
     }
 
-    private static readonly int DirectMonocularId = Shader.PropertyToID("_DirectMonocular");
+    private static readonly int DirectMonocularId = Shader.PropertyToID("_DirectMonocular"), DirectOverId = Shader.PropertyToID("_DirectOver");
     private static readonly int DirectSeeThroughId = Shader.PropertyToID("_DirectSeeThrough");
     // How far the device drawn here is seen through, all over (F12 夜视仪透明度): 0 solid. Its pixels kept and left out
     // by the chessboard as a monocular's fade is, what lies behind showing between.
@@ -586,7 +586,8 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalFloat(DirectSplit, split);
         buffer.SetGlobalVector(DirectMonocularId, monocular);
         buffer.SetGlobalFloat(DirectSeeThroughId, Mathf.Clamp01(DeviceSeeThrough));
-        buffer.SetGlobalFloat(DirectStrip, Mathf.Lerp(Overscan, MixedStrip, _eyesMixed * _eyesMixed));
+        buffer.SetGlobalFloat(DirectStrip, Overscan);
+        buffer.SetGlobalVector(DirectOverId, new Vector4(_eyesMixed, _goggleEyeRight ? 1f : 0f, TwoRenders.BareSeen, 0f));
         buffer.SetGlobalVector(DirectInset, new Vector4(DirectInsetPixels / Mathf.Max(Screen.width, 1), DirectInsetPixels / Mathf.Max(Screen.height, 1), 0f, 0f));
         for (int side = 0; side < 2; side++)
         {

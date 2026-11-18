@@ -83,9 +83,25 @@ Shader "Justachae/NVG/Direct" {
  // How much of the device is here, and how far over to the right eye's it is. As the eyes' pictures were eased into each other:
  // the left eye's on the left of the line, the right's on the right, each by its share across the strip about it, and through a
  // lens that eye has nothing of the device. All that goes past the line is gone.
+ // A monocular's bare eye aiming (_DirectOver: x how far the aim has come up, y the goggle's eye, 0 left or 1 right, z how much
+ // of the device as the bare eye sees it is seen): the two eyes' views of the device not side by side but one over the other,
+ // the goggle eye's whole all over the frame, the bare eye's seen through wherever the goggle eye's is not.
+ float4 _DirectOver;
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
   float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
   toRight = t;
+  if (_DirectOver.x > 0) {
+   bool goggleRight = _DirectOver.y > 0.5;
+   bool inL = within(_DirectLens0, uv, _EyeInvVP0), inR = within(_DirectLens1, uv, _EyeInvVP1);
+   // Through the goggle eye's lens nothing of either: the composite shows the lens there whole.
+   if (goggleRight ? inR : inL) return 0;
+   float sL = shown(rawL) && !inL ? lerp(1 - t, goggleRight ? _DirectOver.z : 1, _DirectOver.x) : 0;
+   float sR = shown(rawR) && !inR ? lerp(t, goggleRight ? 1 : _DirectOver.z, _DirectOver.x) : 0;
+   float own = goggleRight ? sR : sL, other = goggleRight ? sL : sR;
+   if (own > 0 && own >= other) { toRight = goggleRight ? 1 : 0; return own; }
+   if (other > 0) { toRight = goggleRight ? 0 : 1; return other; }
+   return 0;
+  }
   // Through either eye's lens here, nothing of the device: the lenses' picture is made from this frame, and the composite shows the
   // lens there whole.
   if ((t < 1 && within(_DirectLens0, uv, _EyeInvVP0)) || (t > 0 && within(_DirectLens1, uv, _EyeInvVP1))) return 0;

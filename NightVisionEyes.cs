@@ -224,6 +224,7 @@ internal static partial class NightVisionEyepieces
         // the goggle's eye straight behind its eyepiece, the bare eye from its side (the user's, 2026-11-18).
         float eyesOwn = TwoRenders.BareAimShare * CameraPosition.ViewAimed;
         _eyesMixed = eyesOwn;
+        _goggleEyeRight = _device.Monocular ? a + CameraPosition.Horizontal > 0f : podMono && (lone == CentreLensA) != (a <= b);
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
@@ -381,10 +382,10 @@ internal static partial class NightVisionEyepieces
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.
     // A monocular's bare eye aiming, 0 to 1 as the aim comes up: the two eyes' views of the device no longer side by side but
-    // one over the other, each seen through by half, all over the frame (NightVisionDirect.DrawDirect; the user's,
-    // 2026-11-18: both eyes' devices seen, as both eyes' guns are).
+    // one over the other all over the frame, the goggle eye's whole, the bare eye's seen through (TwoRenders.BareSeen;
+    // NvgDirect.shader, coverage; the user's, 2026-11-18: both eyes' devices seen, as both eyes' guns are).
     private static float _eyesMixed;
-    private const float MixedStrip = 40f;   // frames wide: across the frame each eye's share is then a half
+    private static bool _goggleEyeRight;
 
     private const float PodLoneRims = 2f;   // the eyepiece left seen out to this many of its glass's radii from its middle
 
