@@ -734,7 +734,13 @@ Shader "Justachae/NVG/Direct" {
    float4 frag (v2f i) : SV_Target {
     float2 uv = i.screen.xy / i.screen.w;
     float which = tex2Dlod(_GunWhich, float4(uv, 0, 0)).r;
-    if (which < 0.75)
+    // And the pixels given the goggle eye's gun behind the aiming bare eye's sight lens: the frame shows there what lies
+    // beyond (that gun is left out of the picture, pass 17 writes it no motion), but the camera's motion was worked out
+    // from that gun's depth, near: some 230 pixels a frame as the head moved, on every other pixel (raw captures,
+    // 2026-11-18: the mottle seen through that lens).
+    bool bare = which > 0.75;
+    bool hidden = which > 0.25 && which <= 0.75 && tex2Dlod(_DirectGunLens, float4(uv, 0, 0)).r > 0.5;
+    if (!bare && !hidden)
      discard;
     return tex2Dlod(_GunMotionCopy, float4(uv + float2(_DirectGunTexel.x, 0), 0, 0));
    }
