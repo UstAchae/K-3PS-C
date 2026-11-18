@@ -185,6 +185,40 @@ internal static class TwoRenders
         _hooked = true;
         Application.onBeforeRender += BeforeRender;
         Camera.onPostRender += AfterOptic;
+        try
+        {
+            var fill = HarmonyLib.AccessTools.Method(typeof(SSAAPropagator), nameof(SSAAPropagator.FillCommandBuffer));
+            new HarmonyLib.Harmony(NewCameraPlugin.PluginGuid + ".bareLens").Patch(fill,
+                prefix: new HarmonyLib.HarmonyMethod(typeof(TwoRenders), nameof(LensOutPrefix)),
+                finalizer: new HarmonyLib.HarmonyMethod(typeof(TwoRenders), nameof(LensOutFinalizer)));
+        }
+        catch (System.Exception e)
+        {
+            NewCameraPlugin.Log?.LogError($"Two eyes: the game's lens could not be kept out while the bare eye aims: {e}");
+        }
+    }
+
+    // While the bare eye aims the game lays no sight lens in (it would, from the camera: DrawLensLayer lays it from the bare
+    // eye): its lens and collimator taken from it only while it fills its command buffer, and given back at once. (Taken
+    // for the whole frame and given back at its end, the game cleared them in between as an aim ended, with their materials;
+    // given back then, the lens stood without a material and FillCommandBuffer threw every frame from there on: nothing it
+    // or what follows it draws was drawn, the lasers added after the upscale among them; found in Player.log, 2026-11-18.)
+    private static void LensOutPrefix(SSAAPropagator __instance, out (Renderer? lens, Renderer? collimator, bool taken) __state)
+    {
+        __state = (null, null, false);
+        if (!_gunHidden || !BareAims || _gunsFrame != Time.frameCount || !__instance.CompareTag("MainCamera"))
+            return;
+        __state = (LensRenderer(__instance), CollimatorRenderer(__instance), true);
+        LensRenderer(__instance) = null!;
+        CollimatorRenderer(__instance) = null!;
+    }
+
+    private static void LensOutFinalizer(SSAAPropagator __instance, (Renderer? lens, Renderer? collimator, bool taken) __state)
+    {
+        if (!__state.taken)
+            return;
+        LensRenderer(__instance) = __state.lens!;
+        CollimatorRenderer(__instance) = __state.collimator!;
     }
 
     private static bool OpticAtWork()
@@ -249,8 +283,7 @@ internal static class TwoRenders
 
     private static bool _gunHidden;
     private static readonly System.Collections.Generic.List<(Renderer, UnityEngine.Rendering.ShadowCastingMode)> _castings = new System.Collections.Generic.List<(Renderer, UnityEngine.Rendering.ShadowCastingMode)>();
-    private static SSAAPropagator? _lensOf;
-    private static Renderer? _lensKept, _collimatorKept;
+    private static Renderer? _lensKept;
     private static Material? _lensMaterialKept;
     private static readonly HarmonyLib.AccessTools.FieldRef<SSAAPropagator, Renderer> LensRenderer =
         HarmonyLib.AccessTools.FieldRefAccess<SSAAPropagator, Renderer>("_opticLensRenderer");
@@ -288,23 +321,16 @@ internal static class TwoRenders
             _castings.Clear();
         }
         SSAAPropagator? propagator = Camera.main != null ? Camera.main.GetComponent<SSAAPropagator>() : null;
+        // The game's lens and its material, for DrawLensLayer (the game's own fields are left as they are: LensOutPrefix).
         if (hide && propagator != null && BareAims)
         {
             _lensKept = LensRenderer(propagator);
-            _collimatorKept = CollimatorRenderer(propagator);
             _lensMaterialKept = LensMaterial(propagator);
-            _lensOf = propagator;
-            LensRenderer(propagator) = null!;
-            CollimatorRenderer(propagator) = null!;
         }
-        else if (!hide && _lensOf != null)
+        else if (!hide)
         {
-            if (LensRenderer(_lensOf) == null)
-                LensRenderer(_lensOf) = _lensKept!;
-            if (CollimatorRenderer(_lensOf) == null)
-                CollimatorRenderer(_lensOf) = _collimatorKept!;
-            _lensOf = null;
-            _lensKept = _collimatorKept = null;
+            _lensKept = null;
+            _lensMaterialKept = null;
         }
     }
 

@@ -722,5 +722,23 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
+  // 21: the camera's motion at the pixels given the bare eye's gun (_GunWhich 1): that of the pixel next to it (the other kind
+  //     of the chessboard), not what the camera worked out from that gun's depth (NightVisionDirect.DrawGunMotion).
+  Pass {
+   Cull Off ZWrite Off ZTest Always
+   CGPROGRAM
+   #pragma vertex vert
+   #pragma fragment frag
+   #pragma target 3.5
+   sampler2D _GunWhich, _GunMotionCopy;
+   float4 frag (v2f i) : SV_Target {
+    float2 uv = i.screen.xy / i.screen.w;
+    float which = tex2Dlod(_GunWhich, float4(uv, 0, 0)).r;
+    if (which < 0.75)
+     discard;
+    return tex2Dlod(_GunMotionCopy, float4(uv + float2(_DirectGunTexel.x, 0), 0, 0));
+   }
+   ENDCG
+  }
  }
 }

@@ -242,7 +242,8 @@ internal static partial class NightVisionEyepieces
     private static readonly Dictionary<Renderer, Matrix4x4> _oldGunPieces = new Dictionary<Renderer, Matrix4x4>();
     private static Matrix4x4 _gunOldVP;
     private static int _gunMotionFrame = -100;
-    private const int GunMotionPass = 17, BareMotionPass = 18;
+    private const int GunMotionPass = 17, BareMotionPass = 18, BareMotionFromNextPass = 21;
+    private static readonly int GunMotionCopyId = Shader.PropertyToID("_GunMotionCopy");
     private static readonly int GunParityId = Shader.PropertyToID("_GunParity");
     private static Vector3 _bareShiftNow, _bareShiftOld;
     private static readonly RenderTexture?[] _bareMotion = new RenderTexture?[1];
@@ -301,6 +302,20 @@ internal static partial class NightVisionEyepieces
                 buffer.DrawMesh(mesh, matrix, _directMaterial, sub, GunMotionPass);
             }
             buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        }
+        // The pixels given the bare eye's gun: the frame keeps there what the goggle eye sees (made from the pixels next to
+        // them, TwoRenders.FillApart), but the camera's motion was worked out from that gun's depth, near: as the camera
+        // moved (leaning most of all) the frame's smoothing over frames looked for those pixels in the wrong place, every
+        // other pixel, and the picture under the gun, seen through it, came out mottled (the user's video, 2026-11-18). Given
+        // the motion of the pixel next to them (the other kind of the chessboard, never the bare eye's gun).
+        if (motionVectors)
+        {
+            buffer.GetTemporaryRT(GunMotionCopyId, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RGHalf);
+            buffer.Blit(BuiltinRenderTextureType.MotionVectors, GunMotionCopyId);
+            buffer.SetRenderTarget(BuiltinRenderTextureType.MotionVectors);
+            buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, BareMotionFromNextPass);
+            buffer.ReleaseTemporaryRT(GunMotionCopyId);
             buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         }
         foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunDraws)

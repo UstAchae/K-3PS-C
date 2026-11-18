@@ -263,10 +263,9 @@ internal static partial class NightVisionEyepieces
         // 2026-11-17), the other eye's half from there on.
         if (monocularHalves)
         {
-            float rim = (CentreLensA < _lensFloors.Length ? _lensFloors[CentreLensA].w : 0.02f) * _body!.lossyScale.x * PodLoneRims;
-            split = monocularLeft
-                ? Mathf.Clamp(Across(camera, leftGlass + right * rim - leftShift), -Overscan, 1f + Overscan)
-                : Mathf.Clamp(Across(camera, rightGlass - right * rim - rightShift), -Overscan, 1f + Overscan);
+            // The whole device as the goggle's eye sees it, all over the frame (cut past its eyepiece, the rest of its body
+            // was missing: the user's, 2026-11-18); the other eye's view of it only as that eye aims (NvgDirect, _DirectOver).
+            split = monocularLeft ? 2f + Overscan : -1f - Overscan;
         }
         if (podMono)
         {
