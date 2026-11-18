@@ -198,7 +198,7 @@ internal static partial class NightVisionEyepieces
         bool asMonocular = _device.Monocular && !monocularHalves;
         binocular.SetVector(MonocularId, new Vector4(0f, -1f, 0f, 0f));   // (no monocular's fade)
         binocular.SetFloat(LensClearId, LensReflections ? 0f : 1f);
-        binocular.SetFloat(PictureShareId, TwoEyes.PictureShare);
+        binocular.SetFloat(PictureShareId, 1f);   // (the eyepieces whole: NvgBinocular.shader can lay them by a share)
         binocular.SetVector(EyeSpanId, new Vector4(1f, 1f, 0f, 0f));
         binocular.SetFloat(OverscanId, Overscan);
         _eyesFrame = Time.frameCount;

@@ -26,10 +26,10 @@ namespace EFTNewCamera;
 // 单筒：切换主视眼, / by default):
 //   the goggle's eye (as above): the camera stays, its gun and the goggle eye's view of the device whole, the bare eye's
 //   gun and view of the device laid over by half;
-//   the bare eye: the camera goes over to that eye as with any goggle; its gun (the camera's own view of it, still taken
-//   apart and laid over the eyepieces' picture: no night vision on it) and its view of the device whole, and the goggle
-//   eye's laid in by half: its gun drawn from that eye into the frame (night vision on it in the eyepiece), its view of
-//   the device, and the eyepieces' picture.
+//   the bare eye: the camera goes over to that eye as with any goggle, and the one gun is the game's own, as that eye
+//   sees it (nothing of the gun is drawn here then: the user's, 2026-11-18); that eye's view of the device whole, the
+//   goggle eye's laid over by half, the eyepieces' picture whole (by half over the same scene bare, it no longer read as
+//   night vision).
 //
 // The device itself is NightVisionEyes.cs and NightVisionDirect.cs (PieceShift, NvgDirect's coverage, _DirectOver): each
 // eye's view of it, the bare eye's laid over the goggle eye's by half while that eye aims.
@@ -55,9 +55,11 @@ internal static class TwoEyes
     // Which eye aims (_shareBare: 1 the bare eye; it goes over as the gun changes shoulders, CameraPosition), and how far
     // the aim has come up (_aim, 0 to 1): the bare eye's gun only while it aims.
     private static float _shareBare, _aim;
-    internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f;
+    // The bare eye aiming, and, while it does, the two guns drawn here: not once that eye leads (the game's own gun then).
+    internal static bool BareEyeAims => _shareBare > 0.5f && _aim > 0.001f;
+    internal static bool BareAims => BareEyeAims && _lead < 0.999f;
+    // (Whole as the bare eye comes to lead: the camera is then at that eye, and this gun its own.)
     private static float BareGunOpacity => Mathf.Lerp(_aim * BareSeen, 1f, _lead);
-    private static float GoggleGunOpacity => Mathf.Lerp(1f, _aim * BareSeen, _lead);
 
     // Which eye leads while the bare eye aims: false the goggle's (the camera stays), true the bare eye (the camera goes
     // over to it). _lead follows it over a quarter of a second.
@@ -69,7 +71,7 @@ internal static class TwoEyes
     // From NewCameraPlugin.Update: the key, only while the bare eye aims; and the easing.
     internal static void Update()
     {
-        if (LeadKey.IsDown() && Now && BareAims)
+        if (LeadKey.IsDown() && Now && BareEyeAims)
         {
             BareLeads = !BareLeads;
             NewCameraPlugin.Log?.LogInfo($"Two eyes: the {(BareLeads ? "bare eye" : "goggle's eye")} leads from now on.");
@@ -77,8 +79,6 @@ internal static class TwoEyes
         _lead = Mathf.MoveTowards(_lead, BareLeads ? 1f : 0f, Time.deltaTime * 4f);
     }
 
-    // How much of the eyepieces' picture is seen (NightVisionEyes.RenderLenses): by half once the bare eye leads and aims.
-    internal static float PictureShare => Now ? Mathf.Lerp(1f, BareSeen, _lead * BareAimShare * CameraPosition.ViewAimed) : 1f;
     // How much the camera stays put while the bare eye aims (CameraPosition): all of it while the goggle's eye leads.
     internal static float CameraStays => BareAimShare * (1f - _lead);
     // How much of what the bare eye sees (its gun, its lasers, the device from its side) is seen over the goggle eye's:
@@ -95,8 +95,6 @@ internal static class TwoEyes
     // From the camera to the bare eye while it aims: the aiming eye's place (the gun is placed for it) from the camera's.
     // (None of it once the bare eye leads: the camera is then that eye.)
     private static Vector3 BareShift(Quaternion turn) => turn * new Vector3((CameraPosition.AimingEyeAcross - CameraPosition.Horizontal) * (1f - _lead), 0f, 0f);
-    // From the camera to the goggle's eye, for its gun, once the bare eye leads: as far the other side of the head's middle.
-    private static Vector3 GoggleShift(Quaternion turn) => turn * new Vector3((-CameraPosition.AimingEyeAcross - CameraPosition.Horizontal) * _lead, 0f, 0f);
 
     // From NightVisionEyes.RenderLenses: the goggle's lens across from the head's middle.
     internal static void SeeLens(float across)
@@ -152,17 +150,29 @@ internal static class TwoEyes
     // Under the gun in the hands, as gathered (its own model's hierarchy).
     internal static bool IsOnGun(Transform t) => _gunRoot != null && t.IsChildOf(_gunRoot);
 
+    // DIAG (1.8.118, to come out): once a second while the bare eye's gun is drawn, from where: the user finds it looks as
+    // if seen from between the eyes.
+    private static float _noteNext;
+    private static void NoteBareGun(Quaternion turn, Vector3 shift)
+    {
+        if (Time.unscaledTime < _noteNext)
+            return;
+        _noteNext = Time.unscaledTime + 1f;
+        Vector3 across = Quaternion.Inverse(turn) * shift;
+        NewCameraPlugin.Log?.LogInfo($"Two eyes: the bare eye's gun drawn from ({across.x * 1000f:F1}, {across.y * 1000f:F1}, {across.z * 1000f:F1}) mm of the camera; camera across {CameraPosition.Horizontal * 1000f:F1} mm (set {CameraPosition.Across * 1000f:F1}), aiming eye {CameraPosition.AimingEyeAcross * 1000f:F1}, aim eye set {CameraPosition.AimEye * 1000f:F1}, gun placed {CameraPosition.PoseAcross * 1000f:F1} from the camera, goggle's eye {_goggleEye * 1000f:F1}, aim {_aim:F2}, share {_shareBare:F2}, lead {_lead:F2}, stays {CameraStays:F2}");
+    }
+
     // For NightVisionDirect.DrawGun: the bare eye's gun to draw this frame (it aims), that eye's offset from the camera
     // along the world's axes, and that it is put in on the chessboard (shown below 1).
-    internal static System.Collections.Generic.List<Renderer>? GunHere(Quaternion turn, out Vector3 shift, out Vector3 goggleShift, out float shown)
+    internal static System.Collections.Generic.List<Renderer>? GunHere(Quaternion turn, out Vector3 shift, out float shown)
     {
-        shift = goggleShift = Vector3.zero;
+        shift = Vector3.zero;
         shown = 0f;
         if (!BareGunNow)
             return null;
         shift = BareShift(turn);
-        goggleShift = GoggleShift(turn);
         shown = 0.5f;
+        NoteBareGun(turn, shift);
         return _gunRenderers;
     }
 
@@ -437,7 +447,7 @@ internal static class TwoEyes
         var buffer = _apartBuffer;
         buffer.Clear();
         buffer.SetGlobalVector(GunTexelId, new Vector4(1f / w, 1f / h, w, h));
-        buffer.SetGlobalFloat(GoggleShareId, GoggleGunOpacity);
+        buffer.SetGlobalFloat(GoggleShareId, 1f);   // (the camera's gun stays whole)
         buffer.GetTemporaryRT(ApartTempId, w, h, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
         buffer.Blit(UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, ApartTempId);
         buffer.Blit(ApartTempId, bareView, material, BareViewPass);
