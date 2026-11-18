@@ -931,7 +931,11 @@ internal static partial class NightVisionEyepieces
             buffer.SetGlobalTexture(DirectGoggleGunDepth, goggleDepth);
         buffer.SetGlobalFloat(DirectGoggleShownId, goggleDepth != null ? 1f : 0f);
         buffer.SetGlobalFloat(DirectBareAimsId, TwoRenders.BareAims ? 1f : 0f);
-        buffer.SetGlobalFloat(GunParityId, Time.frameCount & 1);
+        // The chessboard no longer turned over each frame: under the bare eye's gun, now seen through, the goggle eye's
+        // picture was its own at a pixel one frame and made from the pixels next to it the next, and what smooths the frame
+        // over frames showed that as a mottle whenever the camera moved (the user's videos, 2026-11-18). Each pixel now
+        // always the same kind; the bare eye's gun is made from half its pixels, a little softer.
+        buffer.SetGlobalFloat(GunParityId, 0f);
         _bareShiftNow = shift;
         // Its sight's lens: the gun left out there, so the frame keeps what lies behind it (the goggle's picture is made
         // from it, and the lens laid over that at its see-through: TwoRenders.DrawLensLayer).

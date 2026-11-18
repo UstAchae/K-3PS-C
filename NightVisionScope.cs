@@ -80,11 +80,21 @@ internal static partial class NightVisionEyepieces
 
     private static bool GoggleBeforeAimingEye(Vector3 cameraPlace, Quaternion cameraTurn)
     {
-        if (!_device.Monocular || _lensNodes.Length == 0)
+        // (A binocular with one eyepiece swung away, the ENVG-B's: by the one left, as a monocular. Taken for before both
+        // eyes, a sight aimed with the bare eye was drawn as seen with night vision, its IR laser in its picture: the user's,
+        // 2026-11-18.)
+        int lens = CentreLensA;
+        bool one = _device.Monocular;
+        if (!one && PodMonocular(out int lone, out _) && lone < _lensRest.Length)
+        {
+            one = true;
+            lens = lone;
+        }
+        if (!one || _lensNodes.Length == 0)
             return true;
-        // By where the lens and the aiming eye are from the head's middle: the camera may stand at the goggle's eye
-        // (TwoRenders.cs) whichever eye aims.
-        float lensAcross = Vector3.Dot(_lensNodes[CentreLensA].position - cameraPlace, cameraTurn * Vector3.right) + CameraPosition.Horizontal;
+        // By where the lens and the aiming eye are from the head's middle, wherever the camera stands.
+        Transform lensNode = _device.Monocular ? _lensNodes[lens] : _lensRest[lens];
+        float lensAcross = Vector3.Dot(lensNode.position - cameraPlace, cameraTurn * Vector3.right) + CameraPosition.Horizontal;
         return Mathf.Abs(lensAcross - CameraPosition.AimingEyeAcross) <= BeforeEyeWithin;
     }
 
