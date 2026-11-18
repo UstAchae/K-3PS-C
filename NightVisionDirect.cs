@@ -494,9 +494,6 @@ internal static partial class NightVisionEyepieces
     private static readonly float[] _sideGone = new float[2];
     private const float AgreeBy = 3f;   // the halves agree once a pod is a third of the way gone
 
-    // (diagnostics, 1.8.114)
-    internal static string CaptureNote() => $"sides gone ({_sideGone[0]:F3}, {_sideGone[1]:F3}), eyes mixed {_eyesMixed:F3}, pods ({_sidePods[0]}, {_sidePods[1]}), pieces {_pieces.Count}";
-
     // Which side's pod a part of the device is on: 0 the left's, 1 the right's, -1 neither (the body, the mount).
     private static int PodSideOf(Transform t)
     {
@@ -742,27 +739,15 @@ internal static partial class NightVisionEyepieces
             DrawMotion(_directMotion, main, turned, projection, leftShift, rightShift);
         // (The bare eye's gun's own motion whether or not the camera keeps motion vectors.)
         DrawGunMotion(_directMotion, main, turned, projection, gun, motionVectors);
-        if (TwoRenders.Capturing && motionVectors)   // (diagnostics, 1.8.114)
-        {
-            _directMotion.Blit(BuiltinRenderTextureType.MotionVectors, TwoRenders.CaptureMotionTarget(width, height));
-            _directMotion.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-        }
         // Once all is lit: the fade.
         buffer = _directEnd;
         buffer.SetGlobalVector(DirectTexel, new Vector4(1f / Mathf.Max(width, 1), 1f / Mathf.Max(height, 1), 0f, 0f));
         buffer.GetTemporaryRT(DirectLitNow, width, height, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
         buffer.Blit(BuiltinRenderTextureType.CameraTarget, DirectLitNow);
-        if (TwoRenders.Capturing)   // (diagnostics, 1.8.114: the frame lit, before the device's pattern is evened)
-            buffer.Blit(DirectLitNow, TwoRenders.CapturePreLitTarget(width, height));
         buffer.SetGlobalTexture(DirectLitNow, DirectLitNow);
         buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, EvenPass);
         buffer.ReleaseTemporaryRT(DirectLitNow);
-        if (TwoRenders.Capturing)   // (diagnostics, 1.8.114)
-        {
-            buffer.Blit(BuiltinRenderTextureType.CameraTarget, TwoRenders.CaptureLitTarget(width, height));
-            buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-        }
     }
 
     // The bare eye's gun (and its hands and arms), drawn from that eye into G-buffers of its own, as the device is; put into

@@ -329,10 +329,14 @@ Shader "Justachae/NVG/Direct" {
      other /= count;
      return float4(lerp(device ? other : own, device ? own : other, c * monocularShown(uv)), 1);
     }
+    // Sixteen pixels, each at its middle (whole pixels from this one: the pattern is four by four, so any four by four
+    // of them holds each kind once). Taken half a pixel off, each sample fell on the line between two pixels and took
+    // either as the rounding went, a row twice here and not at all there: lines across whatever is seen through (raw
+    // captures, 2026-11-18: the pattern clean before this pass, striped after it).
     float3 sum = 0;
     for (int y = -2; y < 2; y++)
      for (int x = -2; x < 2; x++)
-      sum += tex2Dlod(_DirectLitNow, float4(uv + (float2(x, y) + 0.5) * _DirectTexel.xy, 0, 0)).rgb;
+      sum += tex2Dlod(_DirectLitNow, float4(uv + float2(x, y) * _DirectTexel.xy, 0, 0)).rgb;
     return float4(sum / 16, 1);
    }
    ENDCG
