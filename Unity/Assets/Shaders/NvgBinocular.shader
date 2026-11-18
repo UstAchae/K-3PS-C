@@ -39,7 +39,11 @@ Shader "Justachae/NVG/Binocular" {
     float3 device = eye.rgb * (1 - saturate(cover * _LensClear + (1 - _LensClear) * dark));
     // The scene only past the device and never through a lens: behind the glass is the tube, so where its picture
     // falls short (the line of sight off the pupil, between the two eyes' views) the glass is dark, not a window.
-    return float4(device + light.rgb * _Lamp.x + glow + (1 - saturate(eye.a)) * (1 - cover) * scene.rgb, scene.a);
+    float3 seen = device + light.rgb * _Lamp.x + glow + (1 - saturate(eye.a)) * (1 - cover) * scene.rgb;
+    // The eyepieces (their picture and their glass) laid over the frame by a share (_PictureShare, 1 whole): by half
+    // while the bare eye leads and aims (TwoEyes.BareLeads), the frame being then that eye's.
+    float share = lerp(1, _PictureShare, saturate(max(cover, light.w)));
+    return float4(lerp(scene.rgb, seen, share), scene.a);
    }
    ENDCG
   }

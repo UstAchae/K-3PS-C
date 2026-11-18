@@ -16,6 +16,7 @@ float4 _EyeSpan;                  // x the left eye's view's share of the frame'
 float4 _Monocular;                // x 1 for a monocular, whose one eye (y: 0 left, 1 right) sees the whole frame; the other half fades toward its edge, z as this power (0 not at all)
 float4 _Lamp;                     // x the lenses' brightness, y the glow's, z the eyepieces' distortion, w the field angle it is given at (rad)
 float _Mode;
+float _PictureShare;             // how much of the eyepieces is laid over the frame (NvgBinocular.shader): 1 whole
 float _LensClear;                 // 1: the lenses' own surface (its reflections, its highlights) left out over their picture
 
 float4 _FusedRect;                // the other mod's picture (EyepieceFusion): xy its centre, zw its half width and height (uv); z 0: none

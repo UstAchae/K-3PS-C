@@ -198,6 +198,7 @@ internal static partial class NightVisionEyepieces
         bool asMonocular = _device.Monocular && !monocularHalves;
         binocular.SetVector(MonocularId, new Vector4(0f, -1f, 0f, 0f));   // (no monocular's fade)
         binocular.SetFloat(LensClearId, LensReflections ? 0f : 1f);
+        binocular.SetFloat(PictureShareId, TwoEyes.PictureShare);
         binocular.SetVector(EyeSpanId, new Vector4(1f, 1f, 0f, 0f));
         binocular.SetFloat(OverscanId, Overscan);
         _eyesFrame = Time.frameCount;
@@ -393,6 +394,7 @@ internal static partial class NightVisionEyepieces
     // NvgDirect.shader, coverage; the user's, 2026-11-18: both eyes' devices seen, as both eyes' guns are).
     private static float _eyesMixed;
     private static bool _goggleEyeRight;
+    private static readonly int PictureShareId = Shader.PropertyToID("_PictureShare");
 
     private static float Across(Camera camera, Vector3 to)
     {
