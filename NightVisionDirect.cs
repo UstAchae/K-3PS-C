@@ -316,6 +316,8 @@ internal static partial class NightVisionEyepieces
             buffer.SetRenderTarget(BuiltinRenderTextureType.MotionVectors);
             buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, BareMotionFromNextPass);
             buffer.ReleaseTemporaryRT(GunMotionCopyId);
+            if (TwoRenders.Capturing)   // (diagnostics, 1.8.105)
+                buffer.Blit(BuiltinRenderTextureType.MotionVectors, TwoRenders.CaptureMotionTarget(main.pixelWidth, main.pixelHeight));
             buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
         }
         foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunDraws)
