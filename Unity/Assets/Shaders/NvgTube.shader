@@ -335,12 +335,25 @@ Shader "Justachae/NVG/Tube" {
    #pragma target 3.5
    #include "UnityCG.cginc"
    UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+   UNITY_DECLARE_DEPTH_TEXTURE(_DirectHD);
    sampler2D _GunWhich, _DirectGunLens;
    float4 frag (v2f_img i) : SV_Target {
     float which = tex2Dlod(_GunWhich, float4(i.uv, 0, 0)).r;
     bool goggleGun = which > 0.25 && which < 0.75, lens = tex2Dlod(_DirectGunLens, float4(i.uv, 0, 0)).r > 0.5;
     // (Behind the aiming bare eye's sight lens the goggle eye's gun is not seen, pass 4: its depth left out too.)
     float w = which > 0.75 || goggleGun && lens ? 0 : 1;
+    // Where the goggle eye's gun stands but this pixel was given neither gun (the chessboard's other kind, the bare eye's
+    // gun not there): the frame has what lies behind, far, and the gun's depth was a chessboard of near and far, which the
+    // objective's blur, reading a pixel and its corners (all of one kind), took for far on half of them, and lost. Left
+    // out too, filled from the gun's own pixels next to it.
+    float rawH = SAMPLE_DEPTH_TEXTURE_LOD(_DirectHD, float4(i.uv, 0, 0));
+    #if defined(UNITY_REVERSED_Z)
+    bool goggleCovers = rawH > 0;
+    #else
+    bool goggleCovers = rawH < 1;
+    #endif
+    if (which < 0.25 && goggleCovers && !lens)
+     w = 0;
     return float4(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(i.uv, 0, 0)) * w, w, 0, 0);
    }
    ENDCG
