@@ -267,14 +267,12 @@ internal static class TwoRenders
             return;
         }
         HideGun(true);
-        CapturePlan(main);
         FillApart(main);
     }
 
     // From NewCameraPlugin.EndOfFrame.
     internal static void EndOfFrame()
     {
-        CaptureNow();
         HideGun(false);
         _apartBuffer?.Clear();
         if (_frameDepth != null && _goggleDepth != null && Shader.GetGlobalTexture(CameraDepthId) == _goggleDepth)
@@ -429,8 +427,6 @@ internal static class TwoRenders
         // upscaler: with the bare eye's gun's depth, near, on every other pixel under that gun, what smooths the frame over
         // frames by its depth mottled the picture seen through that gun as the camera moved). The camera's own given back
         // at the frame's end.
-        if (Capturing)
-            buffer.Blit(UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, CaptureTexture(ref _capGoggle, w, h, RenderTextureFormat.ARGBHalf, "Justachae capture goggle frame"));
         if (Shader.GetGlobalTexture(CameraDepthId) is Texture frameDepth && frameDepth != depth)
             _frameDepth = frameDepth;
         buffer.SetGlobalTexture(CameraDepthId, depth);
@@ -445,8 +441,6 @@ internal static class TwoRenders
         _layFrame = -1;
         if (MaterialFor(tubeShader) == null || !Now || _gunsFrame != Time.frameCount || !BareAims || _apartFrame != Time.frameCount || _bareNow == null)
             return;
-        if (Capturing)
-            Graphics.Blit(scene, CaptureTexture(ref _capScene, scene.width, scene.height, RenderTextureFormat.ARGBHalf, "Justachae capture scene"));
         if (BareAims && _goggleDepth != null && Shader.GetGlobalTexture(CameraDepthId) is Texture frameDepth && frameDepth != _goggleDepth)
         {
             _ownDepth = frameDepth;
@@ -494,103 +488,7 @@ internal static class TwoRenders
         laying.SetTexture(GunWhich14Id, NightVisionEyepieces.GunWhichTexture ?? (Texture)Texture2D.blackTexture);
         laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
         Graphics.Blit(frame, into, laying, GunAndLensPass);
-        if (Capturing)
-        {
-            Graphics.Blit(frame, CaptureTexture(ref _capBefore, into.width, into.height, RenderTextureFormat.ARGBHalf, "Justachae capture before laying"));
-            Graphics.Blit(into, CaptureTexture(ref _capFinal, into.width, into.height, RenderTextureFormat.ARGBHalf, "Justachae capture final"));
-        }
         RenderTexture.ReleaseTemporary(frame);
-    }
-
-    // CAPTURE (diagnostics, 1.8.105, 2026-11-18; to come out once the mottle is found): while the bare eye aims and the
-    // camera turns, six frames in a row, raw, three times at most: the frame as the goggle eye's (the guns taken apart, at
-    // the camera's own pixels), the frame as it reaches the eyepieces (after the game's smoothing and upscale), the frame
-    // after the eyepieces, the final frame, the bare eye's gun gathered, which gun each pixel was given, the camera's
-    // motion, the goggle eye's depth. Written to .codex-work/nvgdump/mottle as s<set>_f<frame>_<name>_<W>x<H>_<format>.raw.
-    private const string CaptureFolder = "D:/games/SPT-4.1.6/.codex-work/nvgdump/mottle";
-    private const int CaptureFrames = 6, CaptureSets = 3;
-    private static int _capIndex = -1, _capSet, _capNext = 300, _capFrame = -1;
-    private static Quaternion _capTurn = Quaternion.identity;
-    private static RenderTexture? _capGoggle, _capScene, _capBefore, _capFinal;
-    internal static RenderTexture? CaptureMotion;
-    internal static bool Capturing => _capIndex >= 0 && _capFrame == Time.frameCount;
-
-    private static void CapturePlan(Camera main)
-    {
-        Quaternion turn = main.transform.rotation;
-        float turned = Quaternion.Angle(turn, _capTurn);
-        _capTurn = turn;
-        if (_capIndex >= 0 && ++_capIndex >= CaptureFrames)
-            _capIndex = -1;
-        if (_capIndex < 0 && _capSet < CaptureSets && _aim > 0.99f && turned > 0.15f && Time.frameCount >= _capNext)
-        {
-            _capIndex = 0;
-            _capNext = Time.frameCount + 240;
-            _capSet++;
-        }
-        if (_capIndex >= 0)
-        {
-            _capFrame = Time.frameCount;
-            NewCameraPlugin.Log?.LogInfo($"Mottle capture: set {_capSet} frame {_capIndex} at {Time.frameCount}, turned {turned:F3} deg since the last frame, camera {main.pixelWidth}x{main.pixelHeight}");
-        }
-    }
-
-    private static RenderTexture CaptureTexture(ref RenderTexture? kept, int w, int h, RenderTextureFormat format, string name)
-    {
-        if (kept == null || kept.width != w || kept.height != h)
-        {
-            if (kept != null)
-            {
-                kept.Release();
-                Object.Destroy(kept);
-            }
-            kept = new RenderTexture(w, h, 0, format) { name = name, hideFlags = HideFlags.DontSave, filterMode = FilterMode.Point };
-            kept.Create();
-        }
-        return kept;
-    }
-
-    internal static RenderTexture CaptureMotionTarget(int w, int h) => CaptureTexture(ref CaptureMotion, w, h, RenderTextureFormat.RGHalf, "Justachae capture motion");
-
-    private static void CaptureNow()
-    {
-        if (!Capturing)
-            return;
-        try
-        {
-            System.IO.Directory.CreateDirectory(CaptureFolder);
-        }
-        catch
-        {
-            return;
-        }
-        int set = _capSet, frame = _capIndex;
-        void Save(Texture? texture, string name)
-        {
-            if (texture is not RenderTexture rt)
-                return;
-            string path = $"{CaptureFolder}/s{set}_f{frame}_{name}_{rt.width}x{rt.height}_{rt.format}.raw";
-            UnityEngine.Rendering.AsyncGPUReadback.Request(rt, 0, request =>
-            {
-                if (request.hasError)
-                    return;
-                try
-                {
-                    System.IO.File.WriteAllBytes(path, request.GetData<byte>().ToArray());
-                }
-                catch
-                {
-                }
-            });
-        }
-        Save(_capGoggle, "goggle");
-        Save(_capScene, "scene");
-        Save(_capBefore, "before");
-        Save(_capFinal, "final");
-        Save(_bareNow, "bare");
-        Save(NightVisionEyepieces.GunWhichTexture, "which");
-        Save(CaptureMotion, "motion");
-        Save(_goggleDepth, "depth");
     }
 
     // The bare eye's gun's sight lens, drawn from that eye with the game's own lens material (its picture is the sight
