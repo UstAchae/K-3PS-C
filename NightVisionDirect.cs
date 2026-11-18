@@ -733,6 +733,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int[] DirectGoggleGun = { Shader.PropertyToID("_DirectH0"), Shader.PropertyToID("_DirectH1"), Shader.PropertyToID("_DirectH2"), Shader.PropertyToID("_DirectH3") };
     private static readonly int DirectGoggleGunDepth = Shader.PropertyToID("_DirectHD"), DirectGoggleShownId = Shader.PropertyToID("_DirectGoggleShown");
     private static readonly List<(Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer)> _gunDraws = new List<(Mesh, Matrix4x4, Material, int, int, Renderer)>();
+    private static readonly HashSet<Material> _gunGlass = new HashSet<Material>();
     private static Matrix4x4 _forwardFromBare = Matrix4x4.identity, _forwardFromGoggle = Matrix4x4.identity;
     private static Vector3 _goggleShiftNow, _goggleShiftOld;
     private static bool _forwardGoggleToo;
@@ -825,7 +826,7 @@ internal static partial class NightVisionEyepieces
             Matrix4x4 eyeMove = eye == 0 ? _forwardFromBare : _forwardFromGoggle;
             foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunForward)
             {
-                if (mesh == null || material == null || renderer == null)
+                if (mesh == null || material == null || renderer == null || intoBare && _gunGlass.Contains(material))
                     continue;
                 renderer.GetPropertyBlock(_pieceBlock);
                 buffer.DrawMesh(mesh, eyeMove * matrix, material, sub, pass, _pieceBlock);
@@ -895,13 +896,18 @@ internal static partial class NightVisionEyepieces
                     bool seeThrough = materials[i] != null && materials[i].renderQueue > 2500;
                     passes[i] = seeThrough ? -1 : GBufferPass(materials[i]);
                     forward[i] = seeThrough ? ForwardPassOf(materials[i]) : ForwardPass(materials[i]);
-                    // DIAG (1.8.120, to come out): each part of the gun that is not drawn into the G-buffer, once.
-                    if (materials[i] != null && passes[i] < 0)
-                        NewCameraPlugin.Log?.LogInfo($"Two eyes: gun part {r.name} material {materials[i].name} [{materials[i].shader.name}] queue {materials[i].renderQueue}: see-through {seeThrough}, forward pass {forward[i]}, off {r.forceRenderingOff}");
+                    // A sight's glass (a holographic sight's window): not drawn into the bare eye's gun's own picture, where
+                    // nothing stands behind it and its see-through shader left it black (DrawGunForward).
+                    if (materials[i] != null && seeThrough && (materials[i].shader.name.IndexOf("glass", System.StringComparison.OrdinalIgnoreCase) >= 0
+                        || materials[i].name.IndexOf("glass", System.StringComparison.OrdinalIgnoreCase) >= 0))
+                        _gunGlass.Add(materials[i]);
                 }
                 source = (materials, passes, forward);
                 if (_gunSources.Count > 512)
+                {
                     _gunSources.Clear();
+                    _gunGlass.Clear();
+                }
                 _gunSources[r] = source;
             }
             Matrix4x4 matrix = FromCamera(r.transform, place);
