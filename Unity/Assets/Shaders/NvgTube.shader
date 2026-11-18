@@ -345,9 +345,7 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
-  // 8: that depth, where it was left out (under the bare eye's gun) as far: what the goggle eye sees there is hidden by
-  //    that gun, solid, laid over after, and given as far the objective's blur spreads none of it round the gun and into its
-  //    sight's lens (filled from around, it took in near depths, the device's, and blurred the lens's inner ring).
+  // 8: that depth filled from around (its mips made in between): from the first smaller level that has some of what was kept.
   Pass {
    Cull Off ZWrite Off ZTest Always Blend Off
    CGPROGRAM
@@ -360,11 +358,16 @@ Shader "Justachae/NVG/Tube" {
     float2 s = tex2Dlod(_MainTex, float4(i.uv, 0, 0)).rg;
     if (s.y > 0.99)
      return s.x / s.y;
-    #if defined(UNITY_REVERSED_Z)
-    return 0;
-    #else
-    return 1;
-    #endif
+    // As the picture is filled (pass 5): coarsest to finest, each by how much of it was kept.
+    float filled = 0, any = 0;
+    for (int level = 11; level >= 0; level--) {
+     float2 m = tex2Dlod(_MainTex, float4(i.uv, 0, level)).rg;
+     if (m.y > 0.0001) {
+      filled = any > 0 ? lerp(filled, m.x / m.y, saturate(m.y * 8)) : m.x / m.y;
+      any = 1;
+     }
+    }
+    return filled;
    }
    ENDCG
   }

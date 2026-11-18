@@ -8,8 +8,9 @@ namespace EFTNewCamera;
 // 2026-11-17: both eyes' guns were too much to be worth it). Both eyes are seen only at the sight's lens:
 //   the goggle eye aims: the game's own gun and sight as ever (night vision and the objective's blur on them);
 //   not aiming: the game's own gun, as the camera sees it, whichever shoulder it is on (the user's, 2026-11-18);
-//   the bare eye aims (from the moment the aim begins; the eye it is drawn from goes over from the camera to the bare eye
-//   as the aim comes up, and back, so it comes out of the camera's own gun and returns to it): its gun (with the hands and arms) is drawn into the G-buffer by NightVisionDirect.cs from that eye,
+//   the bare eye aims: the camera's gun stays (drawn here too, as the game's, on the other kind of a chessboard, the
+//   game's copy kept to its shadow; left out behind the bare eye's sight lens), and the bare eye's fades in over it as the
+//   aim comes up: its gun (with the hands and arms) is drawn into the G-buffer by NightVisionDirect.cs from that eye,
 //   unjittered, the game's copy kept to its shadow; taken apart before the image effects (FillApart, what lies under it
 //   filled from around for the eyepieces), gathered over frames along its own motion (its light's grain smoothed) and
 //   laid over the eyepieces' picture after (TakeEye): no night vision, no blur on it. Its sight's lens seen through (F12
@@ -32,6 +33,9 @@ internal static class TwoRenders
     // the aim has come up (_aim, 0 to 1): the bare eye's gun only while it aims.
     private static float _shareBare, _aim;
     internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f;
+    // The camera's (goggle eye's) gun stays whole; the bare eye's by as much as the aim has come up.
+    internal static float GoggleOpacityNow => 1f;
+    private static float BareGunOpacity => _aim;
     // The bare eye's gun drawn this frame (it aims).
     private static bool BareGunNow => Now && BareAims && _gunsFrame == Time.frameCount && _gunRenderers.Count > 0;
 
@@ -41,8 +45,7 @@ internal static class TwoRenders
     // As the goggle flips down the eyes go out to their places from where the camera would be, and back as it flips up.
     private static float Apart => Mathf.SmoothStep(0f, 1f, NightVisionEyepieces.Flip);
     internal static float Place(float across) => AtGoggleEye ? Mathf.Lerp(across, _goggleEye, Apart) : across;
-    // From the camera to the eye the bare eye's gun is drawn from: over to the bare eye as the aim comes up.
-    private static Vector3 BareShift(Quaternion turn) => AtGoggleEye ? turn * new Vector3((BareEye - _goggleEye) * Apart * _aim, 0f, 0f) : Vector3.zero;
+    private static Vector3 BareShift(Quaternion turn) => AtGoggleEye ? turn * new Vector3((BareEye - _goggleEye) * Apart, 0f, 0f) : Vector3.zero;
 
     // The eyes from the head's middle while seen this way: as far as the goggle's eyepiece stands, so that the aiming eye
     // (and the gun placed for it, CameraPosition) is behind it as the mount is set (the user's, 2026-11-17).
@@ -103,7 +106,7 @@ internal static class TwoRenders
     internal static bool IsOnGun(Transform t) => _gunRoot != null && t.IsChildOf(_gunRoot);
 
     // For NightVisionDirect.DrawGun: the bare eye's gun to draw this frame (it aims), that eye's offset from the camera
-    // along the world's axes, and that it is solid (shown 1).
+    // along the world's axes, and that it is put in on the chessboard (shown below 1).
     internal static System.Collections.Generic.List<Renderer>? GunHere(Quaternion turn, out Vector3 shift, out float shown)
     {
         shift = Vector3.zero;
@@ -111,18 +114,18 @@ internal static class TwoRenders
         if (!BareGunNow)
             return null;
         shift = BareShift(turn);
-        shown = 1f;
+        shown = 0.5f;
         return _gunRenderers;
     }
 
-    // While the bare eye's gun is drawn: the lasers on it go from it (LaserReplay moves their emitters by the opposite of
-    // that eye's offset for the main camera, the beam and the point it lands on alike).
+    // While the bare eye's gun is drawn: the lasers on the gun go over to it as the aim comes up (LaserReplay moves their
+    // emitters by the opposite of that eye's offset for the main camera, the beam and the point it lands on alike).
     internal static bool BareLaserShift(Camera camera, out Vector3 shift)
     {
         shift = Vector3.zero;
         if (camera == null || !BareGunNow)
             return false;
-        shift = BareShift(camera.transform.rotation);
+        shift = BareShift(camera.transform.rotation) * _aim;
         return true;
     }
 
@@ -299,7 +302,9 @@ internal static class TwoRenders
 
     private const int LensSolidPass = 1, GunAndLensPass = 2, BareViewPass = 3, GoggleViewPass = 4, GoggleFillPass = 5,
         DepthWeighPass = 7, DepthPullPass = 8, BareGatherPass = 9;
+    internal const int PartsLayPass = 6;
     private static Material? _material;
+    internal static Material? TubeMaterial => _material;
     private static Material? MaterialFor(Shader? tubeShader) =>
         tubeShader == null ? null : _material ??= new Material(tubeShader) { name = "Justachae two eyes", hideFlags = HideFlags.DontSave };
 
@@ -354,7 +359,7 @@ internal static class TwoRenders
         var buffer = _apartBuffer;
         buffer.Clear();
         buffer.SetGlobalVector(GunTexelId, new Vector4(1f / w, 1f / h, w, h));
-        buffer.SetGlobalFloat(GoggleShareId, 0f);   // (no goggle eye's gun drawn)
+        buffer.SetGlobalFloat(GoggleShareId, GoggleOpacityNow);
         buffer.GetTemporaryRT(ApartTempId, w, h, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
         buffer.Blit(UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, ApartTempId);
         buffer.Blit(ApartTempId, bareView, material, BareViewPass);
@@ -427,14 +432,14 @@ internal static class TwoRenders
         RenderTexture frame = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
         Graphics.Blit(into, frame);
         laying.SetTexture(OtherId, _bareNow);
-        laying.SetFloat(GunShareId, 1f);
+        laying.SetFloat(GunShareId, BareGunOpacity);
         laying.SetTexture(LensLayerId, lens ? _lensLayer : Texture2D.blackTexture);
         laying.SetTexture(LensMaskId, lens ? _lensSolid : Texture2D.blackTexture);
-        // (Seen through by as much as the aim has come up.)
-        laying.SetFloat(LensShareId, Mathf.Lerp(1f, LensOpacity, _aim));
+        // (Laid over by as much as the aim has come up, with its gun.)
+        laying.SetFloat(LensShareId, LensOpacity * _aim);
         laying.SetFloat(LensUnderAimingId, 0f);
         laying.SetTexture(AimLensMaskId, Texture2D.blackTexture);
-        laying.SetTexture(GunWhich14Id, Texture2D.blackTexture);
+        laying.SetTexture(GunWhich14Id, NightVisionEyepieces.GunWhichTexture ?? (Texture)Texture2D.blackTexture);
         laying.SetTexture(BareLasersId, Texture2D.blackTexture);
         Graphics.Blit(frame, into, laying, GunAndLensPass);
         RenderTexture.ReleaseTemporary(frame);
