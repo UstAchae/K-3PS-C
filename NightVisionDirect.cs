@@ -346,10 +346,12 @@ internal static partial class NightVisionEyepieces
         buffer.SetRenderTarget(BuiltinRenderTextureType.MotionVectors);
         for (int half = 0; half < 2; half++)
         {
-            Matrix4x4 fromEye = Matrix4x4.Translate(-(half == 0 ? leftShift : rightShift)), fromOldEye = Matrix4x4.Translate(-_oldShifts[half]);
             buffer.SetGlobalFloat(DirectHalf, half);
             foreach (Piece piece in _pieces)
             {
+                // (Each part from where it is drawn: PieceShift.)
+                Matrix4x4 fromEye = Matrix4x4.Translate(-PieceShift(piece.Renderer.transform, half, leftShift, rightShift)),
+                    fromOldEye = Matrix4x4.Translate(-PieceShift(piece.Renderer.transform, half, _oldShifts[0], _oldShifts[1]));
                 Matrix4x4 old = _oldPieces.TryGetValue(piece.Renderer, out Matrix4x4 was) ? was : piece.FromCamera;
                 buffer.SetGlobalMatrix(DirectOldM, fromOldEye * old);
                 for (int s = 0; s < piece.Mesh.subMeshCount; s++)
@@ -477,6 +479,42 @@ internal static partial class NightVisionEyepieces
         return false;
     }
 
+    // Each side's eyepiece's pod (and its eyecup's pod node), by name, and how far it has swung away, 0 to 1
+    // (NightVisionEyes.RenderLenses).
+    private static readonly string?[] _sidePods = new string?[2], _sideCups = new string?[2];
+    private static readonly float[] _sideGone = new float[2];
+
+    // Which side's pod a part of the device is on: 0 the left's, 1 the right's, -1 neither (the body, the mount).
+    private static int PodSideOf(Transform t)
+    {
+        if (_sidePods[0] == null && _sidePods[1] == null)
+            return -1;
+        for (Transform? at = t; at != null && at != _body; at = at.parent)
+        {
+            string name = at.name;
+            for (int side = 0; side < 2; side++)
+            {
+                if (name == _sidePods[side] || _sideCups[side] != null && name == _sideCups[side])
+                    return side;
+            }
+        }
+        return -1;
+    }
+
+    // From where a part of the device is drawn in a half of the frame (0 the left eye's, 1 the right's). With both
+    // eyepieces down, the half's own eye. With one swung away, the same in both halves, so they agree where they meet:
+    // the body from the side that has swung (the camera's own view), an eyepiece's own parts from its own side (the one
+    // still down from its eye, brought in; the one swung up from the camera). Eased by the swing.
+    private static Vector3 PieceShift(Transform part, int half, Vector3 leftShift, Vector3 rightShift)
+    {
+        Vector3 own = half == 0 ? leftShift : rightShift, other = half == 0 ? rightShift : leftShift;
+        int side = PodSideOf(part);
+        if (side == half)
+            return own;
+        float toOther = side < 0 ? _sideGone[1 - half] : Mathf.Max(_sideGone[0], _sideGone[1]);
+        return toOther <= 0f ? own : Vector3.Lerp(own, other, toOther);
+    }
+
     private static void DrawDirect(Camera main, Vector3 leftShift, Vector3 rightShift, float split, Vector4 monocular)
     {
         _directBuffer ??= new CommandBuffer { name = "Justachae NVG device in the main camera" };
@@ -556,11 +594,11 @@ internal static partial class NightVisionEyepieces
             // From where this eye truly stands: the view direction a material works out comes from the camera's place, which the
             // view matrix alone leaves where the main camera is. (Far out in a map a place in the world is kept only to some tens
             // of micrometres: the device is drawn with the eye at the origin, by its true offsets, or it shook.)
-            Matrix4x4 fromEye = Matrix4x4.Translate(-shift);
             buffer.SetViewProjectionMatrices(turned, projection);
             buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
             foreach (Piece piece in _pieces)
             {
+                Matrix4x4 fromEye = Matrix4x4.Translate(-PieceShift(piece.Renderer.transform, half, leftShift, rightShift));
                 piece.Renderer.GetPropertyBlock(_pieceBlock);
                 int count = Mathf.Min(piece.Materials.Length, piece.Mesh.subMeshCount);
                 for (int s = 0; s < count; s++)

@@ -187,7 +187,7 @@ internal static partial class NightVisionEyepieces
         // from that eye brought in toward the middle, the camera where it is (the user's, 2026-11-17: the camera went over
         // to the one left, then the one left alone over the whole frame looked like the whole device moved); both swung all
         // the way away, the game draws the device (LensesOn).
-        bool podMono = PodMonocular(out int lone, out float podAway);
+        bool podMono = PodMonocular(out int lone, out _);
         // (Which side the bare eye is, for its gun and sight while it aims: TwoRenders.cs.)
         if (podMono)
             TwoRenders.SeeLens((lone == CentreLensA ? a : b) + CameraPosition.Horizontal);
@@ -228,17 +228,26 @@ internal static partial class NightVisionEyepieces
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
-        // One eyepiece swung away (the ENVG-B's): only the side of the one left is brought in toward the middle; the other
-        // side goes back to how the camera itself sees the device, as far as its eyepiece has swung (eased with the swing,
-        // so nothing jumps: the whole device given to one eye at once flashed over, the user's, 2026-11-18). The halves
-        // still meet halfway between where each side sees its eyepiece's place, which moves with it.
-        if (podMono && _direct)
+        // An eyepiece swung away on its pod (the ENVG-B's): that side is no longer brought in toward the middle, it goes
+        // back to how the camera itself sees the device, as far as its own eyepiece has swung (each side by its own pod:
+        // by how far the two were apart together, the side already up sprang in and out as the second swung; the user's,
+        // 2026-11-18). Both up, both sides are the camera's, which is how the game then draws the device.
+        // The device's parts follow (NightVisionDirect.PieceShift): the eyepiece still down from its own eye in both
+        // halves, the rest from the camera in both, so the halves show the same thing where they meet (each half whole
+        // from its own side, parts of the device were missing between the eyepiece left and the one swung up).
+        int leftTube = a <= b ? CentreLensA : CentreLensB, rightTube = a <= b ? CentreLensB : CentreLensA;
+        _sideGone[0] = _direct ? PodGone(leftTube) : 0f;
+        _sideGone[1] = _direct ? PodGone(rightTube) : 0f;
+        for (int side = 0; side < 2; side++)
         {
-            if ((lone == CentreLensA) == (a <= b))
-                rightShift = Vector3.Lerp(rightShift, -back, podAway);
-            else
-                leftShift = Vector3.Lerp(leftShift, -back, podAway);
+            int tube = side == 0 ? leftTube : rightTube;
+            Transform? pod = tube < _lensPods.Length ? _lensPods[tube] : null;
+            int which = pod != null ? System.Array.IndexOf(_device.Pods, pod.name) : -1;
+            _sidePods[side] = pod != null ? pod.name : null;
+            _sideCups[side] = which >= 0 && which < _device.CupPods.Length ? _device.CupPods[which] : null;
         }
+        leftShift = Vector3.Lerp(leftShift, -back, _sideGone[0]);
+        rightShift = Vector3.Lerp(rightShift, -back, _sideGone[1]);
         bool monocularLeft = a + CameraPosition.Horizontal <= 0f;
         if (monocularHalves)
         {
