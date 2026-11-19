@@ -445,5 +445,32 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
+  // 10: the bare eye's gun's picture (pass 9: its colour, where it is in alpha) blurred along one line (_BlurStep, uv from
+  // one sample to the next; across and then down): each sample by how much of the gun it has, so nothing from outside
+  // the gun darkens it, and the gun's edge spreads out with it.
+  Pass {
+   Cull Off ZWrite Off ZTest Always Blend Off
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   #include "UnityCG.cginc"
+   sampler2D _MainTex;
+   float4 _BlurStep;
+   static const float weights[5] = { 0.2270, 0.1945, 0.1216, 0.0541, 0.0162 };
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2Dlod(_MainTex, float4(i.uv, 0, 0));
+    float3 sum = c.rgb * c.a * weights[0];
+    float cover = c.a * weights[0];
+    [unroll] for (int k = 1; k < 5; k++) {
+     float4 a = tex2Dlod(_MainTex, float4(i.uv + _BlurStep.xy * k, 0, 0));
+     float4 b = tex2Dlod(_MainTex, float4(i.uv - _BlurStep.xy * k, 0, 0));
+     sum += (a.rgb * a.a + b.rgb * b.a) * weights[k];
+     cover += (a.a + b.a) * weights[k];
+    }
+    return cover > 0.0001 ? float4(sum / cover, cover) : float4(0, 0, 0, 0);
+   }
+   ENDCG
+  }
  }
 }

@@ -394,7 +394,7 @@ internal static class TwoEyes
     // ---------------------------------------------------------------- the bare eye's gun apart (NvgTube.shader)
 
     private const int LensSolidPass = 1, GunAndLensPass = 2, BareViewPass = 3, GoggleViewPass = 4, GoggleFillPass = 5,
-        DepthWeighPass = 7, DepthPullPass = 8, BareGatherPass = 9;
+        DepthWeighPass = 7, DepthPullPass = 8, BareGatherPass = 9, GunBlurPass = 10;
     private static Material? _material;
     private static Material? MaterialFor(Shader? tubeShader) =>
         tubeShader == null ? null : _material ??= new Material(tubeShader) { name = "Justachae two eyes", hideFlags = HideFlags.DontSave };
@@ -542,6 +542,7 @@ internal static class TwoEyes
     private static RenderTexture? _lensLayer, _lensSolid;
     private static readonly int AimLensMaskId = Shader.PropertyToID("_AimLensMask");
     private static UnityEngine.Rendering.CommandBuffer? _lensBuffer;
+    private static readonly int BlurStepId = Shader.PropertyToID("_BlurStep");
     private static readonly int OtherId = Shader.PropertyToID("_Other"), LensLayerId = Shader.PropertyToID("_LensLayer"),
         LensMaskId = Shader.PropertyToID("_LensMask"), GunShareId = Shader.PropertyToID("_GunShare"), LensShareId = Shader.PropertyToID("_LensShare"),
         LensUnderAimingId = Shader.PropertyToID("_LensUnderAiming"), GunWhich14Id = Shader.PropertyToID("_GunWhich14"),
@@ -565,7 +566,25 @@ internal static class TwoEyes
         bool lens = DrawLensLayer(into, laying);
         RenderTexture frame = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
         Graphics.Blit(into, frame);
-        laying.SetTexture(OtherId, _bareNow);
+        // The bare eye leading, the aim coming up or going: its gun blurred by as far as the aim is from up, so it goes from
+        // the goggle's blurred picture of the gun, as the two slide apart from one place, to sharp, and back (the user's,
+        // 2026-11-19: sharp all the way, it stood out on the blurred one while the two were still all but one).
+        Texture bare = _bareNow;
+        float blur = _lead * (1f - _aim);
+        RenderTexture? across = null, down = null;
+        if (blur > 0.01f)
+        {
+            int w = _bareNow.width, h = _bareNow.height;
+            float step = blur * h * 0.003f;   // (pixels from one sample to the next; four each way)
+            across = RenderTexture.GetTemporary(w, h, 0, _bareNow.format);
+            down = RenderTexture.GetTemporary(w, h, 0, _bareNow.format);
+            laying.SetVector(BlurStepId, new Vector4(step / w, 0f, 0f, 0f));
+            Graphics.Blit(_bareNow, across, laying, GunBlurPass);
+            laying.SetVector(BlurStepId, new Vector4(0f, step / h, 0f, 0f));
+            Graphics.Blit(across, down, laying, GunBlurPass);
+            bare = down;
+        }
+        laying.SetTexture(OtherId, bare);
         laying.SetFloat(GunShareId, BareGunOpacity);
         laying.SetTexture(LensLayerId, lens ? _lensLayer : Texture2D.blackTexture);
         laying.SetTexture(LensMaskId, lens ? _lensSolid : Texture2D.blackTexture);
@@ -599,6 +618,10 @@ internal static class TwoEyes
         laying.SetTexture(SceneBareId, windows ? _sceneBare : Texture2D.blackTexture);
         Graphics.Blit(frame, into, laying, GunAndLensPass);
         RenderTexture.ReleaseTemporary(frame);
+        if (across != null)
+            RenderTexture.ReleaseTemporary(across);
+        if (down != null)
+            RenderTexture.ReleaseTemporary(down);
         DrawCollimator(into);
     }
 
