@@ -558,6 +558,7 @@ internal static class TwoEyes
         if (!BareAims || _bareNow == null)
             return;
         bool lens = DrawLensLayer(into, laying);
+        NoteLens(lens);
         RenderTexture frame = RenderTexture.GetTemporary(into.width, into.height, 0, into.format);
         Graphics.Blit(into, frame);
         laying.SetTexture(OtherId, _bareNow);
@@ -625,6 +626,38 @@ internal static class TwoEyes
         buffer.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
         Graphics.ExecuteCommandBuffer(buffer);
+    }
+
+    // Temporary (1.8.140): why a scope on the bare eye's gun shows no picture (the user's, 2026-11-19): what the lens's
+    // layer is made from, every 2 s while that eye aims.
+    private static float _lensNoted;
+    private static void NoteLens(bool laid)
+    {
+        if (Time.unscaledTime - _lensNoted < 2f)
+            return;
+        _lensNoted = Time.unscaledTime;
+        try
+        {
+            Camera? main = Camera.main;
+            SSAAPropagator? propagator = main != null ? main.GetComponent<SSAAPropagator>() : null;
+            Renderer? theirs = propagator != null ? LensRenderer(propagator) : null;
+            Material? theirMaterial = propagator != null ? LensMaterial(propagator) : null;
+            var manager = EFT.CameraControl.CameraManager.Instance?.OpticCameraManager;
+            Renderer? sights = manager?.CurrentOpticSight?.LensRenderer;
+            Camera? optic = manager?.Camera;
+            Renderer? kept = _lensKept;
+            Texture? picture = _lensMaterialKept != null && _lensMaterialKept.HasProperty("_CamTex") ? _lensMaterialKept.GetTexture("_CamTex") : null;
+            NewCameraPlugin.Log?.LogInfo($"[lens] laid {laid}, aim {_aim:0.00}, lead {_lead:0.00}, share {LensOpacity * _aim:0.00}, optic at work {OpticAtWork()}"
+                + $" | kept {(kept != null ? kept.name + " enabled " + kept.enabled + " active " + kept.gameObject.activeInHierarchy : "none")}"
+                + $", material {(_lensMaterialKept != null ? _lensMaterialKept.shader.name : "none")}, picture {(picture != null ? picture.name + " " + picture.width + "x" + picture.height : "none")}"
+                + $" | the game's {(theirs != null ? theirs.name : "none")}, material {(theirMaterial != null ? theirMaterial.shader.name : "none")}"
+                + $" | sight's {(sights != null ? sights.name + " enabled " + sights.enabled : "none")}, collimator {(_collimatorKept != null ? _collimatorKept.name : "none")}"
+                + $" | optic camera {(optic != null ? optic.name + " target " + (optic.targetTexture != null ? optic.targetTexture.name + " " + optic.targetTexture.width : "none") : "none")}");
+        }
+        catch (System.Exception e)
+        {
+            NewCameraPlugin.Log?.LogInfo("[lens] " + e.Message);
+        }
     }
 
     // The bare eye's gun's sight lens, drawn from that eye with the game's own lens material (its picture is the sight
