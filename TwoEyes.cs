@@ -40,8 +40,13 @@ internal static class TwoEyes
     // The goggle eye's gun drawn too, always (the bare eye leading, by half, from that eye: the user's, 2026-11-19).
     internal static bool GoggleGunToo => true;
     // (Whole as the bare eye comes to lead: the camera is then at that eye, and this gun its own.)
-    private static float BareGunOpacity => Mathf.Lerp(_aim * BareSeen, 1f, _lead);
-    private static float GoggleGunOpacity => Mathf.Lerp(1f, BareSeen, _lead);
+    // (The bare eye leading, the two guns slide apart from one place with the aim and back into it, GoggleShift: the bare
+    // eye's whole from the first quarter of the way on, the goggle eye's seen through from there; over that quarter the two
+    // are all but one. Whole all the way, the bare eye's gun was gone at once as the aim ended, the goggle eye's whole in
+    // its place: the user's, 2026-11-19.)
+    private static float Whole => Mathf.Clamp01(_aim * 4f);
+    private static float BareGunOpacity => Mathf.Lerp(_aim * BareSeen, Whole, _lead);
+    private static float GoggleGunOpacity => Mathf.Lerp(1f, Mathf.Lerp(1f, BareSeen, Whole), _lead);
 
     // Which eye leads while the bare eye aims: false the goggle's (the camera stays), true the bare eye (the camera goes
     // over to it). _lead follows it over a quarter of a second.
