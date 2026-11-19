@@ -10,10 +10,11 @@ namespace EFTNewCamera;
 // aiming, to the eye that leads (BareLeads): the goggle's (the user's, 2026-11-19: left between the two eyes it was
 // neither's) or the bare one (CameraPosition, AimAcross).
 //
-// Each eye's own world (the user's, 2026-11-19), without a second render: what one eye sees where the camera is the
-// other is the camera's frame moved over by each pixel's depth (the nearer, the further). So the eyepieces' picture is
-// the goggle eye's world (NvgEyes.cginc, eyeWorld) and a sight's window on the bare eye's gun shows the bare eye's
-// (NvgTube pass 2); what one eye sees and the camera does not, behind a near thing's edge, is not there to be had.
+// The bare eye's own world in its sight's window (the user's, 2026-11-19), without a second render: where the camera is
+// not that eye, the camera's frame moved over by each pixel's depth, the nearer the further (NvgTube pass 2,
+// windowWorld); what that eye sees and the camera does not, behind a near thing's edge, is not there to be had. Only
+// there: done for the eyepieces' picture too (the goggle eye's world), the gun near the eye came out wrong in the
+// eyepiece, and the user had meant the sight's inside alone (NvgEyes.cginc's eyeWorld is left unset, and does nothing).
 //
 // The gun:
 //   not aiming, or the goggle's eye aiming: the game's own, as the camera sees it. Nothing is done here.
@@ -91,14 +92,6 @@ internal static class TwoEyes
     // Where the camera goes to aim (CameraPosition), across from the head's middle: the aiming eye, or, the bare eye
     // aiming and the goggle's eye leading, the goggle's eye.
     internal static float AimAcross(float aimingEye) => Mathf.Lerp(aimingEye, Mathf.Lerp(_goggleEye, aimingEye, _lead), BareAimShare);
-
-    // The goggle's eye from the camera, across (m): for its world in the eyepieces (NightVisionEyes.SetEyeWorld).
-    // None once the camera has gone over to that eye to aim (the goggle's eye aiming, or leading while the bare eye aims):
-    // the camera is then that eye, wherever its eyepiece stands by the mount (measured against the eyepiece, a few
-    // millimetres were left, and the gun near the eye came out doubled in the eyepiece: the user's, 2026-11-19).
-    internal static float GoggleEyeFromCamera => Now
-        ? (_goggleEye - CameraPosition.Horizontal) * (1f - CameraPosition.ViewAimed * (1f - BareAimShare * _lead))
-        : 0f;
 
     // A depth texture's raw value to metres, as Unity has it: 1 / (x * raw + y).
     internal static Vector2 DepthToMetres(Camera camera)
