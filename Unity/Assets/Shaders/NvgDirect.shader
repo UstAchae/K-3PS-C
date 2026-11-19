@@ -87,18 +87,26 @@ Shader "Justachae/NVG/Direct" {
  // of the device as the bare eye sees it is seen): the two eyes' views of the device not side by side but one over the other,
  // the goggle eye's whole all over the frame, the bare eye's seen through wherever the goggle eye's is not.
  float4 _DirectOver;
+ float _DirectBareRight;   // the bare eye's side of the device's two views: 0 the left's, 1 the right's
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
   float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
   bool inL = within(_DirectLens0, uv, _EyeInvVP0), inR = within(_DirectLens1, uv, _EyeInvVP1);
   bool hasL = shown(rawL), hasR = shown(rawR);
   float c = 0, side = t;
   if (_DirectOver.x > 0) {
-   bool goggleRight = _DirectOver.y > 0.5;
-   float sL = hasL && !inL ? lerp(1 - t, goggleRight ? _DirectOver.z : 1, _DirectOver.x) : 0;
-   float sR = hasR && !inR ? lerp(t, goggleRight ? 1 : _DirectOver.z, _DirectOver.x) : 0;
+   // (goggleRight: the leading eye's side, the goggle's or the bare eye's, NightVisionDirect.cs.)
+   bool goggleRight = _DirectOver.y > 0.5, bareRight = _DirectBareRight > 0.5;
+   // The bare eye's view of the device with all it has in its eyepiece's mouth too, its glass: that eye looks at the
+   // eyepiece from the side and sees no picture in it. (Left open as the goggle eye's is, for its picture, with nothing
+   // to fill it: the tube's middle a hole in that view, seen through, where what lay behind showed as it was: the
+   // user's, 2026-11-19.)
+   bool openL = inL && bareRight, openR = inR && !bareRight;
+   float sL = hasL && !openL ? lerp(1 - t, goggleRight ? _DirectOver.z : 1, _DirectOver.x) : 0;
+   float sR = hasR && !openR ? lerp(t, goggleRight ? 1 : _DirectOver.z, _DirectOver.x) : 0;
    float own = goggleRight ? sR : sL, other = goggleRight ? sL : sR;
-   // Through the goggle eye's lens nothing of either: the composite shows the lens there whole.
-   bool throughLens = goggleRight ? inR : inL;
+   // Through the goggle eye's lens, that eye leading, nothing of either: the composite shows the lens there whole. (The
+   // bare eye leading, its view of the device stands before that too.)
+   bool throughLens = goggleRight != bareRight && (goggleRight ? inR : inL);
    if (!throughLens) {
     if (own > 0 && own >= other) { side = goggleRight ? 1 : 0; c = own; }
     else if (other > 0) { side = goggleRight ? 0 : 1; c = other; }
@@ -220,7 +228,6 @@ Shader "Justachae/NVG/Direct" {
  // device as the leading eye sees it, which is whole; not behind the other eye's view of it, which is seen through
  // (behind any of the device, the leading bare eye's gun was cut away where the goggle eye's view of the device lay, and
  // the goggle eye's gun was left only within its eyepiece: the user's, 2026-11-19).
- float _DirectBareRight;   // the bare eye's side of the device's two views: 0 the left's, 1 the right's
  bool deviceNearer (float raw, bool lens, float gun) {
   bool nearer = false;
   if (shown(raw) && !lens) {
