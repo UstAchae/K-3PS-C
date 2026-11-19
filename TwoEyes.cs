@@ -435,7 +435,10 @@ internal static class TwoEyes
         _apartBuffer ??= new UnityEngine.Rendering.CommandBuffer { name = "Justachae bare eye's gun apart" };
         if (_apartCamera != main)
         {
-            _apartCamera?.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _apartBuffer);
+            // (Not "?.": the hideout's camera, destroyed on entering a raid, is not null to it; the call threw every frame
+            // and no gun was drawn while the bare eye aimed: the user's, 2026-11-19.)
+            if (_apartCamera != null)
+                _apartCamera.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _apartBuffer);
             main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterForwardAlpha, _apartBuffer);
             _apartCamera = main;
             NightVisionEyepieces.GunForwardAfter(main);

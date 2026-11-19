@@ -396,7 +396,9 @@ internal static partial class NightVisionEyepieces
         if (_stencilWaiting)
         {
             _stencilWaiting = false;
-            _stencilCamera?.RemoveCommandBuffer(CameraEvent.AfterGBuffer, _stencilProbe);
+            // (Not "?.": a camera destroyed since, the hideout's on entering a raid, is not null to it, and the call threw.)
+            if (_stencilCamera != null)
+                _stencilCamera.RemoveCommandBuffer(CameraEvent.AfterGBuffer, _stencilProbe);
             ReadStencil();
             return;
         }
@@ -831,7 +833,8 @@ internal static partial class NightVisionEyepieces
         buffer.Clear();
         if (_gunForwardCamera != main)
         {
-            _gunForwardCamera?.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
+            if (_gunForwardCamera != null)   // (not "?.": a destroyed camera)
+                _gunForwardCamera.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
             main.AddCommandBuffer(CameraEvent.AfterForwardAlpha, buffer);
             _gunForwardCamera = main;
         }
