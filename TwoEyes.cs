@@ -44,7 +44,8 @@ internal static class TwoEyes
     // the next: the user's): over a fifth of a second from the aim's end (_handed) the goggle eye's gun comes to where
     // the bare eye's is and grows whole as the bare eye's, blurred, fades from over it; then the game's own, in that
     // same place.
-    internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f && !(_lead > 0.5f && CameraPosition.AimLeaving && _handed >= 1f);
+    // (Whichever eye leads: the user's, 2026-11-19.)
+    internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f && !(CameraPosition.AimLeaving && _handed >= 1f);
     private static float _handed;
     private const float HandSeconds = 0.2f;
     private static float Handed => Mathf.SmoothStep(0f, 1f, _handed);
@@ -56,7 +57,7 @@ internal static class TwoEyes
     // are all but one. Whole all the way, the bare eye's gun was gone at once as the aim ended, the goggle eye's whole in
     // its place: the user's, 2026-11-19.)
     private static float Whole => Mathf.Clamp01(_aim * 4f);
-    private static float BareGunOpacity => Mathf.Lerp(_aim * BareSeen, Whole * (1f - Handed), _lead);
+    private static float BareGunOpacity => Mathf.Lerp(_aim * BareSeen, Whole, _lead) * (1f - Handed);
     private static float GoggleGunOpacity => Mathf.Lerp(1f, Mathf.Lerp(1f, BareSeen, Whole * (1f - Handed)), _lead);
 
     // Which eye leads while the bare eye aims: false the goggle's (the camera stays), true the bare eye (the camera goes
@@ -75,7 +76,7 @@ internal static class TwoEyes
             NewCameraPlugin.Log?.LogInfo($"Two eyes: the {(BareLeads ? "bare eye" : "goggle's eye")} leads from now on.");
         }
         _lead = Mathf.MoveTowards(_lead, BareLeads ? 1f : 0f, Time.deltaTime * 4f);
-        bool handing = _lead > 0.5f && CameraPosition.AimLeaving;
+        bool handing = CameraPosition.AimLeaving;
         _handed = Mathf.MoveTowards(_handed, handing ? 1f : 0f, Time.deltaTime / (handing ? HandSeconds : 0.1f));
     }
 
@@ -99,7 +100,9 @@ internal static class TwoEyes
     // leads (the camera is then that eye); the bare eye leading, the whole way across.
     private static Vector3 GoggleShift(Quaternion turn) => turn * new Vector3((_goggleEye - CameraPosition.Horizontal) * _aim * (1f - Handed), 0f, 0f);
     // (None of it once the bare eye leads: the camera is then that eye.)
-    private static Vector3 BareShift(Quaternion turn) => turn * new Vector3((CameraPosition.AimingEyeAcross - CameraPosition.Horizontal) * (1f - _lead), 0f, 0f);
+    // (The goggle's eye leading, out from the goggle eye's gun's place with the aim, and back to it as the aim is let go:
+    // it came and went by its share where it stood.)
+    private static Vector3 BareShift(Quaternion turn) => turn * new Vector3((CameraPosition.AimingEyeAcross - CameraPosition.Horizontal) * (1f - _lead) * _aim * (1f - Handed), 0f, 0f);
 
     // From NightVisionEyes.RenderLenses: the goggle's lens across from the head's middle.
     internal static void SeeLens(float across)
@@ -583,7 +586,7 @@ internal static class TwoEyes
         // the goggle's blurred picture of the gun, as the two slide apart from one place, to sharp, and back (the user's,
         // 2026-11-19: sharp all the way, it stood out on the blurred one while the two were still all but one).
         Texture bare = _bareNow;
-        float blur = _lead * Mathf.Max(1f - _aim, Handed);
+        float blur = Mathf.Max(1f - _aim, Handed);
         RenderTexture? across = null, down = null;
         if (blur > 0.01f)
         {

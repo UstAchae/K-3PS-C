@@ -867,6 +867,7 @@ internal static partial class NightVisionEyepieces
                 if (mesh == null || material == null || renderer == null || intoBare && _gunGlass.Contains(material))
                     continue;
                 renderer.GetPropertyBlock(_pieceBlock);
+                SetAmbient(_pieceBlock);
                 buffer.DrawMesh(mesh, eyeMove * matrix, material, sub, pass, _pieceBlock);
             }
             if (intoBare)
@@ -876,6 +877,51 @@ internal static partial class NightVisionEyepieces
         buffer.SetGlobalVector(CameraPlaceId, new Vector4(place.x, place.y, place.z, 1f));
     }
     private static readonly List<Material> _gunMaterialsNow = new List<Material>();
+
+    // The light from all round (the light probes', or the scene's own where it has none) for the guns drawn here: a mesh
+    // drawn by a command buffer is given none, as a renderer is, and the gun was lit by the lamps alone, black where no
+    // lamp fell on it; given back to the game as the aim ended, it was bright from one frame to the next (the user's
+    // video, 2026-11-19). One reading for the whole gun, where it is, each frame; as the shaders have it (unity_SHAr...).
+    private static readonly int[] AmbientIds = { Shader.PropertyToID("unity_SHAr"), Shader.PropertyToID("unity_SHAg"), Shader.PropertyToID("unity_SHAb"),
+        Shader.PropertyToID("unity_SHBr"), Shader.PropertyToID("unity_SHBg"), Shader.PropertyToID("unity_SHBb"), Shader.PropertyToID("unity_SHC") };
+    private static readonly Vector4[] _ambient = new Vector4[7];
+    private static float _ambientNoted = -100f;
+
+    private static void GatherAmbient(Camera main, List<Renderer> renderers)
+    {
+        Renderer? anchor = null;
+        foreach (Renderer r in renderers)
+        {
+            if (r != null && r.enabled && r.gameObject.activeInHierarchy)
+            {
+                anchor = r;
+                break;
+            }
+        }
+        UnityEngine.Rendering.SphericalHarmonicsL2 sh = RenderSettings.ambientProbe;
+        bool probed = anchor != null && anchor.lightProbeUsage != UnityEngine.Rendering.LightProbeUsage.Off;
+        if (probed)
+            LightProbes.GetInterpolatedProbe(main.transform.position + main.transform.forward * 0.3f, anchor, out sh);
+        for (int c = 0; c < 3; c++)
+        {
+            _ambient[c] = new Vector4(sh[c, 3], sh[c, 1], sh[c, 2], sh[c, 0] - sh[c, 6]);
+            _ambient[3 + c] = new Vector4(sh[c, 4], sh[c, 5], sh[c, 6] * 3f, sh[c, 7]);
+        }
+        _ambient[6] = new Vector4(sh[0, 8], sh[1, 8], sh[2, 8], 1f);
+        // (Temporary, 1.8.147: that it is read, and what, every 5 s.)
+        if (Time.unscaledTime - _ambientNoted > 5f)
+        {
+            _ambientNoted = Time.unscaledTime;
+            NewCameraPlugin.Log?.LogInfo($"[ambient] for the guns drawn: {(probed ? "light probes" : "the scene's own")}, flat term {sh[0, 0]:0.000} {sh[1, 0]:0.000} {sh[2, 0]:0.000}"
+                + $", anchor {(anchor != null ? anchor.name + " " + anchor.lightProbeUsage : "none")}, scene's own {RenderSettings.ambientProbe[0, 0]:0.000}, mode {RenderSettings.ambientMode}");
+        }
+    }
+
+    private static void SetAmbient(MaterialPropertyBlock block)
+    {
+        for (int i = 0; i < 7; i++)
+            block.SetVector(AmbientIds[i], _ambient[i]);
+    }
 
     private static bool DrawGun(CommandBuffer buffer, Camera main, Vector3 place, Matrix4x4 turned, Matrix4x4 projection, int width, int height)
     {
@@ -966,6 +1012,7 @@ internal static partial class NightVisionEyepieces
                 _gunDraws.Add((mesh, matrix, source.materials[s], s, source.passes[s], r));
             }
         }
+        GatherAmbient(main, renderers);
         bool goggleToo = TwoEyes.GoggleGunToo;   // the camera's gun too, unless the bare eye leads (TwoEyes.cs)
         Matrix4x4 fromEye = Matrix4x4.Translate(-shift);
         _forwardFromBare = fromEye;
@@ -994,16 +1041,19 @@ internal static partial class NightVisionEyepieces
             buffer.ClearRenderTarget(true, true, Color.clear);
             buffer.SetViewProjectionMatrices(turned, eye == 0 ? bareProjection : projection);
             buffer.SetGlobalVector(CameraPlaceId, new Vector4(0f, 0f, 0f, 1f));
+            buffer.EnableShaderKeyword("LIGHTPROBE_SH");
             Matrix4x4 eyeMove = eye == 0 ? fromEye : fromGoggle;
             foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunDraws)
             {
                 if (renderer == null)
                     continue;
                 renderer.GetPropertyBlock(_pieceBlock);
+                SetAmbient(_pieceBlock);
                 buffer.DrawMesh(mesh, eyeMove * matrix, material, sub, pass, _pieceBlock);
                 drawn++;
             }
         }
+        buffer.DisableShaderKeyword("LIGHTPROBE_SH");
         for (int t = 0; t < 4; t++)
             buffer.SetGlobalTexture(DirectGoggleGun[t], goggleToo ? _goggleGunTextures[t]! : Texture2D.blackTexture);
         buffer.SetGlobalTexture(DirectGoggleGunDepth, goggleDepth);
