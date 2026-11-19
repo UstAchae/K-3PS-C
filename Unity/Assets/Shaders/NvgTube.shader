@@ -99,45 +99,17 @@ Shader "Justachae/NVG/Tube" {
    // it bare, so there the frame from before the eyepieces (_SceneBare, no night vision) is laid over their picture by
    // the lens's share: the two eyes' views one over the other, as at a scope's lens.
    sampler2D _WindowMask, _SceneBare;
-   // That eye's world there: the frame moved over by each pixel's depth (_WindowWorld, _WindowDepth: as NvgEyes.cginc's
-   // eyeWorld), where the camera is not that eye.
+   // Each eye's own world there, the two standing apart as two eyes' views do: each layer is the camera's frame moved over
+   // by how far that eye is from the camera and by the depth of what is seen at this pixel (_WindowWorld: x for the bare
+   // eye's layer, w for the goggle eye's, each half the eye's distance across times the projection's scale, 0 for the eye
+   // the camera is; y, z a raw depth to metres; _WindowDepth). By this pixel's own depth, one step: a window looks out on
+   // what is far, and that needs no search (searched along the line of sight, the gun round the window got in the way).
+   // Nothing counts as nearer than two metres, so the gun's own edge cannot throw it far over.
    sampler2D_float _WindowDepth;
    float4 _WindowWorld;
-   // (What stands nearer than 8 cm is the goggle itself, before the eye: not a thing that eye looks at.)
-   float nearEnough (float metres, float k) { return metres < 0.08 ? 0 : k / metres; }
-   float2 windowWorld (float2 uv) {
-    if (_WindowWorld.x == 0)
-     return uv;
-    // Along the eye's line of sight, from near to far, as far over in the camera's frame as a thing at each distance would
-    // stand (k / metres): the first place where what the camera has there is as near as that, or nearer, is what the eye
-    // sees. (Stepping from the depth at the pixel itself went wrong wherever near and far meet: a gun came out in pieces,
-    // or three times over; the user's, 2026-11-19.) Then halved in between a few times.
-    float k = _WindowWorld.x, nearest = k / 0.08;
-    float front = nearest, behind = 0;
-    bool found = false;
-    for (int n = 0; n < 48 && !found; n++) {
-     float p = nearest * (1 - (n + 1) / 48.0);
-     float2 at = uv + float2(p, 0);
-     float there = 0;
-     if (at.x >= 0 && at.x <= 1)
-      there = nearEnough(1 / (_WindowWorld.y * tex2Dlod(_WindowDepth, float4(at, 0, 0)).r + _WindowWorld.z), k);
-     if (abs(there) >= abs(p)) {
-      behind = p;
-      found = true;
-     } else
-      front = p;
-    }
-    float p = 0;
-    if (found) {
-     for (int m = 0; m < 4; m++) {
-      float mid = 0.5 * (front + behind);
-      float2 at = uv + float2(mid, 0);
-      float there = nearEnough(1 / (_WindowWorld.y * tex2Dlod(_WindowDepth, float4(saturate(at), 0, 0)).r + _WindowWorld.z), k);
-      if (abs(there) >= abs(mid)) behind = mid; else front = mid;
-     }
-     p = behind;
-    }
-    return uv + float2(p, 0);
+   float2 windowWorld (float2 uv, float k) {
+    float metres = max(1 / (_WindowWorld.y * tex2Dlod(_WindowDepth, float4(uv, 0, 0)).r + _WindowWorld.z), 2);
+    return saturate(uv + float2(k / metres, 0));
    }
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
@@ -154,7 +126,11 @@ Shader "Justachae/NVG/Tube" {
     float2 at = i.uv;
     float4 g = tex2D(_Other, at);
     if (tex2D(_WindowMask, at).r > 0.5)
-     c.rgb = lerp(c.rgb, tex2Dlod(_SceneBare, float4(saturate(windowWorld(at)), 0, 0)).rgb, _LensShare * (1 - saturate(g.a)));
+    {
+     float3 goggle = tex2Dlod(_MainTex, float4(windowWorld(at, _WindowWorld.w), 0, 0)).rgb;
+     float3 bare = tex2Dlod(_SceneBare, float4(windowWorld(at, _WindowWorld.x), 0, 0)).rgb;
+     c.rgb = lerp(c.rgb, lerp(goggle, bare, _LensShare), 1 - saturate(g.a));
+    }
     c.rgb = lerp(c.rgb, g.rgb, _GunShare * saturate(g.a));
     c.rgb += tex2D(_BareLasers, at).rgb * _GunShare;
     return c;
