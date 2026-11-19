@@ -215,6 +215,45 @@ Shader "Justachae/NVG/Direct" {
   return mainDepth(lerp(inverseDepth(rawL), inverseDepth(rawR), toRight));
  }
 
+ // Whether the device stands before a gun here (gun: its depth as the main camera's). The two eyes' views of the device
+ // one over the other (_DirectOver): a gun is behind the device as its own eye sees it, and the gun of the eye that does
+ // not lead is behind the device as the leading eye sees it too, whose things lie over the other's. (Behind any of the
+ // device, the leading bare eye's gun was cut away where the goggle eye's view of the device lay: the user's,
+ // 2026-11-19.) Otherwise, behind whichever half is here.
+ float _DirectBareRight;   // the bare eye's side of the device's two views: 0 the left's, 1 the right's
+ bool deviceNearer (float raw, bool lens, float gun) {
+  bool nearer = false;
+  if (shown(raw) && !lens) {
+   float device = mainDepth(inverseDepth(raw));
+   #if defined(UNITY_REVERSED_Z)
+   nearer = device > gun;
+   #else
+   nearer = device < gun;
+   #endif
+  }
+  return nearer;
+ }
+ bool deviceBefore (float2 uv, bool bareGun, float gun) {
+  float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
+  bool before = false;
+  if (_DirectOver.x > 0) {
+   bool ownRight = (_DirectBareRight > 0.5) == bareGun, leadRight = _DirectOver.y > 0.5;
+   bool inL = within(_DirectLens0, uv, _EyeInvVP0), inR = within(_DirectLens1, uv, _EyeInvVP1);
+   bool left = deviceNearer(rawL, inL, gun), right = deviceNearer(rawR, inR, gun);
+   before = ownRight ? right : left;
+   if (ownRight != leadRight)
+    before = before || (leadRight ? right : left);
+  } else if (coverage(uv, rawL, rawR, toRight) > 0) {
+   float device = pickedDepth(rawL, rawR, toRight);
+   #if defined(UNITY_REVERSED_Z)
+   before = device > gun;
+   #else
+   before = device < gun;
+   #endif
+  }
+  return before;
+ }
+
  // Not behind what the main camera has there (the helmet's brim stands before the device), for what comes once the camera's depth
  // texture is made. Either eye's: across the strip each pixel may be the one's or the other's.
  bool notCovered (float2 uv, float rawL, float rawR) {
@@ -541,17 +580,8 @@ Shader "Justachae/NVG/Direct" {
     bool goggle = which == 2;
     if (which == 0)
      discard;
-    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
-    if (coverage(uv, rawL, rawR, toRight) > 0) {
-     float device = pickedDepth(rawL, rawR, toRight), gun = mainDepth(inverseDepth(raw));
-     #if defined(UNITY_REVERSED_Z)
-     if (device > gun)
-      discard;
-     #else
-     if (device < gun)
-      discard;
-     #endif
-    }
+    if (deviceBefore(uv, !goggle, mainDepth(inverseDepth(raw))))
+     discard;
     output o;
     o.g0 = goggle ? tex2D(_DirectH0, uv) : tex2D(_DirectG0, uv);
     o.g1 = goggle ? tex2D(_DirectH1, uv) : tex2D(_DirectG1, uv);
@@ -612,18 +642,7 @@ Shader "Justachae/NVG/Direct" {
     bool goggle = which == 2;
     if (which == 0)
      return 0;
-    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
-    if (coverage(uv, rawL, rawR, toRight) > 0) {
-     float device = pickedDepth(rawL, rawR, toRight), gun = mainDepth(inverseDepth(raw));
-     #if defined(UNITY_REVERSED_Z)
-     if (device > gun)
-      return 0;
-     #else
-     if (device < gun)
-      return 0;
-     #endif
-    }
-    return goggle ? 0.5 : 1;
+    return deviceBefore(uv, !goggle, mainDepth(inverseDepth(raw))) ? 0 : (goggle ? 0.5 : 1);
    }
    ENDCG
   }
@@ -655,17 +674,8 @@ Shader "Justachae/NVG/Direct" {
     float own = SAMPLE_DEPTH_TEXTURE(_DirectHD, uv);
     if (!shown(own) || abs(own - i.pos.z) > max(own * 0.002, 0.0000003))
      discard;
-    float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
-    if (coverage(uv, rawL, rawR, toRight) > 0) {
-     float device = pickedDepth(rawL, rawR, toRight), gun = mainDepth(inverseDepth(own));
-     #if defined(UNITY_REVERSED_Z)
-     if (device > gun)
-      discard;
-     #else
-     if (device < gun)
-      discard;
-     #endif
-    }
+    if (deviceBefore(uv, false, mainDepth(inverseDepth(own))))
+     discard;
     float2 now = (i.now.xy / i.now.w + 1) * 0.5, old = (i.old.xy / i.old.w + 1) * 0.5;
     return float4(now - old, 0, 1);
    }
