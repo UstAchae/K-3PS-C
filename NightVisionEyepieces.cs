@@ -33,7 +33,6 @@ namespace EFTNewCamera;
 internal static partial class NightVisionEyepieces
 {
     internal static bool EyepieceGlow = true;   // the lenses' light spread over the glass and eyecups (F12)
-    internal static bool MergeWhileAiming = true;   // F12 瞄准时合并目镜
     internal static float EyeShift = 0.8f;      // how far each half of the device comes in, as a share of the way from its centre lens
     internal static bool LensReflections = true;    // the device's glass drawn at the eyes, with what it reflects (F12)
 

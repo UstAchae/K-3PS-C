@@ -215,12 +215,6 @@ internal static partial class NightVisionEyepieces
         _eyesMixed = eyesOwn;
         _goggleEyeRight = _device.Monocular ? a + CameraPosition.Horizontal > 0f : podMono && (lone == CentreLensA) != (a <= b);
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
-        // F12 瞄准时合并目镜, off (the user's, 2026-11-19, to try): as the aim comes up the two eyepieces are no longer
-        // brought in toward the middle; both halves go back to the camera's own view, which is then the aiming eye's (its
-        // eyepiece straight ahead, the other off to its side), eased with the aim. (Not while a goggle before one eye is
-        // seen with both, the bare eye aiming: TwoEyes.cs has the eyes at their own places then.)
-        if (!MergeWhileAiming)
-            comesIn *= 1f - CameraPosition.ViewAimed * (1f - TwoEyes.BareAimShare);
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
         // An eyepiece swung away on its pod (the ENVG-B's): that side is no longer brought in toward the middle, it goes
