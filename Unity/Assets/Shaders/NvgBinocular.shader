@@ -59,9 +59,10 @@ Shader "Justachae/NVG/Binocular" {
      // (Not its eyepiece's own glass, as far as the two views are one, _BareOver.z: the bare eye's view comes out from
      // where the goggle eye's is as the aim comes up, and its glass then lies on the goggle eye's picture, which went
      // dark under it.)
-     float4 glassL = tex2D(_LeftLens, i.uv), glassR = tex2D(_RightLens, i.uv);
-     float glass = dot(_BareOver.y > 0.5 ? glassR : glassL, 1) > 0.01 ? 1 : 0;
-     there *= 1 - glass * _BareOver.z;
+     // (1.8.155: and its eyepiece's glass is of it too, though the model's own is not drawn: NvgDirect puts a dark one
+     // in there, coverage.)
+     float glassL = tex2D(_LeftGlass, i.uv).r, glassR = tex2D(_RightGlass, i.uv).r;
+     there = max(there, (_BareOver.y > 0.5 ? glassR : glassL) > 0.02 ? 1 : 0);
      share *= 1 - _BareOver.x * there;
     }
     return float4(lerp(scene.rgb, seen, share), scene.a);

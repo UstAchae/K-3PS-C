@@ -36,6 +36,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int[] DirectLeft = { Shader.PropertyToID("_DirectL0"), Shader.PropertyToID("_DirectL1"), Shader.PropertyToID("_DirectL2"), Shader.PropertyToID("_DirectL3") };
     private static readonly int[] DirectRight = { Shader.PropertyToID("_DirectR0"), Shader.PropertyToID("_DirectR1"), Shader.PropertyToID("_DirectR2"), Shader.PropertyToID("_DirectR3") };
     private static readonly int[] DirectLens = { Shader.PropertyToID("_DirectLens0"), Shader.PropertyToID("_DirectLens1") };
+    private static readonly int[] DirectGlass = { Shader.PropertyToID("_DirectGlass0"), Shader.PropertyToID("_DirectGlass1") };
     private static readonly int DirectLeftDepth = Shader.PropertyToID("_DirectLD"), DirectRightDepth = Shader.PropertyToID("_DirectRD");
     private static readonly int DirectPlanes = Shader.PropertyToID("_DirectPlanes"), DirectInset = Shader.PropertyToID("_DirectInset");
     private static readonly int DirectSplit = Shader.PropertyToID("_DirectSplit"), DirectStrip = Shader.PropertyToID("_DirectStrip");
@@ -634,6 +635,7 @@ internal static partial class NightVisionEyepieces
         {
             if (_lensMaps[side] != null)
                 buffer.SetGlobalTexture(DirectLens[side], _lensMaps[side]);
+            buffer.SetGlobalTexture(DirectGlass[side], _glassMaps[side] != null ? _glassMaps[side]! : (Texture)Texture2D.blackTexture);
         }
         // What the composite works out what is open by.
         Material composite = _binocularMaterial!;

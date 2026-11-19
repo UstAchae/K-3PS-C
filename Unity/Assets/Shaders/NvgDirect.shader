@@ -7,6 +7,8 @@ Shader "Justachae/NVG/Direct" {
  CGINCLUDE
  #include "UnityCG.cginc"
  sampler2D _DirectL0, _DirectL1, _DirectL2, _DirectL3, _DirectR0, _DirectR1, _DirectR2, _DirectR3, _DirectLens0, _DirectLens1;
+ // Each eye's glass map (NightVisionEyes.cs: where that eye looks at an eyepiece's glass at all).
+ sampler2D _DirectGlass0, _DirectGlass1;
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectLD);
  UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
  UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
@@ -101,8 +103,13 @@ Shader "Justachae/NVG/Direct" {
    // to fill it: the tube's middle a hole in that view, seen through, where what lay behind showed as it was: the
    // user's, 2026-11-19.)
    bool openL = inL && bareRight, openR = inR && !bareRight;
-   float sL = hasL && !openL ? lerp(1 - t, goggleRight ? _DirectOver.z : 1, _DirectOver.x) : 0;
-   float sR = hasR && !openR ? lerp(t, goggleRight ? 1 : _DirectOver.z, _DirectOver.x) : 0;
+   // And where that eye looks at its eyepiece's glass, the device has it there though nothing of it was drawn: the
+   // model's glass is see-through and is not drawn with the rest, so down the tube's middle there was a round hole
+   // (seen in each eye's view of the device as saved, 2026-11-19); a dark glass put in there (pickedDepth, and the
+   // G-buffers' nothing: black).
+   bool glassL = !bareRight && tex2D(_DirectGlass0, uv).r > 0.02, glassR = bareRight && tex2D(_DirectGlass1, uv).r > 0.02;
+   float sL = (hasL || glassL) && !openL ? lerp(1 - t, goggleRight ? _DirectOver.z : 1, _DirectOver.x) : 0;
+   float sR = (hasR || glassR) && !openR ? lerp(t, goggleRight ? 1 : _DirectOver.z, _DirectOver.x) : 0;
    float own = goggleRight ? sR : sL, other = goggleRight ? sL : sR;
    // Through the goggle eye's lens, that eye leading, nothing of either: the composite shows the lens there whole. (The
    // bare eye leading, its view of the device stands before that too.)
@@ -219,8 +226,11 @@ Shader "Justachae/NVG/Direct" {
   return kept(pixel, c);
  }
  // The main camera's depth of this pixel's device.
+ // (Where nothing of that eye's device was drawn but it is taken to be there, its eyepiece's glass, coverage: 6 cm off,
+ // about where an eyepiece's glass is.)
  float pickedDepth (float rawL, float rawR, float toRight) {
-  return mainDepth(lerp(inverseDepth(rawL), inverseDepth(rawR), toRight));
+  float left = shown(rawL) ? inverseDepth(rawL) : 1 / 0.06, right = shown(rawR) ? inverseDepth(rawR) : 1 / 0.06;
+  return mainDepth(lerp(left, right, toRight));
  }
 
  // Whether the device stands before a gun here (gun: its depth as the main camera's): behind whichever of the device is
