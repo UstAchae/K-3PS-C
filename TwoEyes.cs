@@ -40,7 +40,14 @@ internal static class TwoEyes
     // goggle where it stands in its picture, blurred there as it is when not aiming, while the camera and the two views
     // of the device slide back; the user's, 2026-11-19: kept to the end, the bare eye's sharp gun lay on the goggle's
     // picture all the way back and gave way to the blurred one at once.)
-    internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f && !(_lead > 0.5f && CameraPosition.AimLeaving);
+    // Not at once (1.8.145: the gun, dark as the bare eye sees it, was bright in the goggle's picture from one frame to
+    // the next: the user's): over a fifth of a second from the aim's end (_handed) the goggle eye's gun comes to where
+    // the bare eye's is and grows whole as the bare eye's, blurred, fades from over it; then the game's own, in that
+    // same place.
+    internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f && !(_lead > 0.5f && CameraPosition.AimLeaving && _handed >= 1f);
+    private static float _handed;
+    private const float HandSeconds = 0.2f;
+    private static float Handed => Mathf.SmoothStep(0f, 1f, _handed);
     // The goggle eye's gun drawn too, always (the bare eye leading, by half, from that eye: the user's, 2026-11-19).
     internal static bool GoggleGunToo => true;
     // (Whole as the bare eye comes to lead: the camera is then at that eye, and this gun its own.)
@@ -49,8 +56,8 @@ internal static class TwoEyes
     // are all but one. Whole all the way, the bare eye's gun was gone at once as the aim ended, the goggle eye's whole in
     // its place: the user's, 2026-11-19.)
     private static float Whole => Mathf.Clamp01(_aim * 4f);
-    private static float BareGunOpacity => Mathf.Lerp(_aim * BareSeen, Whole, _lead);
-    private static float GoggleGunOpacity => Mathf.Lerp(1f, Mathf.Lerp(1f, BareSeen, Whole), _lead);
+    private static float BareGunOpacity => Mathf.Lerp(_aim * BareSeen, Whole * (1f - Handed), _lead);
+    private static float GoggleGunOpacity => Mathf.Lerp(1f, Mathf.Lerp(1f, BareSeen, Whole * (1f - Handed)), _lead);
 
     // Which eye leads while the bare eye aims: false the goggle's (the camera stays), true the bare eye (the camera goes
     // over to it). _lead follows it over a quarter of a second.
@@ -68,6 +75,8 @@ internal static class TwoEyes
             NewCameraPlugin.Log?.LogInfo($"Two eyes: the {(BareLeads ? "bare eye" : "goggle's eye")} leads from now on.");
         }
         _lead = Mathf.MoveTowards(_lead, BareLeads ? 1f : 0f, Time.deltaTime * 4f);
+        bool handing = _lead > 0.5f && CameraPosition.AimLeaving;
+        _handed = Mathf.MoveTowards(_handed, handing ? 1f : 0f, Time.deltaTime / (handing ? HandSeconds : 0.1f));
     }
 
     // Where the camera goes to aim (CameraPosition), across from the head's middle: the aiming eye, or, the bare eye
@@ -88,7 +97,7 @@ internal static class TwoEyes
     // From the camera to the goggle's eye, for its gun and the lasers on it: where its lens stands from the head's middle
     // (SeeLens). Eased in with the aim (not aiming, the gun is the game's, from the camera). None while the goggle's eye
     // leads (the camera is then that eye); the bare eye leading, the whole way across.
-    private static Vector3 GoggleShift(Quaternion turn) => turn * new Vector3((_goggleEye - CameraPosition.Horizontal) * _aim, 0f, 0f);
+    private static Vector3 GoggleShift(Quaternion turn) => turn * new Vector3((_goggleEye - CameraPosition.Horizontal) * _aim * (1f - Handed), 0f, 0f);
     // (None of it once the bare eye leads: the camera is then that eye.)
     private static Vector3 BareShift(Quaternion turn) => turn * new Vector3((CameraPosition.AimingEyeAcross - CameraPosition.Horizontal) * (1f - _lead), 0f, 0f);
 
@@ -574,7 +583,7 @@ internal static class TwoEyes
         // the goggle's blurred picture of the gun, as the two slide apart from one place, to sharp, and back (the user's,
         // 2026-11-19: sharp all the way, it stood out on the blurred one while the two were still all but one).
         Texture bare = _bareNow;
-        float blur = _lead * (1f - _aim);
+        float blur = _lead * Mathf.Max(1f - _aim, Handed);
         RenderTexture? across = null, down = null;
         if (blur > 0.01f)
         {
