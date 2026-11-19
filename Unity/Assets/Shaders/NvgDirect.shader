@@ -215,11 +215,11 @@ Shader "Justachae/NVG/Direct" {
   return mainDepth(lerp(inverseDepth(rawL), inverseDepth(rawR), toRight));
  }
 
- // Whether the device stands before a gun here (gun: its depth as the main camera's). The two eyes' views of the device
- // one over the other (_DirectOver): a gun is behind the device as its own eye sees it, and the gun of the eye that does
- // not lead is behind the device as the leading eye sees it too, whose things lie over the other's. (Behind any of the
- // device, the leading bare eye's gun was cut away where the goggle eye's view of the device lay: the user's,
- // 2026-11-19.) Otherwise, behind whichever half is here.
+ // Whether the device stands before a gun here (gun: its depth as the main camera's): behind whichever of the device is
+ // here. But with the two eyes' views of the device one over the other (_DirectOver), either eye's gun only behind the
+ // device as the leading eye sees it, which is whole; not behind the other eye's view of it, which is seen through
+ // (behind any of the device, the leading bare eye's gun was cut away where the goggle eye's view of the device lay, and
+ // the goggle eye's gun was left only within its eyepiece: the user's, 2026-11-19).
  float _DirectBareRight;   // the bare eye's side of the device's two views: 0 the left's, 1 the right's
  bool deviceNearer (float raw, bool lens, float gun) {
   bool nearer = false;
@@ -235,14 +235,11 @@ Shader "Justachae/NVG/Direct" {
  }
  bool deviceBefore (float2 uv, bool bareGun, float gun) {
   float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
+  bool leadRight = _DirectOver.y > 0.5;
   bool before = false;
   if (_DirectOver.x > 0) {
-   bool ownRight = (_DirectBareRight > 0.5) == bareGun, leadRight = _DirectOver.y > 0.5;
-   bool inL = within(_DirectLens0, uv, _EyeInvVP0), inR = within(_DirectLens1, uv, _EyeInvVP1);
-   bool left = deviceNearer(rawL, inL, gun), right = deviceNearer(rawR, inR, gun);
-   before = ownRight ? right : left;
-   if (ownRight != leadRight)
-    before = before || (leadRight ? right : left);
+   bool lens = leadRight ? within(_DirectLens1, uv, _EyeInvVP1) : within(_DirectLens0, uv, _EyeInvVP0);
+   before = deviceNearer(leadRight ? rawR : rawL, lens, gun);
   } else if (coverage(uv, rawL, rawR, toRight) > 0) {
    float device = pickedDepth(rawL, rawR, toRight);
    #if defined(UNITY_REVERSED_Z)
