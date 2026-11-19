@@ -103,15 +103,41 @@ Shader "Justachae/NVG/Tube" {
    // eyeWorld), where the camera is not that eye.
    sampler2D_float _WindowDepth;
    float4 _WindowWorld;
+   // (What stands nearer than 8 cm is the goggle itself, before the eye: not a thing that eye looks at.)
+   float nearEnough (float metres, float k) { return metres < 0.08 ? 0 : k / metres; }
    float2 windowWorld (float2 uv) {
     if (_WindowWorld.x == 0)
      return uv;
-    float2 at = uv;
-    for (int k = 0; k < 3; k++) {
-     float metres = 1 / (_WindowWorld.y * tex2Dlod(_WindowDepth, float4(saturate(at), 0, 0)).r + _WindowWorld.z);
-     at = uv + float2(_WindowWorld.x / max(metres, 0.05), 0);
+    // Along the eye's line of sight, from near to far, as far over in the camera's frame as a thing at each distance would
+    // stand (k / metres): the first place where what the camera has there is as near as that, or nearer, is what the eye
+    // sees. (Stepping from the depth at the pixel itself went wrong wherever near and far meet: a gun came out in pieces,
+    // or three times over; the user's, 2026-11-19.) Then halved in between a few times.
+    float k = _WindowWorld.x, nearest = k / 0.08;
+    float front = nearest, behind = 0;
+    bool found = false;
+    for (int n = 0; n < 48 && !found; n++) {
+     float p = nearest * (1 - (n + 1) / 48.0);
+     float2 at = uv + float2(p, 0);
+     float there = 0;
+     if (at.x >= 0 && at.x <= 1)
+      there = nearEnough(1 / (_WindowWorld.y * tex2Dlod(_WindowDepth, float4(at, 0, 0)).r + _WindowWorld.z), k);
+     if (abs(there) >= abs(p)) {
+      behind = p;
+      found = true;
+     } else
+      front = p;
     }
-    return at;
+    float p = 0;
+    if (found) {
+     for (int m = 0; m < 4; m++) {
+      float mid = 0.5 * (front + behind);
+      float2 at = uv + float2(mid, 0);
+      float there = nearEnough(1 / (_WindowWorld.y * tex2Dlod(_WindowDepth, float4(saturate(at), 0, 0)).r + _WindowWorld.z), k);
+      if (abs(there) >= abs(mid)) behind = mid; else front = mid;
+     }
+     p = behind;
+    }
+    return uv + float2(p, 0);
    }
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
