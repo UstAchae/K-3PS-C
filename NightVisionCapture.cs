@@ -8,7 +8,9 @@ namespace EFTNewCamera;
 // the device and its lens map, and what they were drawn from in the log. Twelve shots a session, then no more.
 internal static partial class NightVisionEyepieces
 {
-    private static readonly float[] CaptureAt = { 0.25f, 0.5f, 0.75f };
+    // (1.8.154: only while the bare eye leads, where the hole is seen; the first twelve were all with the goggle's eye
+    // leading and showed none. More steps, eighteen shots.)
+    private static readonly float[] CaptureAt = { 0.1f, 0.25f, 0.4f, 0.55f, 0.7f, 0.85f };
     private static float _captureWas;
     private static int _captureShots, _captureFrame = -1, _captureNumber;
     private static Vector3 _captureLeft, _captureRight;
@@ -21,7 +23,7 @@ internal static partial class NightVisionEyepieces
             return true;
         float aimed = CameraPosition.ViewAimed, was = _captureWas;
         _captureWas = aimed;
-        if (_captureShots >= 12 || !TwoEyes.Now || TwoEyes.BareAimShare <= 0.5f)
+        if (_captureShots >= 18 || !TwoEyes.Now || TwoEyes.BareAimShare <= 0.5f || TwoEyes.Lead < 0.5f)
             return false;
         foreach (float at in CaptureAt)
         {
