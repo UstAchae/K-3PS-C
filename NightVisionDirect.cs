@@ -850,6 +850,10 @@ internal static partial class NightVisionEyepieces
             }
             else
                 buffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+            // (The goggle eye's gun's forward parts not while that gun is seen through, the bare eye leading: they would
+            // be whole.)
+            if (eye == 1 && TwoEyes.Lead > 0.5f)
+                continue;
             Matrix4x4 eyeMove = eye == 0 ? _forwardFromBare : _forwardFromGoggle;
             foreach ((Mesh mesh, Matrix4x4 matrix, Material material, int sub, int pass, Renderer renderer) in _gunForward)
             {

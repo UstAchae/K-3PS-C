@@ -407,7 +407,7 @@ internal static partial class NightVisionEyepieces
         if (composite == null)
             return;
         float across = TwoEyes.GoggleEyeFromCamera;
-        Texture? depth = Mathf.Abs(across) > 0.0005f ? Shader.GetGlobalTexture(CameraDepthTextureId) : null;
+        Texture? depth = Mathf.Abs(across) > 0.002f ? Shader.GetGlobalTexture(CameraDepthTextureId) : null;
         if (depth == null || camera == null)
         {
             composite.SetVector(EyeWorldId, Vector4.zero);

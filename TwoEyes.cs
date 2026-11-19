@@ -33,11 +33,11 @@ namespace EFTNewCamera;
 // 单筒：切换主视眼, / by default):
 //   the goggle's eye (as above): the camera stays, its gun and the goggle eye's view of the device whole, the bare eye's
 //   gun and view of the device laid over by half;
-//   the bare eye: the camera goes over to that eye as with any goggle, and there is one gun, that eye's (the camera's
-//   own view of it; the user's, 2026-11-18): still drawn here, taken apart and laid over the eyepieces' picture whole, so
-//   that it stands before the goggle eye's view of the device and has no night vision or blur on it (left to the game,
-//   it lay under the eyepiece's picture, blurred); no gun for the goggle's eye. That eye's view of the device whole, the
-//   goggle eye's laid over by half, the eyepieces' picture whole.
+//   the bare eye: the camera goes over to that eye as with any goggle; its gun (the camera's own view of it) still drawn
+//   here, taken apart and laid over the eyepieces' picture whole, so that it stands before the goggle eye's view of the
+//   device and has no night vision or blur on it; the goggle eye's gun drawn from that eye into the frame by half (night
+//   vision on what of it lies in the eyepiece; the user's, 2026-11-19). That eye's view of the device whole, the goggle
+//   eye's laid over by half, the eyepieces' picture whole.
 //
 // The device itself is NightVisionEyes.cs and NightVisionDirect.cs (PieceShift, NvgDirect's coverage, _DirectOver): each
 // eye's view of it, the bare eye's laid over the goggle eye's by half while that eye aims.
@@ -64,11 +64,11 @@ internal static class TwoEyes
     // the aim has come up (_aim, 0 to 1): the bare eye's gun only while it aims.
     private static float _shareBare, _aim;
     internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f;
-    // The camera's (goggle eye's) gun drawn too: not once the bare eye leads (the camera is then that eye, one gun).
-    internal static bool GoggleGunToo => _lead < 0.999f;
+    // The goggle eye's gun drawn too, always (the bare eye leading, by half, from that eye: the user's, 2026-11-19).
+    internal static bool GoggleGunToo => true;
     // (Whole as the bare eye comes to lead: the camera is then at that eye, and this gun its own.)
     private static float BareGunOpacity => Mathf.Lerp(_aim * BareSeen, 1f, _lead);
-    private static float GoggleGunOpacity => 1f - _lead;
+    private static float GoggleGunOpacity => Mathf.Lerp(1f, BareSeen, _lead);
 
     // Which eye leads while the bare eye aims: false the goggle's (the camera stays), true the bare eye (the camera goes
     // over to it). _lead follows it over a quarter of a second.
@@ -93,7 +93,12 @@ internal static class TwoEyes
     internal static float AimAcross(float aimingEye) => Mathf.Lerp(aimingEye, Mathf.Lerp(_goggleEye, aimingEye, _lead), BareAimShare);
 
     // The goggle's eye from the camera, across (m): for its world in the eyepieces (NightVisionEyes.SetEyeWorld).
-    internal static float GoggleEyeFromCamera => Now ? _goggleEye - CameraPosition.Horizontal : 0f;
+    // None once the camera has gone over to that eye to aim (the goggle's eye aiming, or leading while the bare eye aims):
+    // the camera is then that eye, wherever its eyepiece stands by the mount (measured against the eyepiece, a few
+    // millimetres were left, and the gun near the eye came out doubled in the eyepiece: the user's, 2026-11-19).
+    internal static float GoggleEyeFromCamera => Now
+        ? (_goggleEye - CameraPosition.Horizontal) * (1f - CameraPosition.ViewAimed * (1f - BareAimShare * _lead))
+        : 0f;
 
     // A depth texture's raw value to metres, as Unity has it: 1 / (x * raw + y).
     internal static Vector2 DepthToMetres(Camera camera)
@@ -116,9 +121,9 @@ internal static class TwoEyes
     private static float Apart => Mathf.SmoothStep(0f, 1f, NightVisionEyepieces.Flip);
     // From the camera to the bare eye while it aims: the aiming eye's place (the gun is placed for it) from the camera's.
     // From the camera to the goggle's eye, for its gun and the lasers on it: where its lens stands from the head's middle
-    // (SeeLens). Eased in with the aim (not aiming, the gun is the game's, from the camera) and out as the bare eye comes
-    // to lead (that gun fades out then, GoggleGunOpacity).
-    private static Vector3 GoggleShift(Quaternion turn) => turn * new Vector3((_goggleEye - CameraPosition.Horizontal) * _aim * (1f - _lead), 0f, 0f);
+    // (SeeLens). Eased in with the aim (not aiming, the gun is the game's, from the camera). None while the goggle's eye
+    // leads (the camera is then that eye); the bare eye leading, the whole way across.
+    private static Vector3 GoggleShift(Quaternion turn) => turn * new Vector3((_goggleEye - CameraPosition.Horizontal) * _aim, 0f, 0f);
     // (None of it once the bare eye leads: the camera is then that eye.)
     private static Vector3 BareShift(Quaternion turn) => turn * new Vector3((CameraPosition.AimingEyeAcross - CameraPosition.Horizontal) * (1f - _lead), 0f, 0f);
 
