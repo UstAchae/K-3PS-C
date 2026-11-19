@@ -24,6 +24,12 @@ Shader "Justachae/NVG/Binocular" {
    #pragma vertex vert_img
    #pragma fragment frag
    #pragma target 3.0
+   // The bare eye leading (TwoEyes.BareLeads; _BareOver: x how far, y that eye's side of the device's two views, 0 the
+   // left's or 1 the right's): the device as that eye sees it stands before all the goggle's eye has, its eyepieces'
+   // picture too, so where that view has the device (its own depth, NightVisionDirect.cs) the eyepieces are not laid.
+   UNITY_DECLARE_DEPTH_TEXTURE(_DirectLD);
+   UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
+   float4 _BareOver;
    float4 frag (v2f_img i) : SV_Target {
     float4 scene = tex2D(_MainTex, i.uv);
     if (_Mode < 0.5) return scene;
@@ -43,6 +49,15 @@ Shader "Justachae/NVG/Binocular" {
     // The eyepieces (their picture and their glass) laid over the frame by a share (_PictureShare, 1 whole): by half
     // while the bare eye leads and aims (TwoEyes.BareLeads), the frame being then that eye's.
     float share = lerp(1, _PictureShare, saturate(max(cover, light.w)));
+    if (_BareOver.x > 0) {
+     float raw = _BareOver.y > 0.5 ? SAMPLE_DEPTH_TEXTURE(_DirectRD, i.uv) : SAMPLE_DEPTH_TEXTURE(_DirectLD, i.uv);
+     #if defined(UNITY_REVERSED_Z)
+     float there = raw > 0 ? 1 : 0;
+     #else
+     float there = raw < 1 ? 1 : 0;
+     #endif
+     share *= 1 - _BareOver.x * there;
+    }
     return float4(lerp(scene.rgb, seen, share), scene.a);
    }
    ENDCG

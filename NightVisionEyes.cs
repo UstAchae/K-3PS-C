@@ -215,6 +215,8 @@ internal static partial class NightVisionEyepieces
         float eyesOwn = TwoEyes.BareAimShare * CameraPosition.ViewAimed;
         _eyesMixed = eyesOwn;
         _goggleEyeRight = _device.Monocular ? a + CameraPosition.Horizontal > 0f : podMono && (lone == CentreLensA) != (a <= b);
+        // The bare eye leading: its view of the device before the eyepieces' picture too (NvgBinocular.shader, _BareOver).
+        binocular.SetVector(BareOverId, new Vector4(_direct ? eyesOwn * TwoEyes.Lead : 0f, _goggleEyeRight ? 0f : 1f, 0f, 0f));
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
@@ -395,7 +397,7 @@ internal static partial class NightVisionEyepieces
     // NvgDirect.shader, coverage; the user's, 2026-11-18: both eyes' devices seen, as both eyes' guns are).
     private static float _eyesMixed;
     private static bool _goggleEyeRight;
-    private static readonly int PictureShareId = Shader.PropertyToID("_PictureShare");
+    private static readonly int PictureShareId = Shader.PropertyToID("_PictureShare"), BareOverId = Shader.PropertyToID("_BareOver");
 
     // Where the eyes are while a goggle is worn (the user's, 2026-11-19): behind its eyepieces as they stand down before
     // the eyes, by the mount as it is set, not the set distance from the head's middle (CameraPosition.AimEye, which is
