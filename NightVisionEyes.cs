@@ -178,6 +178,7 @@ internal static partial class NightVisionEyepieces
         // The eyes by where the eyepieces stand down before them, whether or not a pod has swung one away.
         Vector3 placeA = FromCamera(_lensRest[CentreLensA], position).GetColumn(3), placeB = FromCamera(_lensRest[CentreLensB], position).GetColumn(3);
         float a = Vector3.Dot(placeA, right), b = Vector3.Dot(placeB, right);
+        NoteEyes(a + CameraPosition.Horizontal, b + CameraPosition.Horizontal);
         // Which side a monocular's eye is (TwoEyes.cs): its lens across from the head's middle.
         if (_device.Monocular)
             TwoEyes.SeeLens(a + CameraPosition.Horizontal);
@@ -395,6 +396,40 @@ internal static partial class NightVisionEyepieces
     private static float _eyesMixed;
     private static bool _goggleEyeRight;
     private static readonly int PictureShareId = Shader.PropertyToID("_PictureShare");
+
+    // Where the eyes are while a goggle is worn (the user's, 2026-11-19): behind its eyepieces as they stand down before
+    // the eyes, by the mount as it is set, not the set distance from the head's middle (CameraPosition.AimEye, which is
+    // for when none is worn). There were both: the camera went to aim by the set distance and the device was drawn from
+    // behind the eyepiece, a few millimetres apart. Measured while the goggle is all the way down (across from the head's
+    // middle, m) and kept for as long as that goggle is worn: flipped up, or the ENVG-B's eyepieces swung away, the eyes
+    // are where they were. A monocular's other eye: as far the other side.
+    private static Transform? _eyesOf;
+    private static float _eyeLeft, _eyeRight;
+
+    private static void NoteEyes(float acrossA, float acrossB)
+    {
+        if (_body == null || _split < 0.999f)
+            return;
+        float left, right;
+        if (_device.Monocular)
+            left = right = Mathf.Abs(acrossA);
+        else
+        {
+            left = -Mathf.Min(acrossA, acrossB);
+            right = Mathf.Max(acrossA, acrossB);
+        }
+        // (Only what an eye's place can be: a mount set far off to one side is not where the eye is.)
+        if (left < 0.02f || left > 0.05f || right < 0.02f || right > 0.05f)
+            return;
+        _eyeLeft = left;
+        _eyeRight = right;
+        _eyesOf = _body;
+    }
+
+    // The aiming eye from the head's middle (m, unsigned) for CameraPosition: side -1 the left eye, 1 the right, eased
+    // between as the gun changes shoulders. otherwise: with no goggle worn, or one not yet seen down.
+    internal static float EyeFromMiddle(float side, float otherwise) =>
+        _body != null && _eyesOf == _body ? Mathf.Lerp(_eyeLeft, _eyeRight, 0.5f * (side + 1f)) : otherwise;
     private static float Across(Camera camera, Vector3 to)
     {
         Transform view = camera.transform;

@@ -31,6 +31,8 @@ internal static class CameraPosition
     internal static float ViewAimed => Smooth(_viewAimed);
     // The aiming eye across from the head's middle (m), whichever side the gun is shouldered on.
     internal static float AimingEyeAcross = 0.03f;
+    // Which eye that is: -1 the left, 1 the right, eased between as the gun changes shoulders.
+    internal static float AimSide = 1f;
 
     // Each frame, before the camera is placed: how far over to the aiming eye the pose is (aimed, also at the chest)
     // and the camera (aimed, not at the chest).
@@ -44,9 +46,12 @@ internal static class CameraPosition
         _side = Mathf.MoveTowards(_side, left ? -1f : 1f, 2f * Time.deltaTime / SideSeconds);
         float u = 0.5f * (_side + 1f);
         float side = 2f * u * u * (3f - 2f * u) - 1f;
-        float eye = AimEye;
+        // The eye from the head's middle: the set distance, or, a goggle worn, where its eyepiece stands before that eye
+        // (NightVisionEyepieces.EyeFromMiddle).
+        float eye = NightVisionEyepieces.EyeFromMiddle(side, AimEye);
         float pose = Mathf.Lerp(Across, side * eye, Smooth(_aimed));
         AimingEyeAcross = side * eye;
+        AimSide = side;
         // A monocular's bare eye aiming (TwoEyes.cs): the camera stays where it is, that eye's gun is drawn in from it.
         Horizontal = Mathf.Lerp(Across, TwoEyes.AimAcross(side * eye), Smooth(_viewAimed));
         PoseAcross = pose - Horizontal;
