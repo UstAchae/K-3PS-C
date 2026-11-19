@@ -10,38 +10,9 @@ namespace EFTNewCamera;
 // aiming, to the eye that leads (BareLeads): the goggle's (the user's, 2026-11-19: left between the two eyes it was
 // neither's) or the bare one (CameraPosition, AimAcross).
 //
-// The bare eye's own world in its sight's window (the user's, 2026-11-19), without a second render: where the camera is
-// not that eye, the camera's frame moved over by each pixel's depth, the nearer the further (NvgTube pass 2,
-// windowWorld); what that eye sees and the camera does not, behind a near thing's edge, is not there to be had. Only
-// there: done for the eyepieces' picture too (the goggle eye's world), the gun near the eye came out wrong in the
-// eyepiece, and the user had meant the sight's inside alone (NvgEyes.cginc's eyeWorld is left unset, and does nothing).
-//
-// The gun:
-//   not aiming, or the goggle's eye aiming: the game's own, as the camera sees it. Nothing is done here.
-//   the bare eye aiming: the goggle eye's view of the gun stays (drawn from that eye, not from the camera, which stands
-//   between the two: from there it was neither eye's; the user's, 2026-11-18), and the bare eye's own view of the gun
-//   (with the hands, arms and lasers) fades in over it with the aim, to half (BareSeen). Both are drawn into the frame's G-buffer by NightVisionDirect.cs,
-//   on the two kinds of a chessboard (NvgDirect.shader, gunOf), the game's copy kept to its shadow:
-//     the camera's gun is the frame's own: night vision and the objective's blur on it; left out behind the bare eye's
-//     sight lens;
-//     the bare eye's is drawn unjittered, taken apart before the image effects (FillApart: the frame, its depth and the
-//     camera's motion left as the goggle's eye has them, made whole from the pixels next to each), gathered over frames
-//     along its own motion, and laid over the eyepieces' picture after (TakeEye): no night vision, no blur on it. Its
-//     sight's lens is laid from that eye too (DrawLensLayer), seen through (F12 单筒：裸眼瞄准时分划的透明度) over the
-//     goggle eye's picture of what lies behind.
-//
-// Which eye leads while the bare eye aims (BareLeads, the user's, 2026-11-18; changed with a key while aiming, F12
-// 单筒：切换主视眼, / by default):
-//   the goggle's eye (as above): the camera stays, its gun and the goggle eye's view of the device whole, the bare eye's
-//   gun and view of the device laid over by half;
-//   the bare eye: the camera goes over to that eye as with any goggle; its gun (the camera's own view of it) still drawn
-//   here, taken apart and laid over the eyepieces' picture whole, so that it stands before the goggle eye's view of the
-//   device and has no night vision or blur on it; the goggle eye's gun drawn from that eye into the frame by half (night
-//   vision on what of it lies in the eyepiece; the user's, 2026-11-19). That eye's view of the device whole, the goggle
-//   eye's laid over by half, the eyepieces' picture whole.
-//
-// The device itself is NightVisionEyes.cs and NightVisionDirect.cs (PieceShift, NvgDirect's coverage, _DirectOver): each
-// eye's view of it, the bare eye's laid over the goggle eye's by half while that eye aims.
+// Through a sight's window on the bare eye's gun the frame from before the eyepieces (no night vision) is laid over
+// their picture by the lens's share: the two eyes' views one over the other. Both are the camera's frame; neither is
+// moved over to its own eye's place (tried by each pixel's depth, 2026-11-19, and taken out: see TakeEye).
 internal static class TwoEyes
 {
     // Also the ENVG-B with one eyepiece swung away (NightVisionEyepieces.PodMonocular), but the camera left where it is (it
@@ -92,15 +63,6 @@ internal static class TwoEyes
     // Where the camera goes to aim (CameraPosition), across from the head's middle: the aiming eye, or, the bare eye
     // aiming and the goggle's eye leading, the goggle's eye.
     internal static float AimAcross(float aimingEye) => Mathf.Lerp(aimingEye, Mathf.Lerp(_goggleEye, aimingEye, _lead), BareAimShare);
-
-    // A depth texture's raw value to metres, as Unity has it: 1 / (x * raw + y).
-    internal static Vector2 DepthToMetres(Camera camera)
-    {
-        float near = camera.nearClipPlane, far = camera.farClipPlane;
-        return SystemInfo.usesReversedZBuffer
-            ? new Vector2((far / near - 1f) / far, 1f / far)
-            : new Vector2((1f - far / near) / far, far / near / far);
-    }
     // How much of what the bare eye sees (its gun, its lasers, the device from its side) is seen over the goggle eye's:
     // half (the user's, 2026-11-18).
     internal const float BareSeen = 0.5f;
@@ -537,7 +499,7 @@ internal static class TwoEyes
     private static RenderTexture? _sceneBare, _windowMask;
     private static int _sceneFrame = -1;
     private static readonly int WindowMaskId = Shader.PropertyToID("_WindowMask"), SceneBareId = Shader.PropertyToID("_SceneBare"),
-        WindowWorldId = Shader.PropertyToID("_WindowWorld"), WindowDepthId = Shader.PropertyToID("_WindowDepth");
+        WindowWorldId = Shader.PropertyToID("_WindowWorld");
 
     // Where the bare eye's gun's sights' windows are (their glass, from that eye), for TakeEye.
     private static bool DrawWindowMask(RenderTexture into, Material material)
@@ -599,18 +561,11 @@ internal static class TwoEyes
         laying.SetTexture(GunWhich14Id, NightVisionEyepieces.GunWhichTexture ?? (Texture)Texture2D.blackTexture);
         laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
         bool windows = DrawWindowMask(into, laying);
-        // Through a window the bare eye's world: the frame moved over by each pixel's depth, as far as that eye is from the
-        // camera (none where the camera is that eye).
-        Camera? main = Camera.main;
-        if (windows && main != null && _goggleDepth != null)
-        {
-            float across = (CameraPosition.AimingEyeAcross - CameraPosition.Horizontal) * (1f - _lead);
-            Vector2 metres = DepthToMetres(main);
-            laying.SetVector(WindowWorldId, new Vector4(0.5f * across * main.projectionMatrix.m00, metres.x, metres.y, 0f));
-            laying.SetTexture(WindowDepthId, _goggleDepth);
-        }
-        else
-            laying.SetVector(WindowWorldId, Vector4.zero);
+        // (The frame as it is, not moved over to where the bare eye stands by each pixel's depth, NvgTube's windowWorld:
+        // tried, 1.8.123 to 1.8.126, and taken out again. It brought what is far into line with the eyepieces' picture,
+        // so the two eyes' views no longer stood apart in the window, which is what the user wants to see there, and
+        // what is near came out wrong.)
+        laying.SetVector(WindowWorldId, Vector4.zero);
         laying.SetTexture(WindowMaskId, windows ? _windowMask : Texture2D.blackTexture);
         laying.SetTexture(SceneBareId, windows ? _sceneBare : Texture2D.blackTexture);
         Graphics.Blit(frame, into, laying, GunAndLensPass);
