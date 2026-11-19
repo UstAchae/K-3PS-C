@@ -145,6 +145,7 @@ internal static partial class NightVisionEyepieces
         NoteStage(propagator, staged, from);
         // A goggle before one eye, the bare eye aiming (TwoEyes.cs): the eyepieces' steps by the goggle eye's depth.
         TwoEyes.BeforeEyepieces(from, _tubeShader);
+        SetEyeWorld(camera.GetComponent<Camera>(), composite);
 
         RenderTexture? lensed = lens ? RenderTexture.GetTemporary(from.width, from.height, 0, from.format) : null;
         RenderTexture into = lensed != null ? lensed : to;

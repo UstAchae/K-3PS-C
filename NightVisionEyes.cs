@@ -395,6 +395,28 @@ internal static partial class NightVisionEyepieces
     private static float _eyesMixed;
     private static bool _goggleEyeRight;
     private static readonly int PictureShareId = Shader.PropertyToID("_PictureShare");
+    private static readonly int EyeWorldId = Shader.PropertyToID("_EyeWorld"), EyeWorldDepthId = Shader.PropertyToID("_EyeWorldDepth"),
+        CameraDepthTextureId = Shader.PropertyToID("_CameraDepthTexture");
+
+    // The eyepieces' picture as the goggle's eye would see the world, where the camera is not that eye (a goggle before
+    // one eye: not aiming the camera is at the head's middle, and the bare eye leading it is at the bare eye): the
+    // camera's frame moved over by each pixel's depth (NvgEyes.cginc, eyeWorld). By the depth the eyepieces' steps go by
+    // just now (TwoEyes.BeforeEyepieces: the goggle eye's while the bare eye aims).
+    private static void SetEyeWorld(Camera camera, Material? composite)
+    {
+        if (composite == null)
+            return;
+        float across = TwoEyes.GoggleEyeFromCamera;
+        Texture? depth = Mathf.Abs(across) > 0.0005f ? Shader.GetGlobalTexture(CameraDepthTextureId) : null;
+        if (depth == null || camera == null)
+        {
+            composite.SetVector(EyeWorldId, Vector4.zero);
+            return;
+        }
+        Vector2 metres = TwoEyes.DepthToMetres(camera);
+        composite.SetVector(EyeWorldId, new Vector4(0.5f * across * camera.projectionMatrix.m00, metres.x, metres.y, 0f));
+        composite.SetTexture(EyeWorldDepthId, depth);
+    }
 
     private static float Across(Camera camera, Vector3 to)
     {

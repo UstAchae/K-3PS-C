@@ -21,9 +21,25 @@ float _LensClear;                 // 1: the lenses' own surface (its reflections
 
 float4 _FusedRect;                // the other mod's picture (EyepieceFusion): xy its centre, zw its half width and height (uv); z 0: none
 
+// The camera's frame as an eye beside the camera would see it (_EyeWorld: x half the eye's distance across times the
+// projection's scale, 0 none; y, z a raw depth to metres): a thing that far off stands that much further over in the
+// camera's frame, the nearer the more. Found in a few steps, each by the depth at the last place.
+sampler2D_float _EyeWorldDepth;
+float4 _EyeWorld;
+float2 eyeWorld (float2 uv) {
+ if (_EyeWorld.x == 0)
+  return uv;
+ float2 at = uv;
+ for (int k = 0; k < 3; k++) {
+  float metres = 1 / (_EyeWorld.y * tex2Dlod(_EyeWorldDepth, float4(saturate(at), 0, 0)).r + _EyeWorld.z);
+  at = uv + float2(_EyeWorld.x / max(metres, 0.05), 0);
+ }
+ return at;
+}
+
 float3 nightVision (float3 ray, float fused) {
  float4 c = mul(_NightVisionVP, float4(ray, 0));
- float2 uv = c.xy / c.w * 0.5 + 0.5;
+ float2 uv = eyeWorld(c.xy / c.w * 0.5 + 0.5);
  float inside = step(0, c.w) * step(0, uv.x) * step(uv.x, 1) * step(0, uv.y) * step(uv.y, 1);
  float3 tube = tex2D(_NightVision, uv).rgb;
  // Within the fused picture's rectangle, it whatever lens is looked through: one whole rectangle, not cut where the

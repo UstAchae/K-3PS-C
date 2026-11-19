@@ -99,6 +99,20 @@ Shader "Justachae/NVG/Tube" {
    // it bare, so there the frame from before the eyepieces (_SceneBare, no night vision) is laid over their picture by
    // the lens's share: the two eyes' views one over the other, as at a scope's lens.
    sampler2D _WindowMask, _SceneBare;
+   // That eye's world there: the frame moved over by each pixel's depth (_WindowWorld, _WindowDepth: as NvgEyes.cginc's
+   // eyeWorld), where the camera is not that eye.
+   sampler2D_float _WindowDepth;
+   float4 _WindowWorld;
+   float2 windowWorld (float2 uv) {
+    if (_WindowWorld.x == 0)
+     return uv;
+    float2 at = uv;
+    for (int k = 0; k < 3; k++) {
+     float metres = 1 / (_WindowWorld.y * tex2Dlod(_WindowDepth, float4(saturate(at), 0, 0)).r + _WindowWorld.z);
+     at = uv + float2(_WindowWorld.x / max(metres, 0.05), 0);
+    }
+    return at;
+   }
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
     // The bare eye's sight's lens while it aims: only the sight's picture there for that eye.
@@ -114,7 +128,7 @@ Shader "Justachae/NVG/Tube" {
     float2 at = i.uv;
     float4 g = tex2D(_Other, at);
     if (tex2D(_WindowMask, at).r > 0.5)
-     c.rgb = lerp(c.rgb, tex2D(_SceneBare, at).rgb, _LensShare * (1 - saturate(g.a)));
+     c.rgb = lerp(c.rgb, tex2Dlod(_SceneBare, float4(saturate(windowWorld(at)), 0, 0)).rgb, _LensShare * (1 - saturate(g.a)));
     c.rgb = lerp(c.rgb, g.rgb, _GunShare * saturate(g.a));
     c.rgb += tex2D(_BareLasers, at).rgb * _GunShare;
     return c;
