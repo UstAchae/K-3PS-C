@@ -228,6 +228,11 @@ internal static partial class NightVisionEyepieces
         // it, all but a small round of it: the hole the user saw as the aim came up, 2026-11-19.)
         float late = Mathf.Clamp01((eyesOwn - 0.6f) / 0.4f);
         late = late * late * (3f - 2f * late);
+        // (And not once the aim is let go, as its gun is handed back: the eyepieces' picture is whole in its eyepiece from
+        // there, as it is when not aiming. The eyepiece's mouth is left open in the frame for that picture; the picture
+        // kept from it where the bare eye's view of the device was taken to stand, whatever lay behind showed through the
+        // tube's middle: the hole in the goggle eye's view of the device as the aim went, the user's, 2026-11-19.)
+        late *= TwoEyes.NotHanded;
         _captureBareOver = new Vector4(_direct ? late * TwoEyes.Lead : 0f, _goggleEyeRight ? 0f : 1f, _device.Monocular ? 1f - eyesOwn : 0f, 0f);
         binocular.SetVector(BareOverId, _captureBareOver);
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;

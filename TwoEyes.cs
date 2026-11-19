@@ -49,6 +49,9 @@ internal static class TwoEyes
     private static float _handed;
     private const float HandSeconds = 0.2f;
     private static float Handed => Mathf.SmoothStep(0f, 1f, _handed);
+    // How much of what the bare eye sees still stands before the goggle's picture: none once the aim is let go and all is
+    // handed back (NightVisionEyes: the eyepieces' picture whole in its eyepiece again).
+    internal static float NotHanded => 1f - Handed;
     // The goggle eye's gun drawn too, always (the bare eye leading, by half, from that eye: the user's, 2026-11-19).
     internal static bool GoggleGunToo => true;
     // (Whole as the bare eye comes to lead: the camera is then at that eye, and this gun its own.)
