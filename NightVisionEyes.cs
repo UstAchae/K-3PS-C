@@ -219,10 +219,11 @@ internal static partial class NightVisionEyepieces
         // place and back into it (below: the bare eye's from where the goggle eye's is drawn), and the bare eye's is whole
         // from the first quarter of the way on; over that quarter the two are all but one, and which is the whole one
         // changes unseen. (It came in by its share all the way, from the other side of the head's middle: a fade.)
-        _eyesOver = Mathf.Lerp(eyesOwn, Mathf.Clamp01(eyesOwn * 4f), TwoEyes.Lead);
+        // (A monocular only: the ENVG-B with an eyepiece swung away has two halves when not aiming too, as before.)
+        _eyesOver = _device.Monocular && _direct ? Mathf.Lerp(eyesOwn, Mathf.Clamp01(eyesOwn * 4f), TwoEyes.Lead) : eyesOwn;
         _goggleEyeRight = _device.Monocular ? a + CameraPosition.Horizontal > 0f : podMono && (lone == CentreLensA) != (a <= b);
         // The bare eye leading: its view of the device before the eyepieces' picture too (NvgBinocular.shader, _BareOver).
-        binocular.SetVector(BareOverId, new Vector4(_direct ? _eyesOver * TwoEyes.Lead : 0f, _goggleEyeRight ? 0f : 1f, 0f, 0f));
+        binocular.SetVector(BareOverId, new Vector4(_direct ? _eyesOver * TwoEyes.Lead : 0f, _goggleEyeRight ? 0f : 1f, _device.Monocular ? 1f - eyesOwn : 0f, 0f));
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
@@ -256,8 +257,6 @@ internal static partial class NightVisionEyepieces
         {
             // (The other eye: across from the camera, its eyepiece's place mirrored in the head's middle.)
             Vector3 own = EyeShiftOf(a), other = EyeShiftOf(-a - 2f * CameraPosition.Horizontal);
-            // (The bare eye leading: its view from where the goggle eye's is drawn, out to its own place with the aim.)
-            other = Vector3.Lerp(other, Vector3.Lerp(own, other, eyesOwn), TwoEyes.Lead);
             leftShift = monocularLeft ? own : other;
             rightShift = monocularLeft ? other : own;
         }
@@ -270,6 +269,19 @@ internal static partial class NightVisionEyepieces
             leftShift = KeptClear(leftLens, position, leftShift);
         if (!monocularHalves || !monocularLeft)
             rightShift = KeptClear(rightLens, position, rightShift);
+        // The bare eye leading: its view from where the goggle eye's is drawn, out to its own place with the aim. (From
+        // that eye's place as held clear of its eyepiece, here: taken before that, 1.8.142, the bare eye's view was drawn
+        // from inside the eyepiece, a black disc over the whole picture with a small hole in it: the user's video,
+        // 2026-11-19.)
+        if (monocularHalves)
+        {
+            Vector3 goggle = monocularLeft ? leftShift : rightShift, bare = monocularLeft ? rightShift : leftShift;
+            bare = Vector3.Lerp(bare, Vector3.Lerp(goggle, bare, eyesOwn), TwoEyes.Lead);
+            if (monocularLeft)
+                rightShift = bare;
+            else
+                leftShift = bare;
+        }
         // The two views meet halfway between where each eye sees its own eyepiece, not at the frame's middle: with the camera over
         // at one eye, its eyepiece is in the middle and the other's off to the side.
         // By each eyepiece's glass's centre (its lens floor), not its node (the ENVG-B's stand off its glass): halfway between
