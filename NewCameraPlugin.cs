@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.128";
+    public const string PluginVersion = "1.8.130";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -210,6 +210,9 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<float> eyeShift = SettingsLayout.Bind(Config, "头戴式成像装备", "双眼平移比例", 0.8f,
             new ConfigDescription("两个目镜往中间合多少：1 是各自正好对准画面中间，0 是不合。画面里的景物始终完整，这里只改变目镜的样子。",
                 new AcceptableValueRange<float>(0f, 1.2f), new ConfigurationManagerAttributes { Order = 1 }));
+        ConfigEntry<bool> mergeAiming = SettingsLayout.Bind(Config, "头戴式成像装备", "瞄准时合并目镜", true,
+            new ConfigDescription("夜视仪翻下时，两个目镜会按「双眼平移比例」往画面中间合。这一项决定瞄准时还合不合。打开：瞄准时和平时一样合。关掉：瞄准时不合，随着举枪瞄准，两个目镜平移回它们从瞄准眼看过去的真实位置（瞄准眼的目镜在正前方，另一个在旁边），退出瞄准再合回来。",
+                null, new ConfigurationManagerAttributes { Order = 1 }));
         void Refresh()
         {
             NightVisionEyepieces.Picture = picture.Value;
@@ -220,6 +223,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             NightVisionEyepieces.EyepieceGlow = glow.Value;
             NightVisionEyepieces.LensReflections = reflections.Value;
             NightVisionEyepieces.EyeShift = eyeShift.Value;
+            NightVisionEyepieces.MergeWhileAiming = mergeAiming.Value;
             TwoEyes.BareLensSeeThrough = bareGunSeeThrough.Value;
             NightVisionEyepieces.DeviceSeeThrough = deviceSeeThrough.Value;
             NightVisionEyepieces.RaiseMount = raiseMount.Value;
@@ -231,6 +235,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         }
 
         eyeShift.SettingChanged += (_, _) => Refresh();
+        mergeAiming.SettingChanged += (_, _) => Refresh();
         bareGunSeeThrough.SettingChanged += (_, _) => Refresh();
         deviceSeeThrough.SettingChanged += (_, _) => Refresh();
         picture.SettingChanged += (_, _) => Refresh();
