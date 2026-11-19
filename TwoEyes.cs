@@ -27,6 +27,7 @@ internal static class TwoEyes
     // How much the aiming eye is the bare one, 0 to 1 (it goes over as the gun changes shoulders, and with the flip).
     internal static float BareAimShare => Now
         ? Mathf.Clamp01(0.5f + 0.5f * CameraPosition.AimingEyeAcross / Mathf.Max(CameraPosition.AimEye, 1e-4f) * Mathf.Sign(BareEye)) * Apart
+            * NightVisionEyepieces.OneEyeShare
         : 0f;
 
     // F12 单筒：裸眼瞄准时分划的透明度: the bare eye's sight lens seen through (0 solid).
@@ -299,7 +300,10 @@ internal static class TwoEyes
         // Over to the bare eye as the aiming eye goes over to it (CameraPosition: eased as the gun changes shoulders).
         float toward = CameraPosition.AimingEyeAcross / Mathf.Max(CameraPosition.AimEye, 1e-4f) * Mathf.Sign(BareEye);
         _shareBare = Mathf.Clamp01(0.5f + 0.5f * toward);
-        _aim = CameraPosition.ViewAimed;
+        // (By how much the goggle is before one eye only: an eyepiece of the ENVG-B swung up or down while the bare eye
+        // aims, all that is laid in for that eye comes and goes with the swing; at once, the whole device flashed over,
+        // the user's, 2026-11-19.)
+        _aim = CameraPosition.ViewAimed * NightVisionEyepieces.OneEyeShare;
         // The goggle eye aims: the game's own gun.
         if (!BareAims)
         {

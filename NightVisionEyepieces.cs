@@ -317,6 +317,24 @@ internal static partial class NightVisionEyepieces
     // A binocular with one eyepiece swung away on its pod (the ENVG-B's) and the other still before its eye, or both on their
     // way away until the last is all the way: the one left (lone, the less far of the two) seen alone, brought to the middle
     // as a binocular's eyepieces are (NightVisionEyes.RenderLenses).
+    // How much the goggle is before one eye only, 0 to 1: all of it for a monocular; for the ENVG-B, as far as one
+    // eyepiece has swung away while the other is still down (eased with both swings: none with both down, none with both
+    // up). What is done for a goggle before one eye (TwoEyes.cs) comes and goes by it, not at once.
+    internal static float OneEyeShare
+    {
+        get
+        {
+            if (_body == null)
+                return 0f;
+            if (_device.Monocular)
+                return 1f;
+            if (!PodMonocular(out int lone))
+                return 0f;
+            int raised = lone == CentreLensA ? CentreLensB : CentreLensA;
+            return PodGone(raised) * (1f - PodGone(lone));
+        }
+    }
+
     internal static bool PodMonocular(out int lone)
     {
         lone = -1;
