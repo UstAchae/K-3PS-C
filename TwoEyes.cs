@@ -25,7 +25,7 @@ internal static class TwoEyes
     // it is, its own gun as it sees it, and the bare eye's gun, drawn from that eye, fades in over it. Aiming with the
     // goggle's eye it goes over to it, as with any goggle.
     // How much the aiming eye is the bare one, 0 to 1 (it goes over as the gun changes shoulders, and with the flip).
-    internal static float BareAimShare => Now && Blend
+    internal static float BareAimShare => Now
         ? Mathf.Clamp01(0.5f + 0.5f * CameraPosition.AimingEyeAcross / Mathf.Max(CameraPosition.AimEye, 1e-4f) * Mathf.Sign(BareEye)) * Apart
         : 0f;
 
@@ -35,10 +35,7 @@ internal static class TwoEyes
     // Which eye aims (_shareBare: 1 the bare eye; it goes over as the gun changes shoulders, CameraPosition), and how far
     // the aim has come up (_aim, 0 to 1): the bare eye's gun only while it aims.
     private static float _shareBare, _aim;
-    internal static bool BareAims => Blend && _shareBare > 0.5f && _aim > 0.001f;
-    // F12 单筒：瞄准时混合双眼. Off (the user's, 2026-11-19, to try): aiming with the bare eye is as with any goggle, the
-    // camera gone over to the aiming eye, the game's own gun, nothing of the other eye's laid in.
-    internal static bool Blend = true;
+    internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f;
     // The goggle eye's gun drawn too, always (the bare eye leading, by half, from that eye: the user's, 2026-11-19).
     internal static bool GoggleGunToo => true;
     // (Whole as the bare eye comes to lead: the camera is then at that eye, and this gun its own.)
