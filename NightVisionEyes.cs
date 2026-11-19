@@ -228,7 +228,8 @@ internal static partial class NightVisionEyepieces
         // it, all but a small round of it: the hole the user saw as the aim came up, 2026-11-19.)
         float late = Mathf.Clamp01((eyesOwn - 0.6f) / 0.4f);
         late = late * late * (3f - 2f * late);
-        binocular.SetVector(BareOverId, new Vector4(_direct ? late * TwoEyes.Lead : 0f, _goggleEyeRight ? 0f : 1f, _device.Monocular ? 1f - eyesOwn : 0f, 0f));
+        _captureBareOver = new Vector4(_direct ? late * TwoEyes.Lead : 0f, _goggleEyeRight ? 0f : 1f, _device.Monocular ? 1f - eyesOwn : 0f, 0f);
+        binocular.SetVector(BareOverId, _captureBareOver);
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
@@ -318,6 +319,10 @@ internal static partial class NightVisionEyepieces
             pictureSplit = Mathf.Lerp(split, loneLeft ? 1f + Overscan : -Overscan, away);
         }
         binocular.SetFloat(SplitId, pictureSplit);
+        _captureSplit = split;
+        _capturePictureSplit = pictureSplit;
+        _captureLeft = leftShift;
+        _captureRight = rightShift;
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
         // Each pixel's line of sight, by the view turned but not moved (as if at the world's origin): with the place in it, far out
