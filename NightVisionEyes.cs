@@ -223,7 +223,12 @@ internal static partial class NightVisionEyepieces
         _eyesOver = _device.Monocular && _direct ? Mathf.Lerp(eyesOwn, Mathf.Clamp01(eyesOwn * 4f), TwoEyes.Lead) : eyesOwn;
         _goggleEyeRight = _device.Monocular ? a + CameraPosition.Horizontal > 0f : podMono && (lone == CentreLensA) != (a <= b);
         // The bare eye leading: its view of the device before the eyepieces' picture too (NvgBinocular.shader, _BareOver).
-        binocular.SetVector(BareOverId, new Vector4(_direct ? _eyesOver * TwoEyes.Lead : 0f, _goggleEyeRight ? 0f : 1f, _device.Monocular ? 1f - eyesOwn : 0f, 0f));
+        // (Only over the last of the way out to that eye's own place: on its way there from where the goggle's eye is, its
+        // view of the device passes right before the eyepiece, and standing before the picture all the way it covered
+        // it, all but a small round of it: the hole the user saw as the aim came up, 2026-11-19.)
+        float late = Mathf.Clamp01((eyesOwn - 0.6f) / 0.4f);
+        late = late * late * (3f - 2f * late);
+        binocular.SetVector(BareOverId, new Vector4(_direct ? late * TwoEyes.Lead : 0f, _goggleEyeRight ? 0f : 1f, _device.Monocular ? 1f - eyesOwn : 0f, 0f));
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
@@ -277,6 +282,10 @@ internal static partial class NightVisionEyepieces
         {
             Vector3 goggle = monocularLeft ? leftShift : rightShift, bare = monocularLeft ? rightShift : leftShift;
             bare = Vector3.Lerp(bare, Vector3.Lerp(goggle, bare, eyesOwn), TwoEyes.Lead);
+            // (And never past the eyepiece's mouth on the way: the bare eye's own place is not held back as the goggle
+            // eye's is, and between the two the eye went in past the mouth, beside the lens: the hole the user knows from
+            // an eye too near, 2026-11-19. Both eyes stand as far back of the eyepiece.)
+            bare = KeptClear(monocularLeft ? leftLens : rightLens, position, bare);
             if (monocularLeft)
                 rightShift = bare;
             else
