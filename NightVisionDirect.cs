@@ -676,7 +676,9 @@ internal static partial class NightVisionEyepieces
 
         _directMaterial.SetFloat(DirectStencilRefId, _stencilRef);
         // The bare eye's gun (TwoEyes.cs), drawn from that eye into G-buffers of its own like the device.
+        long laying = PerfLog.Start();
         bool gun = DrawGun(buffer, main, place, turned, projection, width, height);
+        PerfLog.Laid(laying, _gunDraws.Count * (_forwardGoggleToo ? 2 : 1));
         buffer.SetRenderTarget(_mainGBuffer, BuiltinRenderTextureType.CameraTarget);
         buffer.SetViewProjectionMatrices(main.worldToCameraMatrix, main.projectionMatrix);
         buffer.DrawMesh(_directQuad, Matrix4x4.identity, _directMaterial, 0, InsertPass);
@@ -911,7 +913,9 @@ internal static partial class NightVisionEyepieces
                     mesh.MarkDynamic();
                     _bakedGun[skin] = mesh;
                 }
+                long baking = PerfLog.Start();
                 skin.BakeMesh(mesh);
+                PerfLog.Baked(baking);
             }
             else if (r.TryGetComponent(out MeshFilter filter) && filter.sharedMesh != null)
                 mesh = filter.sharedMesh;
