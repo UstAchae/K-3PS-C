@@ -36,7 +36,11 @@ internal static class TwoEyes
     // Which eye aims (_shareBare: 1 the bare eye; it goes over as the gun changes shoulders, CameraPosition), and how far
     // the aim has come up (_aim, 0 to 1): the bare eye's gun only while it aims.
     private static float _shareBare, _aim;
-    internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f;
+    // (The bare eye leading, only until the aim is let go: from there the gun is the game's own again, seen through the
+    // goggle where it stands in its picture, blurred there as it is when not aiming, while the camera and the two views
+    // of the device slide back; the user's, 2026-11-19: kept to the end, the bare eye's sharp gun lay on the goggle's
+    // picture all the way back and gave way to the blurred one at once.)
+    internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f && !(_lead > 0.5f && CameraPosition.AimLeaving);
     // The goggle eye's gun drawn too, always (the bare eye leading, by half, from that eye: the user's, 2026-11-19).
     internal static bool GoggleGunToo => true;
     // (Whole as the bare eye comes to lead: the camera is then at that eye, and this gun its own.)

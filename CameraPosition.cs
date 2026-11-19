@@ -29,6 +29,9 @@ internal static class CameraPosition
     private static float _side = 1f;
     // How far over to the aiming eye the camera is, 0 to 1, as it moves.
     internal static float ViewAimed => Smooth(_viewAimed);
+    // The aim is over and the camera on its way back (TwoEyes: the gun is the game's own again from here).
+    private static bool _viewAiming;
+    internal static bool AimLeaving => !_viewAiming && _viewAimed > 0f;
     // The aiming eye across from the head's middle (m), whichever side the gun is shouldered on.
     internal static float AimingEyeAcross = 0.03f;
     // Which eye that is: -1 the left, 1 the right, eased between as the gun changes shoulders.
@@ -40,7 +43,8 @@ internal static class CameraPosition
     {
         bool aimed = AimEyeEnabled && player.HandsController != null && player.HandsController.IsAiming;
         _aimed = Ease(_aimed, aimed);
-        _viewAimed = Ease(_viewAimed, aimed && !ChestStance.Active);
+        _viewAiming = aimed && !ChestStance.Active;
+        _viewAimed = Ease(_viewAimed, _viewAiming);
         bool left = false;
         try { left = player.MovementContext?.LeftStanceController?.LeftStance == true; } catch { }
         _side = Mathf.MoveTowards(_side, left ? -1f : 1f, 2f * Time.deltaTime / SideSeconds);
