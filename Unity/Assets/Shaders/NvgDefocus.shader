@@ -72,6 +72,24 @@ Shader "Justachae/NVG/Defocus" {
    if (_ScopeOn < 0.5) return 0;
    return smoothstep(0.03, 0.3, _ScopeSoft.SampleLevel(sampler_linear_clamp, uv, 0).r);
   }
+  // How far ahead of the objective the nearest thing is, at a place in the depth and its four neighbours (o out each
+  // way diagonally; along: the line of sight's length per unit of depth). What is not ahead of the objective is the
+  // goggle itself, which its own objective does not look at: left out (1e6 where there is nothing else). With a goggle
+  // before one eye and the bare eye aiming, the other eye's view of the device is laid over the frame, seen through;
+  // taken for something at the objective's mouth it blurred the whole picture as the aim came up or went, all but that
+  // view's own eyepiece, a sharp hole in it (the user's video of the ENVG-B, 2026-11-19).
+  float AheadAt(float2 uv, float along) {
+   float d = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv)) * along - _DefocusLens.z;
+   return d < 0.015 ? 1e6 : d;
+  }
+  float NearestAhead(float2 uv, float2 o, float along) {
+   float d = AheadAt(uv, along);
+   d = min(d, AheadAt(uv + float2(o.x, o.y), along));
+   d = min(d, AheadAt(uv + float2(-o.x, o.y), along));
+   d = min(d, AheadAt(uv + float2(o.x, -o.y), along));
+   d = min(d, AheadAt(uv + float2(-o.x, -o.y), along));
+   return d;
+  }
   float Radius(float2 uv) {
    float scope = ScopeNear(uv);
    if (scope > 0.999)
@@ -79,14 +97,10 @@ Shader "Justachae/NVG/Defocus" {
    float2 o = 2 * _DepthTexel.xy;
    float2 picture = uv;
    uv += _DepthJitter.xy;
-   float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
-   float z = LinearEyeDepth(raw);
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(o.x, o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(-o.x, o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(o.x, -o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(-o.x, -o.y))));
    float2 ray = (picture * 2 - 1) * _TanHalf;
-   float d = max(z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z, 0.001);
+   float d = NearestAhead(uv, o, sqrt(1 + dot(ray, ray)));
+   if (d > 1e5)
+    return 0;
    float lens = _DefocusLens.y * abs(1 / d - _DefocusLens.x);
    return _DefocusLens.w * (1 - exp(-lens / _DefocusLens.w)) * (1 - scope);
   }
@@ -100,13 +114,10 @@ Shader "Justachae/NVG/Defocus" {
    if (scope > 0.999)
     return 0;
    float2 o = _DepthSize.zw;
-   float z = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(o.x, o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(-o.x, o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(o.x, -o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(-o.x, -o.y))));
    float2 ray = (picture * 2 - 1) * _TanHalf;
-   float d = max(z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z, 0.001);
+   float d = NearestAhead(du, o, sqrt(1 + dot(ray, ray)));
+   if (d > 1e5)
+    return 0;
    float lens = _DefocusLens.y * abs(1 / d - _DefocusLens.x);
    return _DefocusLens.w * (1 - exp(-lens / _DefocusLens.w)) * (1 - scope);
   }
