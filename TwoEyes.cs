@@ -303,7 +303,10 @@ internal static class TwoEyes
         // (By how much the goggle is before one eye only: an eyepiece of the ENVG-B swung up or down while the bare eye
         // aims, all that is laid in for that eye comes and goes with the swing; at once, the whole device flashed over,
         // the user's, 2026-11-19.)
-        _aim = CameraPosition.ViewAimed * NightVisionEyepieces.OneEyeShare;
+        // And by how far the goggle is down (Apart): flipped up while the bare eye aims, the camera goes over to the aiming
+        // eye and the two eyes' guns and views of the device come together into the one, with the flip, and apart again
+        // as it comes down (the user's, 2026-11-19); they were whole to the flip's end and then gone.
+        _aim = CameraPosition.ViewAimed * NightVisionEyepieces.OneEyeShare * Apart;
         // The goggle eye aims: the game's own gun.
         if (!BareAims)
         {
