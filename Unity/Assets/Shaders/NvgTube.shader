@@ -94,7 +94,7 @@ Shader "Justachae/NVG/Tube" {
    // The bare eye's sight's lens while the goggle eye aims: not over the goggle eye's gun (put in where it is, whole).
    sampler2D _GunWhich14, _AimLensMask;
    float _LensUnderAiming;
-   float _GunShare, _LensShare;
+   float _GunShare, _LensShare, _WindowShare;
    // A sight's window on the bare eye's gun (a holographic or red-dot sight's glass, _WindowMask): that eye sees through
    // it bare, so there the frame from before the eyepieces (_SceneBare, no night vision) is laid over their picture by
    // the lens's share: the two eyes' views one over the other, as at a scope's lens.
@@ -129,7 +129,9 @@ Shader "Justachae/NVG/Tube" {
     {
      float3 goggle = tex2Dlod(_MainTex, float4(windowWorld(at, _WindowWorld.w), 0, 0)).rgb;
      float3 bare = tex2Dlod(_SceneBare, float4(windowWorld(at, _WindowWorld.x), 0, 0)).rgb;
-     c.rgb = lerp(c.rgb, lerp(goggle, bare, _LensShare), 1 - saturate(g.a));
+     // (By as much as that gun is there, _WindowShare: whole while the gun faded away as the aim was let go, the window
+     // stayed, a sharp hole in the goggle's picture where the sight had been: the user's, 2026-11-19.)
+     c.rgb = lerp(c.rgb, lerp(goggle, bare, _LensShare), (1 - saturate(g.a)) * _WindowShare);
     }
     c.rgb = lerp(c.rgb, g.rgb, _GunShare * saturate(g.a));
     c.rgb += tex2D(_BareLasers, at).rgb * _GunShare;

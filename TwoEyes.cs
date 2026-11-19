@@ -558,7 +558,7 @@ internal static class TwoEyes
     private static RenderTexture? _lensLayer, _lensSolid;
     private static readonly int AimLensMaskId = Shader.PropertyToID("_AimLensMask");
     private static UnityEngine.Rendering.CommandBuffer? _lensBuffer;
-    private static readonly int BlurStepId = Shader.PropertyToID("_BlurStep");
+    private static readonly int BlurStepId = Shader.PropertyToID("_BlurStep"), WindowShareId = Shader.PropertyToID("_WindowShare");
     private static readonly int OtherId = Shader.PropertyToID("_Other"), LensLayerId = Shader.PropertyToID("_LensLayer"),
         LensMaskId = Shader.PropertyToID("_LensMask"), GunShareId = Shader.PropertyToID("_GunShare"), LensShareId = Shader.PropertyToID("_LensShare"),
         LensUnderAimingId = Shader.PropertyToID("_LensUnderAiming"), GunWhich14Id = Shader.PropertyToID("_GunWhich14"),
@@ -605,7 +605,8 @@ internal static class TwoEyes
         laying.SetTexture(LensLayerId, lens ? _lensLayer : Texture2D.blackTexture);
         laying.SetTexture(LensMaskId, lens ? _lensSolid : Texture2D.blackTexture);
         // (Laid over by as much as the aim has come up, with its gun.)
-        laying.SetFloat(LensShareId, LensOpacity * _aim);
+        laying.SetFloat(LensShareId, LensOpacity * _aim * (1f - Handed));
+        laying.SetFloat(WindowShareId, Mathf.Lerp(_aim, Whole, _lead) * (1f - Handed));
         laying.SetFloat(LensUnderAimingId, 0f);
         laying.SetTexture(AimLensMaskId, Texture2D.blackTexture);
         laying.SetTexture(GunWhich14Id, NightVisionEyepieces.GunWhichTexture ?? (Texture)Texture2D.blackTexture);
