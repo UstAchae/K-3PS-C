@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.128";
+    public const string PluginVersion = "1.8.129";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -186,6 +186,11 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
                 null, new ConfigurationManagerAttributes { Order = 0 }));
         leadKey.SettingChanged += (_, _) => TwoEyes.LeadKey = leadKey.Value;
         TwoEyes.LeadKey = leadKey.Value;
+        ConfigEntry<bool> blendEyes = SettingsLayout.Bind(Config, "头戴式成像装备", "单筒：瞄准时混合双眼", true,
+            new ConfigDescription("戴单筒夜视仪（PVS-14，或 ENVG-B 翻上一个目镜）、用没戴夜视仪的那只眼瞄准时，要不要把两只眼看到的枪和夜视仪混合在一起。打开：按「单筒：切换主视眼」选的方式混合。关掉：不混合，和戴其他夜视仪瞄准时一样，镜头平移到瞄准眼，只有游戏自己画的一把枪。",
+                null, new ConfigurationManagerAttributes { Order = 0 }));
+        blendEyes.SettingChanged += (_, _) => TwoEyes.Blend = blendEyes.Value;
+        TwoEyes.Blend = blendEyes.Value;
         ConfigEntry<bool> nearBlur = SettingsLayout.Bind(Config, "头戴式成像装备", "近处虚化", true,
             new ConfigDescription("夜视仪的物镜对焦在远处，近处的手、枪和机瞄是虚的，越近越虚，几米外是清楚的，和真实夜视仪的物镜一样。原版夜视和 Borkel's Realistic NVGs 的画面都会这样，热成像不受影响。关掉后目镜里近处也是清楚的。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
