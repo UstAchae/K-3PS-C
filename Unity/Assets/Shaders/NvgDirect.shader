@@ -110,6 +110,15 @@ Shader "Justachae/NVG/Direct" {
    bool glassL = !bareRight && tex2D(_DirectGlass0, uv).r > 0.02, glassR = bareRight && tex2D(_DirectGlass1, uv).r > 0.02;
    float sL = (hasL || glassL) && !openL ? lerp(1 - t, goggleRight ? _DirectOver.z : 1, _DirectOver.x) : 0;
    float sR = (hasR || glassR) && !openR ? lerp(t, goggleRight ? 1 : _DirectOver.z, _DirectOver.x) : 0;
+   // Within the goggle eye's eyepiece the bare eye's view of the device only as far as it is taken to stand before the
+   // eyepieces' picture (_DirectOver.w: NvgBinocular's _BareOver.x): the picture is made from the frame there, and laid
+   // over it. With that view put in there while the picture was still laid over it (as the aim comes up or goes: that
+   // view is then drawn from near the goggle's eye, right over the eyepiece), the picture was made from a frame with
+   // the device smeared across it, and sharp only through the hole down that view's tube: the hole, found in the
+   // frames saved before the eyepieces, 2026-11-20.
+   if (bareRight ? inL : inR) {
+    if (bareRight) sR *= _DirectOver.w; else sL *= _DirectOver.w;
+   }
    float own = goggleRight ? sR : sL, other = goggleRight ? sL : sR;
    // Through the goggle eye's lens, that eye leading, nothing of either: the composite shows the lens there whole. (The
    // bare eye leading, its view of the device stands before that too.)
