@@ -154,22 +154,9 @@ Shader "Justachae/NVG/Direct" {
 
  // Whether this pixel has the device, and whose: each pixel one eye's whole, more of them the other's across the strip. Evened over
  // the pattern once all is lit (pass 2), that is the two eyes' lit pictures eased into each other, as the eyes' cameras were.
- // A monocular is before one eye only: toward the other eye's edge of the frame it fades out, as the composite once faded it (x 1 for
- // a monocular, y its eye: 0 left, 1 right, z the fade's power, 0 not at all).
- float4 _DirectMonocular;
- float _DirectSeeThrough;   // the device seen through, all over (F12 夜视仪透明度): 0 solid
- // Where an eyepiece swung up on its pod is what is seen (pass 19): before no eye, seen by the bare one too, it never fades.
- sampler2D _DirectRaised;
- float monocularShown (float2 uv) {
-  float all = 1 - saturate(_DirectSeeThrough);
-  if (_DirectMonocular.x < 0.5 || _DirectMonocular.z <= 0)
-   return all;
-  // An eyepiece swung up on its pod (the ENVG-B's) never fades: before no eye, the bare one sees it too.
-  if (tex2Dlod(_DirectRaised, float4(uv, 0, 0)).r > 0.5)
-   return all;
-  float s = smoothstep(0, 0.5 + _DirectStrip * 0.5, _DirectMonocular.y > 0.5 ? uv.x : 1 - uv.x);
-  return pow(max(s, 1e-5), _DirectMonocular.z) * all;
- }
+ float _DirectSeeThrough;   // the device seen through, all over (F12): 0 solid
+ // How much of the device is seen (that setting); less than all, it is put in on every other pixel and evened (pass 2).
+ float monocularShown (float2 uv) { return 1 - saturate(_DirectSeeThrough); }
  bool fadingAt (float2 uv) { return monocularShown(uv) < 0.999; }
  // Every other pixel, as on a chessboard: across a monocular's fade those have the device, the others what lies behind.
  bool checker (float2 pixel) { return fmod(floor(pixel.x) + floor(pixel.y), 2) < 0.5; }
@@ -194,7 +181,7 @@ Shader "Justachae/NVG/Direct" {
  // Both guns seen: which eye's gun this pixel is given (1 the bare eye's, 2 the goggle eye's, 0 neither) and its depth. The
  // aiming eye's gun wherever it is, whole (sharp; it is solid); the other's on its half of the chessboard where the aiming
  // eye's is not (it is seen through: taken apart with what lies behind it, TwoEyes.cs). One gun alone: as gunPicked.
- float _DirectBareAims, _GunParity;
+ float _DirectBareAims;
  int gunOf (float2 pixel, float2 uv, out float raw) {
   float rawB = SAMPLE_DEPTH_TEXTURE(_DirectGD, uv);
   bool bare = shown(rawB) && _DirectGunShown > 0 && tex2Dlod(_DirectGunLens, float4(pixel * _DirectGunTexel.xy, 0, 0)).r <= 0.5;
@@ -202,9 +189,9 @@ Shader "Justachae/NVG/Direct" {
   if (_DirectGoggleShown <= 0)
    return bare && (_DirectGunShown >= 0.999 || checker(pixel)) ? 1 : 0;
   float rawG = SAMPLE_DEPTH_TEXTURE(_DirectHD, uv);
-  // The chessboard turned over every frame (_GunParity): over two frames each pixel has the bare eye's gun drawn once,
-  // and TwoEyes.cs gathers them over frames.
-  bool goggle = shown(rawG), even = fmod(floor(pixel.x) + floor(pixel.y) + _GunParity, 2) < 0.5;
+  // (The chessboard as it is every frame: turned over from frame to frame, under the bare eye's gun, seen through, the
+  // goggle eye's picture was its own at a pixel one frame and made from those next to it the next.)
+  bool goggle = shown(rawG), even = fmod(floor(pixel.x) + floor(pixel.y), 2) < 0.5;
   if (_DirectBareAims > 0.5) {
    // The bare eye aims: its gun on one kind of the chessboard, the goggle eye's (seen through) on the other, what lies
    // behind wherever either is not: under the bare eye's gun the goggle eye's own view is kept on half the pixels (made
@@ -732,7 +719,8 @@ Shader "Justachae/NVG/Direct" {
    }
    ENDCG
   }
-  // 19: an eyepiece swung up on its pod, where it is what the eye sees (on the eye's own depth of the device): kept whole there.
+  // 19: not used now (an eyepiece swung up on its pod, kept whole across the old monocular's fade); kept so the passes
+  // after it keep their numbers.
   Pass {
    Cull Off ZWrite Off ZTest LEqual
    CGPROGRAM

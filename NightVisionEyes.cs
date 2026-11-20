@@ -45,7 +45,6 @@ internal static partial class NightVisionEyepieces
     private static readonly int OpeningId = Shader.PropertyToID("_Opening");
     private static readonly int EyeId = Shader.PropertyToID("_Eye");
     private static readonly int OverscanId = Shader.PropertyToID("_Overscan");
-    private static readonly int MonocularId = Shader.PropertyToID("_Monocular");
     private static readonly int SplitId = Shader.PropertyToID("_Split");
     private static readonly int EyeSpanId = Shader.PropertyToID("_EyeSpan");
     private static readonly int LensClearId = Shader.PropertyToID("_LensClear");
@@ -197,9 +196,7 @@ internal static partial class NightVisionEyepieces
         // share, the other eye's half from that eye, as far the other side of the head's middle, brought in alike.
         bool monocularHalves = _device.Monocular && _direct;
         bool asMonocular = _device.Monocular && !monocularHalves;
-        binocular.SetVector(MonocularId, new Vector4(0f, -1f, 0f, 0f));   // (no monocular's fade)
         binocular.SetFloat(LensClearId, LensReflections ? 0f : 1f);
-        binocular.SetFloat(PictureShareId, 1f);   // (the eyepieces whole: NvgBinocular.shader can lay them by a share)
         binocular.SetVector(EyeSpanId, new Vector4(1f, 1f, 0f, 0f));
         binocular.SetFloat(OverscanId, Overscan);
         _eyesFrame = Time.frameCount;
@@ -207,7 +204,6 @@ internal static partial class NightVisionEyepieces
         // Each eye the set share of the way from the camera to its lens: the camera gone over to the aiming eye (CameraPosition) is
         // that eye, its eyepiece straight ahead in the middle of the frame, the other off to its side. They stay back of the
         // camera when it has come forward to a sight (NightVisionScope.cs). Where the game draws the device, from the camera.
-        // A monocular comes in none of the way once aimed: as the camera goes over to the aiming eye, and back as it returns.
         Vector3 back = view.forward * ScopePullback;
         // A monocular's bare eye aiming (TwoEyes.cs; the camera stays where it is): as the aim comes up the eyes go all
         // the way to their own places, so nothing of the device as the camera sees it is left, only as each eye sees it:
@@ -235,7 +231,7 @@ internal static partial class NightVisionEyepieces
         late *= TwoEyes.NotHanded;
         // (Kept for NightVisionDirect: within the goggle eye's eyepiece that view is put into the frame by as much.)
         _bareOver = _direct ? late * TwoEyes.Lead : 0f;
-        binocular.SetVector(BareOverId, new Vector4(_bareOver, _goggleEyeRight ? 0f : 1f, _device.Monocular ? 1f - eyesOwn : 0f, 0f));
+        binocular.SetVector(BareOverId, new Vector4(_bareOver, _goggleEyeRight ? 0f : 1f, 0f, 0f));
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
@@ -433,7 +429,7 @@ internal static partial class NightVisionEyepieces
     // NvgDirect.shader, coverage; the user's, 2026-11-18: both eyes' devices seen, as both eyes' guns are).
     private static float _eyesMixed, _eyesOver, _bareOver;
     private static bool _goggleEyeRight;
-    private static readonly int PictureShareId = Shader.PropertyToID("_PictureShare"), BareOverId = Shader.PropertyToID("_BareOver");
+    private static readonly int BareOverId = Shader.PropertyToID("_BareOver");
 
     // Where the eyes are while a goggle is worn (the user's, 2026-11-19): behind its eyepieces as they stand down before
     // the eyes, by the mount as it is set, not the set distance from the head's middle (CameraPosition.AimEye, which is

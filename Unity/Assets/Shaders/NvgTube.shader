@@ -91,9 +91,6 @@ Shader "Justachae/NVG/Tube" {
     return abs(gun - scene) <= max(gun * 0.002, 0.00002);
    }
    sampler2D _Other, _LensLayer, _LensMask, _BareLasers;
-   // The bare eye's sight's lens while the goggle eye aims: not over the goggle eye's gun (put in where it is, whole).
-   sampler2D _GunWhich14, _AimLensMask;
-   float _LensUnderAiming;
    float _GunShare, _LensShare, _WindowShare;
    // A sight's window on the bare eye's gun (a holographic or red-dot sight's glass, _WindowMask): that eye sees through
    // it bare, so there the frame from before the eyepieces (_SceneBare, no night vision) is laid over their picture by
@@ -114,10 +111,7 @@ Shader "Justachae/NVG/Tube" {
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
     // The bare eye's sight's lens while it aims: only the sight's picture there for that eye.
-    // The goggle eye aiming through its sight: there it sees its sight's picture alone, nothing of the bare eye's laid over.
-    if (tex2D(_AimLensMask, i.uv).r > 0.5)
-     return c;
-    if (tex2D(_LensMask, i.uv).r > 0.5 && (_LensUnderAiming <= 0 || tex2D(_GunWhich14, i.uv).r < 0.25 || tex2D(_GunWhich14, i.uv).r > 0.75)) {
+    if (tex2D(_LensMask, i.uv).r > 0.5) {
      c.rgb = lerp(c.rgb, tex2D(_LensLayer, i.uv).rgb, _LensShare);
      return c;
     }
@@ -335,17 +329,16 @@ Shader "Justachae/NVG/Tube" {
    }
    ENDCG
   }
-  // 6: a copy of the frame with the goggle eye's gun's forward parts on it, laid back over the frame by that gun's share.
+  // 6: not used now (it laid the goggle eye's gun's forward parts back by that gun's share); kept so the passes after it
+  // keep their numbers.
   Pass {
-   Cull Off ZWrite Off ZTest Always Blend SrcAlpha OneMinusSrcAlpha
+   Cull Off ZWrite Off ZTest Always
    CGPROGRAM
    #pragma vertex vert_img
    #pragma fragment frag
    #include "UnityCG.cginc"
    sampler2D _MainTex;
-   float _PartsShare;
-   sampler2D _DirectGunLens;   // (not behind the aiming bare eye's sight lens, as pass 4)
-   float4 frag (v2f_img i) : SV_Target { return float4(tex2D(_MainTex, i.uv).rgb, tex2D(_DirectGunLens, i.uv).r > 0.5 ? 0 : _PartsShare); }
+   float4 frag (v2f_img i) : SV_Target { return tex2D(_MainTex, i.uv); }
    ENDCG
   }
   // 7: the camera's depth as the goggle eye has it, weighted: where the bare eye's gun was put in (_GunWhich 1) left out, to be

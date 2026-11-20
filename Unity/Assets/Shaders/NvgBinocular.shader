@@ -46,9 +46,9 @@ Shader "Justachae/NVG/Binocular" {
     // The scene only past the device and never through a lens: behind the glass is the tube, so where its picture
     // falls short (the line of sight off the pupil, between the two eyes' views) the glass is dark, not a window.
     float3 seen = device + light.rgb * _Lamp.x + glow + (1 - saturate(eye.a)) * (1 - cover) * scene.rgb;
-    // The eyepieces (their picture and their glass) laid over the frame by a share (_PictureShare, 1 whole): by half
-    // while the bare eye leads and aims (TwoEyes.BareLeads), the frame being then that eye's.
-    float share = lerp(1, _PictureShare, saturate(max(cover, light.w)));
+    // The eyepieces (their picture and their glass) laid over the frame, whole but where the bare eye's view of the
+    // device stands before them (below).
+    float share = 1;
     if (_BareOver.x > 0) {
      float raw = _BareOver.y > 0.5 ? SAMPLE_DEPTH_TEXTURE(_DirectRD, i.uv) : SAMPLE_DEPTH_TEXTURE(_DirectLD, i.uv);
      #if defined(UNITY_REVERSED_Z)
@@ -56,11 +56,8 @@ Shader "Justachae/NVG/Binocular" {
      #else
      float there = raw < 1 ? 1 : 0;
      #endif
-     // (Not its eyepiece's own glass, as far as the two views are one, _BareOver.z: the bare eye's view comes out from
-     // where the goggle eye's is as the aim comes up, and its glass then lies on the goggle eye's picture, which went
-     // dark under it.)
-     // (1.8.155: and its eyepiece's glass is of it too, though the model's own is not drawn: NvgDirect puts a dark one
-     // in there, coverage.)
+     // (Its eyepiece's glass is of it too, though the model's own is not drawn: NvgDirect puts a dark one in there,
+     // coverage.)
      float glassL = tex2D(_LeftGlass, i.uv).r, glassR = tex2D(_RightGlass, i.uv).r;
      there = max(there, (_BareOver.y > 0.5 ? glassR : glassL) > 0.02 ? 1 : 0);
      share *= 1 - _BareOver.x * there;

@@ -52,8 +52,6 @@ internal static class TwoEyes
     // How much of what the bare eye sees still stands before the goggle's picture: none once the aim is let go and all is
     // handed back (NightVisionEyes: the eyepieces' picture whole in its eyepiece again).
     internal static float NotHanded => 1f - Handed;
-    // The goggle eye's gun drawn too, always (the bare eye leading, by half, from that eye: the user's, 2026-11-19).
-    internal static bool GoggleGunToo => true;
     // (Whole as the bare eye comes to lead: the camera is then at that eye, and this gun its own.)
     // (The bare eye leading, the two guns slide apart from one place with the aim and back into it, GoggleShift: the bare
     // eye's whole from the first quarter of the way on, the goggle eye's seen through from there; over that quarter the two
@@ -183,7 +181,7 @@ internal static class TwoEyes
     internal static bool GoggleLaserShift(Camera camera, out Vector3 shift)
     {
         shift = Vector3.zero;
-        if (camera == null || !BareGunNow || !GoggleGunToo)
+        if (camera == null || !BareGunNow)
             return false;
         shift = GoggleShift(camera.transform.rotation);
         return shift.sqrMagnitude > 1e-10f;
@@ -559,12 +557,10 @@ internal static class TwoEyes
     // ---------------------------------------------------------------- laying the bare eye's gun over (NvgTube.shader, pass 2)
 
     private static RenderTexture? _lensLayer, _lensSolid;
-    private static readonly int AimLensMaskId = Shader.PropertyToID("_AimLensMask");
     private static UnityEngine.Rendering.CommandBuffer? _lensBuffer;
     private static readonly int BlurStepId = Shader.PropertyToID("_BlurStep"), WindowShareId = Shader.PropertyToID("_WindowShare");
     private static readonly int OtherId = Shader.PropertyToID("_Other"), LensLayerId = Shader.PropertyToID("_LensLayer"),
         LensMaskId = Shader.PropertyToID("_LensMask"), GunShareId = Shader.PropertyToID("_GunShare"), LensShareId = Shader.PropertyToID("_LensShare"),
-        LensUnderAimingId = Shader.PropertyToID("_LensUnderAiming"), GunWhich14Id = Shader.PropertyToID("_GunWhich14"),
         BareLasersId = Shader.PropertyToID("_BareLasers"), NonJitteredProjId = Shader.PropertyToID("NonJitteredProj"),
         CameraPlaceId = Shader.PropertyToID("_WorldSpaceCameraPos");
 
@@ -610,9 +606,6 @@ internal static class TwoEyes
         // (Laid over by as much as the aim has come up, with its gun.)
         laying.SetFloat(LensShareId, LensOpacity * _aim * (1f - Handed));
         laying.SetFloat(WindowShareId, Mathf.Lerp(_aim, Whole, _lead) * (1f - Handed));
-        laying.SetFloat(LensUnderAimingId, 0f);
-        laying.SetTexture(AimLensMaskId, Texture2D.blackTexture);
-        laying.SetTexture(GunWhich14Id, NightVisionEyepieces.GunWhichTexture ?? (Texture)Texture2D.blackTexture);
         laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
         bool windows = DrawWindowMask(into, laying);
         // In a window the two eyes' views stand apart, as two eyes' do (the user's, 2026-11-19): each layer the frame moved

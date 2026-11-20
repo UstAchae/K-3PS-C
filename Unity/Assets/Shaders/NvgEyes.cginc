@@ -13,59 +13,15 @@ float4 _TubePower, _TubeMottle;   // each tube's output (0 off, 1 on), and how m
 float _Overscan;                  // how far past the split each eye's view reaches, as a share of the frame
 float _Split;                     // where across the frame the left eye's view gives way to the right's (0.5 with the camera between the eyes)
 float4 _EyeSpan;                  // x the left eye's view's share of the frame's width, y the right's (1: the whole frame)
-float4 _Monocular;                // x 1 for a monocular, whose one eye (y: 0 left, 1 right) sees the whole frame; the other half fades toward its edge, z as this power (0 not at all)
 float4 _Lamp;                     // x the lenses' brightness, y the glow's, z the eyepieces' distortion, w the field angle it is given at (rad)
 float _Mode;
-float _PictureShare;             // how much of the eyepieces is laid over the frame (NvgBinocular.shader): 1 whole
 float _LensClear;                 // 1: the lenses' own surface (its reflections, its highlights) left out over their picture
 
 float4 _FusedRect;                // the other mod's picture (EyepieceFusion): xy its centre, zw its half width and height (uv); z 0: none
 
-// The camera's frame as an eye beside the camera would see it (_EyeWorld: x half the eye's distance across times the
-// projection's scale, 0 none; y, z a raw depth to metres): a thing that far off stands that much further over in the
-// camera's frame, the nearer the more. Found in a few steps, each by the depth at the last place.
-sampler2D_float _EyeWorldDepth;
-float4 _EyeWorld;
-// (What stands nearer than 8 cm is the goggle itself, before the eye: not a thing that eye looks at.)
-float nearEnough (float metres, float k) { return metres < 0.08 ? 0 : k / metres; }
-float2 eyeWorld (float2 uv) {
- if (_EyeWorld.x == 0)
-  return uv;
- // Along the eye's line of sight, from near to far, as far over in the camera's frame as a thing at each distance would
- // stand (k / metres): the first place where what the camera has there is as near as that, or nearer, is what the eye
- // sees. (Stepping from the depth at the pixel itself went wrong wherever near and far meet: a gun came out in pieces,
- // or three times over; the user's, 2026-11-19.) Then halved in between a few times.
- float k = _EyeWorld.x, nearest = k / 0.08;
- float front = nearest, behind = 0;
- bool found = false;
- for (int n = 0; n < 48 && !found; n++) {
-  float p = nearest * (1 - (n + 1) / 48.0);
-  float2 at = uv + float2(p, 0);
-  float there = 0;
-  if (at.x >= 0 && at.x <= 1)
-   there = nearEnough(1 / (_EyeWorld.y * tex2Dlod(_EyeWorldDepth, float4(at, 0, 0)).r + _EyeWorld.z), k);
-  if (abs(there) >= abs(p)) {
-   behind = p;
-   found = true;
-  } else
-   front = p;
- }
- float p = 0;
- if (found) {
-  for (int m = 0; m < 4; m++) {
-   float mid = 0.5 * (front + behind);
-   float2 at = uv + float2(mid, 0);
-   float there = nearEnough(1 / (_EyeWorld.y * tex2Dlod(_EyeWorldDepth, float4(saturate(at), 0, 0)).r + _EyeWorld.z), k);
-   if (abs(there) >= abs(mid)) behind = mid; else front = mid;
-  }
-  p = behind;
- }
- return uv + float2(p, 0);
-}
-
 float3 nightVision (float3 ray, float fused) {
  float4 c = mul(_NightVisionVP, float4(ray, 0));
- float2 uv = eyeWorld(c.xy / c.w * 0.5 + 0.5);
+ float2 uv = c.xy / c.w * 0.5 + 0.5;
  float inside = step(0, c.w) * step(0, uv.x) * step(uv.x, 1) * step(0, uv.y) * step(uv.y, 1);
  float3 tube = tex2D(_NightVision, uv).rgb;
  // Within the fused picture's rectangle, it whatever lens is looked through: one whole rectangle, not cut where the
@@ -127,20 +83,8 @@ void eyeSide (float2 uv, bool right, out float4 eye, out float4 light, out float
 
 // This pixel's eye: the left eye's on the left half, the right eye's on the right, eased from one to the other across
 // the strip in the middle that both views reach, so the two eyes' slightly different views leave no crease there.
-// A monocular's one eye everywhere, fading over the other eye's half: that eye sees past the device, and the two
-// views are seen as one, the device the fainter the further out toward that eye's edge.
 void eyeAt (float2 uv, out float4 eye, out float4 light, out float cover, out float dark) {
  float toRight = smoothstep(_Split - _Overscan * 0.5, _Split + _Overscan * 0.5, uv.x);
- if (_Monocular.x > 0.5) {
-  bool right = _Monocular.y > 0.5;
-  eyeSide(uv, right, eye, light, cover, dark);
-  float shown = smoothstep(0, 0.5 + _Overscan * 0.5, right ? uv.x : 1 - uv.x);
-  shown = _Monocular.z > 0 ? pow(max(shown, 1e-5), _Monocular.z) : 1;
-  // Only the housing fades: the eyepiece's own picture (and its glass, which keeps the scene from showing through it) is
-  // the tube's, seen whole wherever the lens is; faded with the housing, part of the eyepiece showed the bare scene.
-  eye *= shown;
-  return;
- }
  if (toRight <= 0) { eyeSide(uv, false, eye, light, cover, dark); return; }
  if (toRight >= 1) { eyeSide(uv, true, eye, light, cover, dark); return; }
  float4 leftEye, rightEye; float4 leftLight, rightLight; float leftCover, rightCover, leftDark, rightDark;
