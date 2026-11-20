@@ -778,6 +778,17 @@ internal static partial class NightVisionEyepieces
     {
         if (!Active && !BinocularOn && !HoldFilter)
             return;
+        // Not a sight's own night vision (the sight's camera has a filter of its own, a night-vision scope's): that is the
+        // sight's picture, whatever is worn on the head. Taken for the head's, its filter was emptied here while a goggle
+        // was down, and a night-vision scope showed a plain picture (the user's, the Vulcan MG, 2026-11-20).
+        try
+        {
+            if (__instance == CameraManager.Instance?.OpticCameraManager?.NightVision)
+                return;
+        }
+        catch
+        {
+        }
 
         // Nothing at the SSAA stage: the eyepieces go in by our own image effect (EyepieceImage).
         if (AccessTools.Field(typeof(BSG.CameraEffects.NightVision), "_nightVisionCB")?.GetValue(__instance) is CommandBuffer buffer)
