@@ -52,6 +52,9 @@ internal static class AimArms
     private static bool _suppress;
     private static bool _blendAiming;
     private static int _blendSightId;
+    // The eye's place along the gun (EyeDepth), held from the moment the aim began for as long as it lasts: the game works it out
+    // for each sight (its own aim plane), and switching sights while aimed (Alt or Ctrl with the right button) moved the arms.
+    private static Transform? _heldEyeGun;
     private static float _blend = 1f;
     private static float _mountBlend;
     private static Vector3 _offset;
@@ -275,6 +278,8 @@ internal static class AimArms
         UpdateHandAction(player);
         PlayerBones bones = player.PlayerBones;
         bool aiming = player.HandsController != null && player.HandsController.IsAiming;
+        if (!aiming)
+            _heldEyeGun = null;
         int sightId = 0;
         Vector3 target = Vector3.zero;
         Quaternion turn = Quaternion.identity;
@@ -404,6 +409,8 @@ internal static class AimArms
         Vector3? seenPivot = null;
         if (aiming != _blendAiming || sightId != _blendSightId)
         {
+            if (aiming && _blendAiming && sightId != 0 && _blendSightId != 0)
+                NewCameraPlugin.Log?.LogInfo("Sight switched while aimed, to " + (gunPart != null ? gunPart.name : "?"));
             _blendFrom = _offset;
             // Into or out of the stance at the chest: the gun goes along a straight line as seen, whatever the game's
             // own aim animation does under it (leaving, it starts from the eye, and would carry the gun up first). Where
@@ -1744,14 +1751,29 @@ internal static class AimArms
     {
         var hands = animation.HandsContainer;
         WeaponPrefab.AimPlane? plane = animation._currentAimingPlane ?? hands.DefaultAimPlane;
+        WeaponPrefab.AimPlane? far = animation._farPlane;
+        // Held while aimed: the planes the aim began with.
+        if (!ReferenceEquals(hands.Weapon, _heldEyeGun))
+        {
+            _heldEyeGun = hands.Weapon;
+            _heldPlane = plane;
+            _heldFar = far;
+        }
+        else if (!ReferenceEquals(plane, _heldPlane) && !ReferenceEquals(plane, _heldPlaneSeen) && plane != null && _heldPlane != null)
+            NewCameraPlugin.Log?.LogInfo($"Sight switched while aimed: the eye kept on the aim plane {_heldPlane.Name} ({_heldPlane.Depth * 1000f:F0} mm), not this sight's {plane.Name} ({plane.Depth * 1000f:F0} mm)");
+        _heldPlaneSeen = plane;
+        plane = _heldPlane;
+        far = _heldFar;
         if (plane == null)
             return float.NaN;
         float shift = hands.Weapon.localPosition.y;
         float depth = plane.Depth;
-        if (animation._farPlane != null)
-            depth = Mathf.Min(depth, animation._farPlane.Depth - shift);
+        if (far != null)
+            depth = Mathf.Min(depth, far.Depth - shift);
         return depth + shift;
     }
+
+    private static WeaponPrefab.AimPlane? _heldPlane, _heldFar, _heldPlaneSeen;
 
     private static float SightRelief(ProceduralWeaponAnimation animation, Transform bone)
     {
@@ -1770,6 +1792,7 @@ internal static class AimArms
     {
         _blendAiming = false;
         _blendSightId = 0;
+        _heldEyeGun = null;
         _blend = 1f;
         _mountBlend = 0f;
         _offset = Vector3.zero;
