@@ -85,9 +85,12 @@ Shader "Justachae/NVG/Direct" {
  // How much of the device is here, and how far over to the right eye's it is. As the eyes' pictures were eased into each other:
  // the left eye's on the left of the line, the right's on the right, each by its share across the strip about it, and through a
  // lens that eye has nothing of the device. All that goes past the line is gone.
- // A monocular's bare eye aiming (_DirectOver: x how far the aim has come up, y the goggle's eye, 0 left or 1 right, z how much
- // of the device as the bare eye sees it is seen): the two eyes' views of the device not side by side but one over the other,
- // the goggle eye's whole all over the frame, the bare eye's seen through wherever the goggle eye's is not.
+ // A goggle before one eye, the bare eye aiming: the two eyes' views of the device not side by side but one over the other,
+ // all over the frame. All of how is given (TwoEyes.Device, TwoEyesBlend.cs), nothing of it worked out here:
+ //   _DirectOver.x  how far they are laid so (0: side by side, as for any goggle);
+ //   _DirectOver.y  how much of the goggle eye's view is seen then, .z of the bare eye's (the greater leads: whole, on top);
+ //   _DirectOver.w  how much of the bare eye's view is put in within the goggle eye's eyepiece;
+ //   _DirectBareRight  which of the two views is the bare eye's (0 the left's, 1 the right's).
  float4 _DirectOver;
  float _DirectBareRight;   // the bare eye's side of the device's two views: 0 the left's, 1 the right's
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
@@ -96,36 +99,29 @@ Shader "Justachae/NVG/Direct" {
   bool hasL = shown(rawL), hasR = shown(rawR);
   float c = 0, side = t;
   if (_DirectOver.x > 0) {
-   // (goggleRight: the leading eye's side, the goggle's or the bare eye's, NightVisionDirect.cs.)
-   bool goggleRight = _DirectOver.y > 0.5, bareRight = _DirectBareRight > 0.5;
-   // The bare eye's view of the device with all it has in its eyepiece's mouth too, its glass: that eye looks at the
-   // eyepiece from the side and sees no picture in it. (Left open as the goggle eye's is, for its picture, with nothing
-   // to fill it: the tube's middle a hole in that view, seen through, where what lay behind showed as it was: the
-   // user's, 2026-11-19.)
-   bool openL = inL && bareRight, openR = inR && !bareRight;
-   // And where that eye looks at its eyepiece's glass, the device has it there though nothing of it was drawn: the
-   // model's glass is see-through and is not drawn with the rest, so down the tube's middle there was a round hole
-   // (seen in each eye's view of the device as saved, 2026-11-19); a dark glass put in there (pickedDepth, and the
-   // G-buffers' nothing: black).
-   bool glassL = !bareRight && tex2D(_DirectGlass0, uv).r > 0.02, glassR = bareRight && tex2D(_DirectGlass1, uv).r > 0.02;
-   float sL = (hasL || glassL) && !openL ? lerp(1 - t, goggleRight ? _DirectOver.z : 1, _DirectOver.x) : 0;
-   float sR = (hasR || glassR) && !openR ? lerp(t, goggleRight ? 1 : _DirectOver.z, _DirectOver.x) : 0;
-   // Within the goggle eye's eyepiece the bare eye's view of the device only as far as it is taken to stand before the
-   // eyepieces' picture (_DirectOver.w: NvgBinocular's _BareOver.x): the picture is made from the frame there, and laid
-   // over it. With that view put in there while the picture was still laid over it (as the aim comes up or goes: that
-   // view is then drawn from near the goggle's eye, right over the eyepiece), the picture was made from a frame with
-   // the device smeared across it, and sharp only through the hole down that view's tube: the hole, found in the
-   // frames saved before the eyepieces, 2026-11-20.
-   if (bareRight ? inL : inR) {
-    if (bareRight) sR *= _DirectOver.w; else sL *= _DirectOver.w;
-   }
-   float own = goggleRight ? sR : sL, other = goggleRight ? sL : sR;
-   // Through the goggle eye's lens, that eye leading, nothing of either: the composite shows the lens there whole. (The
-   // bare eye leading, its view of the device stands before that too.)
-   bool throughLens = goggleRight != bareRight && (goggleRight ? inR : inL);
-   if (!throughLens) {
-    if (own > 0 && own >= other) { side = goggleRight ? 1 : 0; c = own; }
-    else if (other > 0) { side = goggleRight ? 0 : 1; c = other; }
+   bool bareRight = _DirectBareRight > 0.5, bareLeads = _DirectOver.z > _DirectOver.y;
+   bool inGoggle = bareRight ? inL : inR;
+   bool hasGoggle = bareRight ? hasL : hasR, hasBare = bareRight ? hasR : hasL;
+   float tBare = bareRight ? t : 1 - t;
+   // The goggle eye's view: not in its eyepiece's mouth, left open for its picture.
+   float sGoggle = hasGoggle && !inGoggle ? lerp(1 - tBare, _DirectOver.y, _DirectOver.x) : 0;
+   // The bare eye's view: with a dark glass where that eye looks at an eyepiece's glass (its glass map): the model's own
+   // glass is see-through and is not drawn with the rest, and down the tube's middle there was a round hole (pickedDepth
+   // gives it a depth; the G-buffers have nothing there: black).
+   bool glassBare = (bareRight ? tex2D(_DirectGlass1, uv).r : tex2D(_DirectGlass0, uv).r) > 0.02;
+   float sBare = hasBare || glassBare ? lerp(tBare, _DirectOver.z, _DirectOver.x) : 0;
+   // Within the goggle eye's eyepiece only by as much as is given: the picture is made from the frame there, and laid over
+   // it. (Put in there while the picture was still laid over it, the picture was made from a frame with the device smeared
+   // across the eyepiece, sharp only through the hole down that view's tube: the hole of 2026-11-20.)
+   if (inGoggle)
+    sBare *= _DirectOver.w;
+   // Through the goggle eye's eyepiece, that eye leading, nothing of either: the composite shows the eyepiece there whole.
+   if (bareLeads || !inGoggle) {
+    float leading = bareLeads ? sBare : sGoggle, other = bareLeads ? sGoggle : sBare;
+    bool leadingHere = leading > 0 && leading >= other;
+    c = leadingHere ? leading : max(other, 0);
+    if (c > 0)
+     side = (leadingHere == bareLeads) == bareRight ? 1 : 0;
    }
   } else {
    // Through either eye's lens here, nothing of the device: the lenses' picture is made from this frame, and the composite
@@ -248,7 +244,7 @@ Shader "Justachae/NVG/Direct" {
  }
  bool deviceBefore (float2 uv, bool bareGun, float gun) {
   float rawL = SAMPLE_DEPTH_TEXTURE(_DirectLD, uv), rawR = SAMPLE_DEPTH_TEXTURE(_DirectRD, uv), toRight;
-  bool leadRight = _DirectOver.y > 0.5;
+  bool leadRight = (_DirectOver.z > _DirectOver.y) == (_DirectBareRight > 0.5);   // the leading eye's view: the right's
   bool before = false;
   if (_DirectOver.x > 0) {
    bool lens = leadRight ? within(_DirectLens1, uv, _EyeInvVP1) : within(_DirectLens0, uv, _EyeInvVP0);

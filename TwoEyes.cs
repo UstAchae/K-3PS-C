@@ -13,7 +13,7 @@ namespace EFTNewCamera;
 // Through a sight's window on the bare eye's gun the frame from before the eyepieces (no night vision) is laid over
 // their picture by the lens's share: the two eyes' views one over the other, and apart, each moved over to its own eye's
 // place by the depth of what is seen there (TakeEye; only in the window).
-internal static class TwoEyes
+internal static partial class TwoEyes
 {
     // Also the ENVG-B with one eyepiece swung away (NightVisionEyepieces.PodMonocular), but the camera left where it is (it
     // goes over to the aiming eye only to aim; the one left brought to the middle as a binocular's are,
@@ -49,18 +49,6 @@ internal static class TwoEyes
     private static float _handed;
     private const float HandSeconds = 0.2f;
     private static float Handed => Mathf.SmoothStep(0f, 1f, _handed);
-    // How much of what the bare eye sees still stands before the goggle's picture: none once the aim is let go and all is
-    // handed back (NightVisionEyes: the eyepieces' picture whole in its eyepiece again).
-    internal static float NotHanded => 1f - Handed;
-    // (Whole as the bare eye comes to lead: the camera is then at that eye, and this gun its own.)
-    // (The bare eye leading, the two guns slide apart from one place with the aim and back into it, GoggleShift: the bare
-    // eye's whole from the first quarter of the way on, the goggle eye's seen through from there; over that quarter the two
-    // are all but one. Whole all the way, the bare eye's gun was gone at once as the aim ended, the goggle eye's whole in
-    // its place: the user's, 2026-11-19.)
-    private static float Whole => Mathf.Clamp01(_aim * 4f);
-    private static float BareGunOpacity => Mathf.Lerp(_aim * BareSeen, Whole, _lead) * (1f - Handed);
-    private static float GoggleGunOpacity => Mathf.Lerp(1f, Mathf.Lerp(1f, BareSeen, Whole * (1f - Handed)), _lead);
-
     // Which eye leads while the bare eye aims: false the goggle's (the camera stays), true the bare eye (the camera goes
     // over to it). _lead follows it over a quarter of a second.
     internal static bool BareLeads;
@@ -84,9 +72,6 @@ internal static class TwoEyes
     // Where the camera goes to aim (CameraPosition), across from the head's middle: the aiming eye, or, the bare eye
     // aiming and the goggle's eye leading, the goggle's eye.
     internal static float AimAcross(float aimingEye) => Mathf.Lerp(aimingEye, Mathf.Lerp(_goggleEye, aimingEye, _lead), BareAimShare);
-    // How much of what the bare eye sees (its gun, its lasers, the device from its side) is seen over the goggle eye's:
-    // half (the user's, 2026-11-18).
-    internal const float BareSeen = 0.5f;
     // The bare eye's gun drawn this frame (it aims).
     private static bool BareGunNow => Now && BareAims && _gunsFrame == Time.frameCount && _gunRenderers.Count > 0;
 
@@ -99,11 +84,11 @@ internal static class TwoEyes
     // From the camera to the goggle's eye, for its gun and the lasers on it: where its lens stands from the head's middle
     // (SeeLens). Eased in with the aim (not aiming, the gun is the game's, from the camera). None while the goggle's eye
     // leads (the camera is then that eye); the bare eye leading, the whole way across.
-    private static Vector3 GoggleShift(Quaternion turn) => turn * new Vector3((_goggleEye - CameraPosition.Horizontal) * _aim * (1f - Handed), 0f, 0f);
+    private static Vector3 GoggleShift(Quaternion turn) => turn * new Vector3((_goggleEye - CameraPosition.Horizontal) * GunGoggleOut, 0f, 0f);
     // (None of it once the bare eye leads: the camera is then that eye.)
     // (The goggle's eye leading, out from the goggle eye's gun's place with the aim, and back to it as the aim is let go:
     // it came and went by its share where it stood.)
-    private static Vector3 BareShift(Quaternion turn) => turn * new Vector3((CameraPosition.AimingEyeAcross - CameraPosition.Horizontal) * (1f - _lead) * _aim * (1f - Handed), 0f, 0f);
+    private static Vector3 BareShift(Quaternion turn) => turn * new Vector3((CameraPosition.AimingEyeAcross - CameraPosition.Horizontal) * GunBareOut, 0f, 0f);
 
     // From NightVisionEyes.RenderLenses: the goggle's lens across from the head's middle.
     internal static void SeeLens(float across)
@@ -470,7 +455,7 @@ internal static class TwoEyes
         var buffer = _apartBuffer;
         buffer.Clear();
         buffer.SetGlobalVector(GunTexelId, new Vector4(1f / w, 1f / h, w, h));
-        buffer.SetGlobalFloat(GoggleShareId, GoggleGunOpacity);
+        buffer.SetGlobalFloat(GoggleShareId, GunGoggleShare);
         buffer.GetTemporaryRT(ApartTempId, w, h, 0, FilterMode.Point, RenderTextureFormat.DefaultHDR);
         buffer.Blit(UnityEngine.Rendering.BuiltinRenderTextureType.CameraTarget, ApartTempId);
         buffer.Blit(ApartTempId, bareView, material, BareViewPass);
@@ -585,7 +570,7 @@ internal static class TwoEyes
         // the goggle's blurred picture of the gun, as the two slide apart from one place, to sharp, and back (the user's,
         // 2026-11-19: sharp all the way, it stood out on the blurred one while the two were still all but one).
         Texture bare = _bareNow;
-        float blur = Mathf.Max(1f - _aim, Handed);
+        float blur = GunBareBlur;
         RenderTexture? across = null, down = null;
         if (blur > 0.01f)
         {
@@ -600,12 +585,12 @@ internal static class TwoEyes
             bare = down;
         }
         laying.SetTexture(OtherId, bare);
-        laying.SetFloat(GunShareId, BareGunOpacity);
+        laying.SetFloat(GunShareId, GunBareShare);
         laying.SetTexture(LensLayerId, lens ? _lensLayer : Texture2D.blackTexture);
         laying.SetTexture(LensMaskId, lens ? _lensSolid : Texture2D.blackTexture);
         // (Laid over by as much as the aim has come up, with its gun.)
-        laying.SetFloat(LensShareId, LensOpacity * _aim * (1f - Handed));
-        laying.SetFloat(WindowShareId, Mathf.Lerp(_aim, Whole, _lead) * (1f - Handed));
+        laying.SetFloat(LensShareId, SightLensShare);
+        laying.SetFloat(WindowShareId, SightWindowShare);
         laying.SetTexture(BareLasersId, NightVisionEyepieces.BareLasers ?? (Texture)Texture2D.blackTexture);
         bool windows = DrawWindowMask(into, laying);
         // In a window the two eyes' views stand apart, as two eyes' do (the user's, 2026-11-19): each layer the frame moved

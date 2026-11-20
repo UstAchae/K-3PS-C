@@ -205,33 +205,12 @@ internal static partial class NightVisionEyepieces
         // that eye, its eyepiece straight ahead in the middle of the frame, the other off to its side. They stay back of the
         // camera when it has come forward to a sight (NightVisionScope.cs). Where the game draws the device, from the camera.
         Vector3 back = view.forward * ScopePullback;
-        // A monocular's bare eye aiming (TwoEyes.cs; the camera stays where it is): as the aim comes up the eyes go all
-        // the way to their own places, so nothing of the device as the camera sees it is left, only as each eye sees it:
-        // the goggle's eye straight behind its eyepiece, the bare eye from its side (the user's, 2026-11-18).
-        float eyesOwn = TwoEyes.BareAimShare * CameraPosition.ViewAimed;
-        _eyesMixed = eyesOwn;
-        // The bare eye leading, as the aim comes up or goes (the user's, 2026-11-19: the gun and the device went from what
-        // the bare eye sees to what the goggle's eye sees at once): the two eyes' views of the device slide apart from one
-        // place and back into it (below: the bare eye's from where the goggle eye's is drawn), and the bare eye's is whole
-        // from the first quarter of the way on; over that quarter the two are all but one, and which is the whole one
-        // changes unseen. (It came in by its share all the way, from the other side of the head's middle: a fade.)
-        // (A monocular only: the ENVG-B with an eyepiece swung away has two halves when not aiming too, as before.)
-        _eyesOver = _device.Monocular && _direct ? Mathf.Lerp(eyesOwn, Mathf.Clamp01(eyesOwn * 4f), TwoEyes.Lead) : eyesOwn;
+        // A goggle before one eye, the bare eye aiming: how the two eyes' views of the device are laid together, all of it
+        // from TwoEyes.Device (TwoEyesBlend.cs); nothing of it is worked out here.
+        _blend = TwoEyes.Device(_direct, _device.Monocular);
+        float eyesOwn = _blend.Apart;
         _goggleEyeRight = _device.Monocular ? a + CameraPosition.Horizontal > 0f : podMono && (lone == CentreLensA) != (a <= b);
-        // The bare eye leading: its view of the device before the eyepieces' picture too (NvgBinocular.shader, _BareOver).
-        // (Only over the last of the way out to that eye's own place: on its way there from where the goggle's eye is, its
-        // view of the device passes right before the eyepiece, and standing before the picture all the way it covered
-        // it, all but a small round of it: the hole the user saw as the aim came up, 2026-11-19.)
-        float late = Mathf.Clamp01((eyesOwn - 0.6f) / 0.4f);
-        late = late * late * (3f - 2f * late);
-        // (And not once the aim is let go, as its gun is handed back: the eyepieces' picture is whole in its eyepiece from
-        // there, as it is when not aiming. The eyepiece's mouth is left open in the frame for that picture; the picture
-        // kept from it where the bare eye's view of the device was taken to stand, whatever lay behind showed through the
-        // tube's middle: the hole in the goggle eye's view of the device as the aim went, the user's, 2026-11-19.)
-        late *= TwoEyes.NotHanded;
-        // (Kept for NightVisionDirect: within the goggle eye's eyepiece that view is put into the frame by as much.)
-        _bareOver = _direct ? late * TwoEyes.Lead : 0f;
-        binocular.SetVector(BareOverId, new Vector4(_bareOver, _goggleEyeRight ? 0f : 1f, 0f, 0f));
+        binocular.SetVector(BareOverId, new Vector4(_blend.BareBeforePicture, _goggleEyeRight ? 0f : 1f, 0f, 0f));
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
@@ -253,11 +232,11 @@ internal static partial class NightVisionEyepieces
             _sidePods[side] = pod != null ? pod.name : null;
             _sideCups[side] = which >= 0 && which < _device.CupPods.Length ? _device.CupPods[which] : null;
         }
-        // (Not while the bare eye aims, _eyesMixed: then each half is its own eye's whole view of the device, the eyes at
+        // (Not while the bare eye aims, by how far the eyes are apart: then each half is its own eye's whole view of the device, the eyes at
         // their own places, the bare eye's laid over the goggle eye's; with both halves made alike there was no second
         // view left to lay over, the user's, 2026-11-18.)
-        _sideGone[0] *= 1f - _eyesMixed;
-        _sideGone[1] *= 1f - _eyesMixed;
+        _sideGone[0] *= 1f - _blend.Apart;
+        _sideGone[1] *= 1f - _blend.Apart;
         leftShift = Vector3.Lerp(leftShift, -back, _sideGone[0]);
         rightShift = Vector3.Lerp(rightShift, -back, _sideGone[1]);
         bool monocularLeft = a + CameraPosition.Horizontal <= 0f;
@@ -284,7 +263,7 @@ internal static partial class NightVisionEyepieces
         if (monocularHalves)
         {
             Vector3 goggle = monocularLeft ? leftShift : rightShift, bare = monocularLeft ? rightShift : leftShift;
-            bare = Vector3.Lerp(bare, Vector3.Lerp(goggle, bare, eyesOwn), TwoEyes.Lead);
+            bare = Vector3.Lerp(goggle, bare, _blend.BareOut);
             // (And never past the eyepiece's mouth on the way: the bare eye's own place is not held back as the goggle
             // eye's is, and between the two the eye went in past the mouth, beside the lens: the hole the user knows from
             // an eye too near, 2026-11-19. Both eyes stand as far back of the eyepiece.)
@@ -427,7 +406,7 @@ internal static partial class NightVisionEyepieces
     // A monocular's bare eye aiming, 0 to 1 as the aim comes up: the two eyes' views of the device no longer side by side but
     // one over the other all over the frame, the goggle eye's whole, the bare eye's seen through (TwoEyes.BareSeen;
     // NvgDirect.shader, coverage; the user's, 2026-11-18: both eyes' devices seen, as both eyes' guns are).
-    private static float _eyesMixed, _eyesOver, _bareOver;
+    private static TwoEyes.DeviceBlend _blend;
     private static bool _goggleEyeRight;
     private static readonly int BareOverId = Shader.PropertyToID("_BareOver");
 
