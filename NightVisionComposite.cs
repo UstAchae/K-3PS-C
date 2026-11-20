@@ -145,12 +145,6 @@ internal static partial class NightVisionEyepieces
         NoteStage(propagator, staged, from);
         // A goggle before one eye, the bare eye aiming (TwoEyes.cs): the eyepieces' steps by the goggle eye's depth.
         TwoEyes.BeforeEyepieces(from, _tubeShader);
-        bool capture = CaptureNow();   // (temporary, NightVisionCapture.cs)
-        if (capture)
-        {
-            Capture(from, "1-frame-before-eyepieces");
-            CaptureDevice();
-        }
 
         RenderTexture? lensed = lens ? RenderTexture.GetTemporary(from.width, from.height, 0, from.format) : null;
         RenderTexture into = lensed != null ? lensed : to;
@@ -168,11 +162,6 @@ internal static partial class NightVisionEyepieces
             Texture? fusedPicture = Fused(picture, ref fused);
             ReleaseMask();
             Compose(composite, glow, from, into, picture, fusedPicture);
-            if (capture)
-            {
-                Capture(picture, "2-night-vision-picture");
-                Capture(into, "3-eyepieces-composed");
-            }
             if (made != null)
                 RenderTexture.ReleaseTemporary(made);
             if (tubed != null)
@@ -186,8 +175,6 @@ internal static partial class NightVisionEyepieces
         }
         // (TwoEyes.cs) the bare eye's gun, lasers and sight lens laid over the eyepieces' picture.
         TwoEyes.TakeEye(into, _tubeShader);
-        if (capture)
-            Capture(into, "8-final");
         if (lensed != null)
         {
             Fisheye.Blit(lensed, to);

@@ -233,8 +233,9 @@ internal static partial class NightVisionEyepieces
         // kept from it where the bare eye's view of the device was taken to stand, whatever lay behind showed through the
         // tube's middle: the hole in the goggle eye's view of the device as the aim went, the user's, 2026-11-19.)
         late *= TwoEyes.NotHanded;
-        _captureBareOver = new Vector4(_direct ? late * TwoEyes.Lead : 0f, _goggleEyeRight ? 0f : 1f, _device.Monocular ? 1f - eyesOwn : 0f, 0f);
-        binocular.SetVector(BareOverId, _captureBareOver);
+        // (Kept for NightVisionDirect: within the goggle eye's eyepiece that view is put into the frame by as much.)
+        _bareOver = _direct ? late * TwoEyes.Lead : 0f;
+        binocular.SetVector(BareOverId, new Vector4(_bareOver, _goggleEyeRight ? 0f : 1f, _device.Monocular ? 1f - eyesOwn : 0f, 0f));
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
@@ -324,10 +325,6 @@ internal static partial class NightVisionEyepieces
             pictureSplit = Mathf.Lerp(split, loneLeft ? 1f + Overscan : -Overscan, away);
         }
         binocular.SetFloat(SplitId, pictureSplit);
-        _captureSplit = split;
-        _capturePictureSplit = pictureSplit;
-        _captureLeft = leftShift;
-        _captureRight = rightShift;
 
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
         // Each pixel's line of sight, by the view turned but not moved (as if at the world's origin): with the place in it, far out
@@ -434,7 +431,7 @@ internal static partial class NightVisionEyepieces
     // A monocular's bare eye aiming, 0 to 1 as the aim comes up: the two eyes' views of the device no longer side by side but
     // one over the other all over the frame, the goggle eye's whole, the bare eye's seen through (TwoEyes.BareSeen;
     // NvgDirect.shader, coverage; the user's, 2026-11-18: both eyes' devices seen, as both eyes' guns are).
-    private static float _eyesMixed, _eyesOver;
+    private static float _eyesMixed, _eyesOver, _bareOver;
     private static bool _goggleEyeRight;
     private static readonly int PictureShareId = Shader.PropertyToID("_PictureShare"), BareOverId = Shader.PropertyToID("_BareOver");
 
