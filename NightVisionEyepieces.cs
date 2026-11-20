@@ -334,6 +334,10 @@ internal static partial class NightVisionEyepieces
         }
     }
 
+    // A binocular with both eyepieces swung all the way off the eyes (the ENVG-B's): the goggle is before neither eye.
+    internal static bool PodsBothAway => _body != null && !_device.Monocular && _lensPods.Length > Mathf.Max(CentreLensA, CentreLensB)
+        && !PodDown(CentreLensA) && !PodDown(CentreLensB) && !PodMonocular(out _);
+
     internal static bool PodMonocular(out int lone)
     {
         lone = -1;

@@ -90,6 +90,10 @@ internal static partial class NightVisionEyepieces
             one = true;
             lens = lone;
         }
+        // (Both swung away: before neither eye, the sight looked through bare. Taken for before both, as with both down, the
+        // IR laser was in the sight's picture, red: the user's, with the ENVG-B, 2026-11-20.)
+        if (!one && PodsBothAway)
+            return false;
         if (!one || _lensNodes.Length == 0)
             return true;
         // By where the lens and the aiming eye are from the head's middle, wherever the camera stands.
