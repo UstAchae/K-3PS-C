@@ -400,6 +400,7 @@ internal static partial class NightVisionEyepieces
             harmony.Patch(preCull, postfix: new HarmonyMethod(postfix) { priority = Priority.Last });
         InstallEyepieceImage(harmony);
         InstallIr(harmony);
+        InstallThermal(harmony);
         InstallPreviewMounts(harmony);
         TrackAmbientLights();
 
@@ -458,8 +459,7 @@ internal static partial class NightVisionEyepieces
         // game's picture, as without BRNVG.
         bool brnvg = !thermal && UseBrnvg && (renderer != null || player is not HideoutPlayer);
         bool present = _body != null && _body.gameObject.activeInHierarchy;
-        // Thermal goggles get no eyepieces on this branch: the game's own picture.
-        bool worn = present && !thermal && EyepieceImageReady(cameras) && (!brnvg || renderer != null);
+        bool worn = present && EyepieceImageReady(cameras) && (thermal ? EnsureThermalCamera() : !brnvg || renderer != null);
         bool switchedOn = worn && (thermal ? thermalItem?.Togglable != null && thermalItem.Togglable.On : nightItem?.Togglable != null ? nightItem.Togglable.On : device != null && SwitchedOn(device));
         // The tubes come on once the device is all the way down and the game has done switching its own filter on
         // (its switch dims the filter for a moment, the picture the lenses show), and go off before it flips up:
@@ -478,6 +478,13 @@ internal static partial class NightVisionEyepieces
         Wake(worn && (switchedOn || on) ? renderer : null, cameras?.NightVision);
         Active = on;
         _split = _flip;
+        HoldMainThermal(cameras, thermal && worn);
+        KeepThermalGlow(thermalDevice);
+        if (thermal && on && _thermalNoted != _body)
+        {
+            _thermalNoted = _body;
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: {_device.Node}'s eyepieces show our thermal camera's picture; the main camera's thermal held off.");
+        }
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
         KeepGlow(device);
         UpdateMountHeight(player);
@@ -494,6 +501,7 @@ internal static partial class NightVisionEyepieces
     private const float HoldFilterSeconds = 1f;
     private static float _holdFilterUntil = -1f;
     private static bool _deviceThere;
+    private static Transform? _thermalNoted;
 
     private static System.Reflection.FieldInfo? _phosphorTint;
     private static bool _phosphorResolved;
@@ -566,6 +574,7 @@ internal static partial class NightVisionEyepieces
         _split = 0f;
         _searchedFrame = -100;
         ReleaseEyes();
+        ReleaseThermal();
         KeepEyepieceImage(null, false);
     }
 
