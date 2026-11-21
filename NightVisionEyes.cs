@@ -103,7 +103,8 @@ internal static partial class NightVisionEyepieces
     private static Vector4 _fusedTubes;
     private static void ClaimFusion(Camera camera)
     {
-        if (!_device.Fusion || _lensNodes.Length == 0 || !LensesOn(camera))
+        // (Only a device some mod serves: one with no handler registered is left to its own mod's way of drawing.)
+        if (!_device.Fusion || _lensNodes.Length == 0 || !LensesOn(camera) || !Interop.EyepieceFusion.Serves(_device.Node))
             return;
         // Which is which by where the eyepieces stand down before the eyes (not where a pod has swung one).
         int indexB = Mathf.Min(CentreLensB, _lensNodes.Length - 1);
@@ -117,7 +118,9 @@ internal static partial class NightVisionEyepieces
         if (PodGone(aRight ? CentreLensA : indexB) >= 1f)
             return;
         for (int i = 0; i < 4; i++)
-            _fusedTubes[i] = i < _lensRest.Length && Vector3.Dot(_lensRest[i].position, right) > middle ? 1f : 0f;
+            _fusedTubes[i] = _device.FusionTubes != null
+                ? (System.Array.IndexOf(_device.FusionTubes, i) >= 0 ? 1f : 0f)
+                : i < _lensRest.Length && Vector3.Dot(_lensRest[i].position, right) > middle ? 1f : 0f;
         Vector3 axis = -rightTube.forward;
         Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
         Vector3 ahead = camera.worldToCameraMatrix.MultiplyPoint3x4(camera.transform.position + axis * 100f);
@@ -127,13 +130,14 @@ internal static partial class NightVisionEyepieces
         Interop.EyepieceFusion.FieldInMainUv = new Vector4(uv.x, uv.y, radius, camera.aspect);
         Interop.EyepieceFusion.Deployed = _flip;
         Interop.EyepieceFusion.ClaimedFrame = Time.frameCount;
-        if (!_fusionClaimNoted)
+        Interop.EyepieceFusion.ClaimedDevice = _device.Node;
+        if (_fusionClaimNoted != _device.Node)
         {
-            _fusionClaimNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the eyepieces claim this device for another mod's picture (field at {uv.x:F3},{uv.y:F3}, radius {radius:F3}; its picture {(Interop.EyepieceFusion.Fuse != null ? "offered" : "not offered yet")}).");
+            _fusionClaimNoted = _device.Node;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the eyepieces claim this device for another mod's picture (field at {uv.x:F3},{uv.y:F3}, radius {radius:F3}; its picture {(Interop.EyepieceFusion.HandlerOf(_device.Node) != null ? "offered" : "not offered yet")}).");
         }
     }
-    private static bool _fusionClaimNoted;
+    private static string? _fusionClaimNoted;
 
     internal static void OnCameraPostRender(Camera camera)
     {
@@ -334,7 +338,8 @@ internal static partial class NightVisionEyepieces
         }
         if (_direct)
             DrawDirect(camera, leftShift, rightShift, split);
-        FusionField(camera, a <= b ? CentreLensB : CentreLensA, position + rightShift);
+        // (The tube the other mod's picture goes into: the device's own first such, or the right eyepiece's.)
+        FusionField(camera, _device.FusionTubes != null && _device.FusionTubes.Length > 0 ? _device.FusionTubes[0] : a <= b ? CentreLensB : CentreLensA, position + rightShift);
     }
     private const float RayFar = 2f;                               // m: the lines of sight's frame (only their direction counts)
     private static float RayNear => Mathf.Max(EyeNear, RayFar / 2e5f);
@@ -362,7 +367,8 @@ internal static partial class NightVisionEyepieces
     }
     private static bool _eyeHeldNoted;
 
-    // A claimed fusion device: its right eyepiece as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
+    // A claimed fusion device: the tube the picture goes into (the right eyepiece; on a device with two tubes to an
+    // eyepiece, the one of them it names) as the right eye sees it this frame, for EyepieceFusion.FieldInMainUv.
     // The eyepiece's own glass (its rim, as the lens node stands), projected from where this file puts the eye: the
     // fused rectangle is sized and placed by it, and so stays still against the eyepiece, as if fixed to it. Not the
     // narrowest of what the eye looks through (lens, eyecup throat, lip) nor cut by the tube's field: which of those

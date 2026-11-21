@@ -73,6 +73,7 @@ internal static partial class NightVisionEyepieces
         internal float CupHeight;                  // a sealed eyecup's flared rim above the Centre, along the axis
         internal Vector4 CupRadii0, CupRadii1;     // its inner radius at 0, 5, 10, 20 mm and at 30, 40 mm above the Centre
         internal bool Fusion;                      // another mod may lay its picture into the eyepieces (EyepieceFusion)
+        internal int[]? FusionTubes;               // the tubes it goes into; null: those of the right eyepiece
         internal float FieldDegrees = 60f;         // the tubes' whole field (each eyepiece shows this cone about its axis; EyepieceFusion.FieldInMainUv)
         // Eyecups that come off (an item of their own in a slot under the device's node, CupSlot): their root's name starts
         // with CupNode. A device with CupNode set is this entry only while its cups are on (CupOff false) or off (true).
@@ -171,11 +172,11 @@ internal static partial class NightVisionEyepieces
         // of two panes meeting at a crease, the centre tube's flat and the side tube's turned 28.7 degrees inward (as the
         // GPNVG-18's floor bends, 26.5); a domed lens of 15.85 mm on each, the two an "8". Each lens as that mod has it
         // (item/nodes.json, eyepieceLenses); each Centre on the lens's axis at the eyecup's rim (y 0.0505), the opening
-        // there about 58 by 40 mm: the cup's own walls, drawn with the device, keep the rest out. Its thermal (the right
-        // centre tube's, K-FPANO's client) is not laid in yet: no Fusion until EyepieceFusion tells devices apart.
+        // there about 58 by 40 mm: the cup's own walls, drawn with the device, keep the rest out. Its thermal is the right
+        // centre tube's (the first here), laid in by K-FPANO's client once that registers for this device (EyepieceFusion).
         new Device
         {
-            Node = "nvg_fpano_LOD0",
+            Node = "nvg_fpano_LOD0", Fusion = true, FusionTubes = new[] { 0 },
             Tubes = new[]
             {
                 new Tube { Centre = new Vector3(0.03025f, 0.0505f, -0.07555f), Normal = Vector3.up, Lens = new Vector3(0.03025f, 0.0340f, -0.07555f), LensRadius = 0.01585f },

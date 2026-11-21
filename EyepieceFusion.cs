@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace EFTNewCamera.Interop;
@@ -15,8 +16,88 @@ namespace EFTNewCamera.Interop;
 // true when it wrote dest, which the eyepieces then show; false leaves them the tube's picture. A frame not claimed
 // (the mod off, its master switch off, another device, the eyepieces not shown) never has ClaimedFrame equal to
 // Time.frameCount: the other mod draws its picture its own way. If Fuse throws, it is not called again this session.
+//
+// More than one such mod, each for a device of its own (K-ENVG-B's, K-FPANO's; added 1.8.165, Version still 1): each
+// calls Register with its device's root node name and its own handler, and Configure for its own rectangle and gain.
+// On a claimed frame only the handler of the device worn is called (ClaimedDevice says which). A device with no
+// handler registered is not claimed at all, so its mod goes on drawing its own way; but the first device, the ENVG-B
+// ("nvg_envgb_psq42_LOD0"), is claimed as ever and served by Fuse, FusedRect and I2Gain below while nothing is
+// registered for it, so a K-ENVG-B from before this works unchanged. A handler that throws is not called again; the
+// others are.
+// FieldInMainUv is the circle of the tube the picture goes into: the ENVG-B's right eyepiece; on a device with two
+// tubes to an eyepiece (the F-PANO), the right eyepiece's centre tube, not the whole eyepiece.
 public static class EyepieceFusion
 {
+    // The device the old members below serve.
+    internal const string FirstDevice = "nvg_envgb_psq42_LOD0";
+
+    private sealed class Entry
+    {
+        internal Func<RenderTexture, RenderTexture, bool>? Fuse;
+        internal Vector2 Rect;
+        internal float Gain = 1f;
+        internal bool Configured, Failed;
+    }
+    private static readonly Dictionary<string, Entry> Entries = new Dictionary<string, Entry>();
+
+    // The device claimed on ClaimedFrame: its model's root node name. Null before any.
+    public static string? ClaimedDevice { get; internal set; }
+
+    // A handler for one device, by its model's root node name: (i2, dest) -> whether dest was written, as Fuse.
+    public static void Register(string deviceNode, Func<RenderTexture, RenderTexture, bool> fuse)
+    {
+        if (string.IsNullOrEmpty(deviceNode) || fuse == null)
+            return;
+        Entry entry = EntryOf(deviceNode);
+        entry.Fuse = fuse;
+        entry.Failed = false;
+    }
+
+    // That device's own rectangle (as FusedRect) and tubes' gain (as I2Gain). May be called again at any time.
+    public static void Configure(string deviceNode, Vector2 fusedRect, float i2Gain)
+    {
+        if (string.IsNullOrEmpty(deviceNode))
+            return;
+        Entry entry = EntryOf(deviceNode);
+        entry.Rect = fusedRect;
+        entry.Gain = i2Gain;
+        entry.Configured = true;
+    }
+
+    private static Entry EntryOf(string deviceNode)
+    {
+        if (!Entries.TryGetValue(deviceNode, out Entry entry))
+            Entries[deviceNode] = entry = new Entry();
+        return entry;
+    }
+
+    // Whether a device's frames are claimed: a handler registered for it, or the first device (served by Fuse).
+    internal static bool Serves(string deviceNode) =>
+        deviceNode == FirstDevice || Entries.TryGetValue(deviceNode, out Entry entry) && entry.Fuse != null;
+
+    // The handler to call for a device this frame: its own, else (the first device) Fuse; none once it has thrown.
+    internal static Func<RenderTexture, RenderTexture, bool>? HandlerOf(string deviceNode)
+    {
+        if (Entries.TryGetValue(deviceNode, out Entry entry) && entry.Fuse != null)
+            return entry.Failed ? null : entry.Fuse;
+        return deviceNode == FirstDevice && !_firstFailed ? Fuse : null;
+    }
+    private static bool _firstFailed;
+
+    internal static void Failed(string deviceNode)
+    {
+        if (Entries.TryGetValue(deviceNode, out Entry entry) && entry.Fuse != null)
+            entry.Failed = true;
+        else
+            _firstFailed = true;
+    }
+
+    internal static Vector2 RectOf(string deviceNode) =>
+        Entries.TryGetValue(deviceNode, out Entry entry) && entry.Configured ? entry.Rect : FusedRect;
+
+    internal static float GainOf(string deviceNode) =>
+        Entries.TryGetValue(deviceNode, out Entry entry) && entry.Configured ? entry.Gain : deviceNode == FirstDevice ? I2Gain : 1f;
+
     // Raised only for a change the other side cannot read the old way; new optional members keep it.
     public const int Version = 1;
 

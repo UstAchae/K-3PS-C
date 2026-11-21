@@ -186,11 +186,14 @@ internal static partial class NightVisionEyepieces
 
     // Another mod's picture laid into the tube's (EyepieceFusion), on a frame the eyepieces claimed for it: for the
     // tubes it goes into (_fusedTubes), the others keep the tube's own. Null when there is none this frame.
-    private static bool _fuseFailed, _fuseNoted;
+    private static string? _fuseNoted;
     private static Texture? Fused(Texture picture, ref RenderTexture? fused)
     {
-        Func<RenderTexture, RenderTexture, bool>? fuse = Interop.EyepieceFusion.Fuse;
-        if (fuse == null || _fuseFailed || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || picture is not RenderTexture i2)
+        // (The handler of the device worn: its own mod's, EyepieceFusion.Register; the ENVG-B's the old Fuse.)
+        if (Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || picture is not RenderTexture i2)
+            return null;
+        Func<RenderTexture, RenderTexture, bool>? fuse = Interop.EyepieceFusion.HandlerOf(_device.Node);
+        if (fuse == null)
             return null;
         fused = RenderTexture.GetTemporary(i2.width, i2.height, 0, i2.format);
         bool wrote;
@@ -200,14 +203,14 @@ internal static partial class NightVisionEyepieces
         }
         catch (Exception e)
         {
-            _fuseFailed = true;
-            NewCameraPlugin.Log?.LogError($"NVG fusion: the other mod's picture failed, the eyepieces show the tube's alone from now on: {e}");
+            Interop.EyepieceFusion.Failed(_device.Node);
+            NewCameraPlugin.Log?.LogError($"NVG fusion: the other mod's picture for {_device.Node} failed, its eyepieces show the tube's alone from now on: {e}");
             return null;
         }
-        if (wrote && !_fuseNoted)
+        if (wrote && _fuseNoted != _device.Node)
         {
-            _fuseNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the other mod's picture laid into the eyepieces ({i2.width}x{i2.height} {i2.format}; tubes {_fusedTubes}).");
+            _fuseNoted = _device.Node;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the other mod's picture laid into the eyepieces of {_device.Node} ({i2.width}x{i2.height} {i2.format}; tubes {_fusedTubes}).");
         }
         return wrote ? fused : null;
     }
@@ -289,7 +292,7 @@ internal static partial class NightVisionEyepieces
     private static bool _tubesGainNoted;
     private static Texture TubesGain(Texture picture, ref RenderTexture? dimmed)
     {
-        float gain = Mathf.Clamp01(Interop.EyepieceFusion.I2Gain);
+        float gain = Mathf.Clamp01(Interop.EyepieceFusion.GainOf(_device.Node));
         // On every frame of a fusion device, claimed or not: with its right eyepiece swung up the left's tube kept the gain
         // the two had together, and did not jump back to full.
         if (gain >= 0.999f || _tubeShader == null || !_device.Fusion)
@@ -326,7 +329,7 @@ internal static partial class NightVisionEyepieces
         composite.SetTexture(FusedId, fusedPicture != null ? fusedPicture : Texture2D.blackTexture);
         composite.SetVector(TubeFusedId, fusedPicture != null ? _fusedTubes : Vector4.zero);
         Vector4 field = Interop.EyepieceFusion.FieldInMainUv;
-        Vector2 share = Interop.EyepieceFusion.FusedRect;
+        Vector2 share = Interop.EyepieceFusion.RectOf(_device.Node);
         composite.SetVector(FusedRectId, fusedPicture != null && field.w > 0f
             ? new Vector4(field.x, field.y, share.x * field.z / field.w, share.y * field.z) : Vector4.zero);
         // The glow worked out only when it is shown.
