@@ -48,6 +48,23 @@ internal static partial class NightVisionEyepieces
     private static readonly List<IrLight> _irLights = new List<IrLight>();
     private static readonly List<IrMesh> _irMeshes = new List<IrMesh>(), _irOnlyMeshes = new List<IrMesh>();
     private static readonly List<IrLight> _irLaserLights = new List<IrLight>();
+    // Another mod's infrared meshes for one frame (EyepieceFusion.DrawIr): drawn with the IR lasers.
+    private static readonly List<IrMesh> _irOutside = new List<IrMesh>();
+    private static int _irOutsideFrame = -1;
+    private const int IrOutsideMost = 64;
+
+    internal static bool IrInOurHands => NewCameraSwitch.Enabled && (Active || BinocularOn || HoldFilter);
+
+    internal static void IrFromOutside(Mesh mesh, Matrix4x4 matrix, Material material, MaterialPropertyBlock? block)
+    {
+        if (_irOutsideFrame != Time.frameCount)
+        {
+            _irOutside.Clear();
+            _irOutsideFrame = Time.frameCount;
+        }
+        if (_irOutside.Count < IrOutsideMost)
+            _irOutside.Add(new IrMesh { Mesh = mesh, Matrix = matrix, Material = material, Block = block! });
+    }
     private static int _irLightsFrame = -1, _irMeshesFrame = -1, _irDrawnFrame = -1;
     private static readonly Dictionary<Light, CommandBuffer> _irShadowed = new Dictionary<Light, CommandBuffer>();
     private static readonly List<Light> _irAttached = new List<Light>();
@@ -349,7 +366,8 @@ internal static partial class NightVisionEyepieces
         bool lights = ir && _irLightsFrame == Time.frameCount && _irLights.Count > 0;
         bool bare = TwoEyes.BareLaserShift(camera, out Vector3 bareShift) && GunDepth != null && _irLaserRecords.Count > 0
             && _irMeshesFrame == Time.frameCount;
-        bool lasers = lifted && _irMeshes.Count > 0 || ir && _irOnlyMeshes.Count > 0 || bare;
+        bool outside = ir && _irOutsideFrame == Time.frameCount && _irOutside.Count > 0;
+        bool lasers = lifted && _irMeshes.Count > 0 || ir && _irOnlyMeshes.Count > 0 || bare || outside;
         // The night-vision ambient's difference (NightVisionAmbient.cs), once the layer's materials are made.
         bool ambient = ir && IrResources() && NightAmbientWanted();
         if (!lights && !lasers && !ambient || !IrResources())
@@ -451,7 +469,7 @@ internal static partial class NightVisionEyepieces
                     _irLasers.Blit(_irNaked, BuiltinRenderTextureType.CameraTarget, _irAdd!, cut ? LaserAddCutPass : LaserAddPass);
             }
             // The IR lasers as night vision shows them, for the lenses.
-            if (ir && _irOnlyMeshes.Count > 0)
+            if (ir && _irOnlyMeshes.Count > 0 || outside)
             {
                 // Cut behind the bare eye's sight lens: drawn apart, then added into the layer but there.
                 bool cutIr = cut && _irCut != null;
@@ -469,6 +487,14 @@ internal static partial class NightVisionEyepieces
                         _irLasers.DrawMesh(m.Mesh, m.Matrix, m.Material, 0, 0, m.Block);
                 }
                 _irLasers.SetGlobalFloat(NightVisionOnId, 0f);
+                if (outside)
+                {
+                    foreach (IrMesh m in _irOutside)
+                    {
+                        if (m.Mesh != null && m.Material != null)
+                            _irLasers.DrawMesh(m.Mesh, m.Matrix, m.Material, 0, 0, m.Block);
+                    }
+                }
                 if (cutIr)
                     _irLasers.Blit(_irCut, _irLayer, _irAdd!, LaserAddCutPass);
             }

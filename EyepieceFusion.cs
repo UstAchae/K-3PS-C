@@ -122,4 +122,25 @@ public static class EyepieceFusion
 
     // Set by the other mod: (i2, dest) -> whether dest was written.
     public static Func<RenderTexture, RenderTexture, bool>? Fuse;
+
+    // Infrared things of another mod's (an IR strobe's flash): seen through the tubes only. (Added 1.8.167, Version
+    // still 1: look for the members by name.)
+    // IrLayerActive: K-3PS-C has the night-vision picture in its own hands now (eyepieces shown, or a goggle on its way
+    // down or up): the game's own picture is not on the screen, and nothing infrared belongs in the main camera's frame.
+    // False: K-3PS-C shows nothing of night vision; the other mod draws its own way, as without K-3PS-C.
+    public static bool IrLayerActive => NightVisionEyepieces.IrInOurHands;
+
+    // One mesh for this frame, drawn into the IR layer (the main camera's view, against its depth, after its
+    // transparent things; the tubes amplify it with the rest). Called each frame it is to be seen, before the main
+    // camera renders (Update, LateUpdate). The material's pass 0, an additive one. The block is read when the camera
+    // renders: one block a call, left as it is till then. Returns IrLayerActive: true, it is in K-3PS-C's hands (drawn
+    // through the tubes, or rightly not at all: a thermal device, the tubes not looking); false, not taken.
+    public static bool DrawIr(Mesh mesh, Matrix4x4 matrix, Material material, MaterialPropertyBlock? block)
+    {
+        if (!NightVisionEyepieces.IrInOurHands)
+            return false;
+        if (mesh != null && material != null)
+            NightVisionEyepieces.IrFromOutside(mesh, matrix, material, block);
+        return true;
+    }
 }
