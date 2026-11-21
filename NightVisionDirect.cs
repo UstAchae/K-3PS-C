@@ -96,7 +96,11 @@ internal static partial class NightVisionEyepieces
     private static readonly List<(Renderer renderer, ShadowCastingMode casting)> _hidden = new List<(Renderer, ShadowCastingMode)>();
     private static readonly List<Piece> _pieces = new List<Piece>();
     private static readonly List<Material> _materialsNow = new List<Material>();
-    private static readonly Dictionary<MeshRenderer, PieceSource> _pieceSources = new Dictionary<MeshRenderer, PieceSource>();
+    private static readonly Dictionary<Renderer, PieceSource> _pieceSources = new Dictionary<Renderer, PieceSource>();
+    // A skinned part of the device (the F-PANO's power cable, K-FPANO 0.1.6: plugged into the helmet's rail, bending as the
+    // goggle flips): baked each frame into a mesh of its own, kept, and drawn as the other pieces are. (Hidden with the
+    // rest and not drawn, it would have been gone while the eyepieces show.)
+    private static readonly Dictionary<SkinnedMeshRenderer, Mesh> _bakedPieces = new Dictionary<SkinnedMeshRenderer, Mesh>();
     private static readonly MaterialPropertyBlock _pieceBlock = new MaterialPropertyBlock();
 
     // The renderers as they are this frame, not as they were found once: a device whose renderers had been made anew was
@@ -109,14 +113,47 @@ internal static partial class NightVisionEyepieces
         {
             _hidden.Add((r, r.shadowCastingMode));
             r.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
-            if (r is not MeshRenderer mesh || !r.enabled || !Opaque(r))
+            if (!r.enabled || !Opaque(r))
                 continue;
-            PieceSource source = SourceOf(mesh);
-            if (!source.Finest || !source.Any || source.Filter == null || source.Filter.sharedMesh == null)
+            Mesh? drawn = null;
+            PieceSource source;
+            if (r is SkinnedMeshRenderer skin)
+            {
+                if (skin.sharedMesh == null)
+                    continue;
+                source = SourceOf(r);
+                if (!source.Finest || !source.Any)
+                    continue;
+                if (!_bakedPieces.TryGetValue(skin, out drawn) || drawn == null)
+                {
+                    if (_bakedPieces.Count > 16)
+                    {
+                        foreach (Mesh old in _bakedPieces.Values)
+                        {
+                            if (old != null)
+                                Object.Destroy(old);
+                        }
+                        _bakedPieces.Clear();
+                    }
+                    drawn = new Mesh { name = "Justachae NVG piece " + skin.name, hideFlags = HideFlags.DontSave };
+                    drawn.MarkDynamic();
+                    _bakedPieces[skin] = drawn;
+                }
+                // (With its scale left to its transform, as FromCamera has it.)
+                skin.BakeMesh(drawn, true);
+            }
+            else if (r is MeshRenderer)
+            {
+                source = SourceOf(r);
+                if (!source.Finest || !source.Any || source.Filter == null || source.Filter.sharedMesh == null)
+                    continue;
+                drawn = source.Filter.sharedMesh;
+            }
+            else
                 continue;
             _pieces.Add(new Piece
             {
-                Renderer = r, Mesh = source.Filter.sharedMesh, Materials = source.Materials, Passes = source.Passes,
+                Renderer = r, Mesh = drawn, Materials = source.Materials, Passes = source.Passes,
                 FromCamera = FromCamera(r.transform, camera.transform.position),
             });
         }
@@ -167,7 +204,7 @@ internal static partial class NightVisionEyepieces
         _hidden.Clear();
     }
 
-    private static PieceSource SourceOf(MeshRenderer r)
+    private static PieceSource SourceOf(Renderer r)
     {
         r.GetSharedMaterials(_materialsNow);
         if (_pieceSources.TryGetValue(r, out PieceSource known) && SameMaterials(known.Materials, _materialsNow))
