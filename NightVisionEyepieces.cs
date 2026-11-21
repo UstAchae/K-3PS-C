@@ -167,6 +167,25 @@ internal static partial class NightVisionEyepieces
             FloorDepth = 0.0081f, OpeningRadius = 0.0197f, RimHeight = 0f, RimRadius = 0.0197f,
             CardSize = new Vector2(0.035f, 0.023f), CardRaise = 0.005f,
         },
+        // F-PANO (K-FPANO's item, 0.1.2; its frame the GPNVG-18's): an oval rubber eyecup a side, 16.5 mm deep, over a window
+        // of two panes meeting at a crease, the centre tube's flat and the side tube's turned 28.7 degrees inward (as the
+        // GPNVG-18's floor bends, 26.5); a domed lens of 15.85 mm on each, the two an "8". Each lens as that mod has it
+        // (item/nodes.json, eyepieceLenses); each Centre on the lens's axis at the eyecup's rim (y 0.0505), the opening
+        // there about 58 by 40 mm: the cup's own walls, drawn with the device, keep the rest out. Its thermal (the right
+        // centre tube's, K-FPANO's client) is not laid in yet: no Fusion until EyepieceFusion tells devices apart.
+        new Device
+        {
+            Node = "nvg_fpano_LOD0",
+            Tubes = new[]
+            {
+                new Tube { Centre = new Vector3(0.03025f, 0.0505f, -0.07555f), Normal = Vector3.up, Lens = new Vector3(0.03025f, 0.0340f, -0.07555f), LensRadius = 0.01585f },
+                new Tube { Centre = new Vector3(0.04453f, 0.0505f, -0.07555f), Normal = new Vector3(-0.4802f, 0.8771f, 0f), Lens = new Vector3(0.0506f, 0.03942f, -0.07555f), LensRadius = 0.01585f },
+                new Tube { Centre = new Vector3(-0.03025f, 0.0505f, -0.07555f), Normal = Vector3.up, Lens = new Vector3(-0.03025f, 0.0340f, -0.07555f), LensRadius = 0.01585f },
+                new Tube { Centre = new Vector3(-0.04453f, 0.0505f, -0.07555f), Normal = new Vector3(0.4802f, 0.8771f, 0f), Lens = new Vector3(-0.0506f, 0.03942f, -0.07555f), LensRadius = 0.01585f },
+            },
+            FloorDepth = 0.0165f, OpeningRadius = 0.021f, RimHeight = 0f, RimRadius = 0.021f,
+            CardSize = new Vector2(0.034f, 0.024f), CardRaise = 0.004f,
+        },
         // PNV-10T: two straight eyepiece tubes (16-sided), 10.75 mm deep, with a rolled rubber rim; the lens is the
         // glass of the tube's floor out to where it meets the wall, the Centre at the tube's top, the rim the roll's inner
         // edge.

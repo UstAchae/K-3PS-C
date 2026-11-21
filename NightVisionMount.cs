@@ -153,6 +153,19 @@ internal static partial class NightVisionEyepieces
             CarriageAlong = new Vector3(0.0003f, 0.9982f, 0.0602f), Lead = 0.001f,
             HeightMin = -0.003f, HeightMax = 0.014f, MinTilt = -10f, MaxTilt = 20f, SlideBack = 0.040f, SlideForward = 0.006f,
         },
+        // The F-PANO's own mount (K-FPANO, 0.1.2), laid out as the ENVG-B's: a carriage that slides up the base plate, the
+        // frame flipping on it, the arm tilting on the frame's pin, the device's slide along the optical axis. No height
+        // screw in its mesh, and no stops: the travel is ours (the item's own check went to 12 mm up, 15 degrees and
+        // 25 mm, its parts keeping together).
+        new Mount
+        {
+            Prefix = "nvg_fpano", PathMatch = "fpano", Joints = true, Hinge = "fpano_carriage/axis",
+            CarriageNode = "fpano_carriage",
+            TiltNode = "fpano_carriage/axis/fpano_frame/fpano_tilt",
+            SlideNode = "fpano_carriage/axis/fpano_frame/fpano_tilt/fpano_arm/fpano_slide",
+            CarriageAlong = Vector3.up, Lead = 0.001f,
+            HeightMin = -0.005f, HeightMax = 0.015f, MinTilt = -10f, MaxTilt = 20f, SlideBack = 0.030f, SlideForward = 0.010f,
+        },
     };
 
     private const float MountSpeed = 0.01f;         // height and slide while a hotkey is held (m/s)
@@ -435,7 +448,8 @@ internal static partial class NightVisionEyepieces
         // A Joints mount: its nodes found by name under the root, the device under its slide.
         private static MountRig? MakeJoints(Transform root, Transform device, Mount mount, InventoryEquipment? equipment, Transform? facing, bool worn, bool onlyIfSet)
         {
-            Transform? carriage = root.Find(mount.CarriageNode), hinge = root.Find(mount.Hinge), screw = root.Find(mount.ScrewNode);
+            // (No screw named: none. Find("") gives the root itself, which the height would then have turned.)
+            Transform? carriage = root.Find(mount.CarriageNode), hinge = root.Find(mount.Hinge), screw = mount.ScrewNode.Length > 0 ? root.Find(mount.ScrewNode) : null;
             Transform? tilt = root.Find(mount.TiltNode), slide = root.Find(mount.SlideNode);
             if (carriage == null || hinge == null || tilt == null || slide == null || !device.IsChildOf(slide))
                 return null;

@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.8.163";
+    public const string PluginVersion = "1.8.164";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -166,7 +166,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             OtherMods.IsChoice(saved, OtherMods.BrnvgGuid, OtherMods.BrnvgName, "BRNVG") ? NightVisionEyepieces.PictureBrnvg
             : saved == "自动" ? NightVisionEyepieces.PictureGame : null);
         ConfigEntry<string> picture = SettingsLayout.Bind(Config, "头戴式成像装备", "夜视画面来源", NightVisionEyepieces.PictureGame,
-            new ConfigDescription("头戴夜视仪和热成像只在自己的目镜里成像，目镜以外是不带夜视的原样画面，设备模型照常画出。支持 GPNVG-18、PNV-10T、PNV-57E、Armasight N-15、AN/PVS-14（单筒）、模组物品 PVS-31A 和 T-7 热成像；其他型号仍是游戏原样的全屏滤镜。这一项选目镜里的夜视画面用谁做，游戏里随时可以来回切换。Borkel's Realistic NVGs：用它的画面，它的 F12 设置（增益、颜色、噪点、泛光、近处虚焦等）都会作用到目镜里；没装时这一项后面写着 [未安装]，选了也按原版。原版：用游戏自己的夜视滤镜（绿色、噪点），装了 BRNVG 也不用它的画面。热成像设备不受这个选项影响。",
+            new ConfigDescription("头戴夜视仪和热成像只在自己的目镜里成像，目镜以外是不带夜视的原样画面，设备模型照常画出。支持 GPNVG-18、PNV-10T、PNV-57E、Armasight N-15、AN/PVS-14（单筒）、模组物品 PVS-31A、F-PANO 和 T-7 热成像；其他型号仍是游戏原样的全屏滤镜。这一项选目镜里的夜视画面用谁做，游戏里随时可以来回切换。Borkel's Realistic NVGs：用它的画面，它的 F12 设置（增益、颜色、噪点、泛光、近处虚焦等）都会作用到目镜里；没装时这一项后面写着 [未安装]，选了也按原版。原版：用游戏自己的夜视滤镜（绿色、噪点），装了 BRNVG 也不用它的画面。热成像设备不受这个选项影响。",
                 new AcceptableValueList<string>(NightVisionEyepieces.PictureBrnvg, NightVisionEyepieces.PictureGame),
                 new ConfigurationManagerAttributes { Order = 3 }));
         ConfigEntry<bool> glow = SettingsLayout.Bind(Config, "头戴式成像装备", "目镜光晕", false,
