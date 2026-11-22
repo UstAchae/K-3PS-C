@@ -197,6 +197,8 @@ internal static partial class NightVisionEyepieces
     private static bool _regionAny, _regionNoted;
     private static float _regionNotedAt;
     private const float RegionMargin = 0.03f;           // of the screen's height, each way
+    private const float RegionBudget = 1707f * 960f;    // pixels: what the whole view took at the old size
+    private const int RegionSlack = 192;                 // pixels: how much smaller this frame's may be before the region is taken anew
     private const int RegionStep = 32;                   // pixels: its edges kept to these, so it does not change by the pixel
 
     internal static Texture? ThermalPicture => _thermalWhole;
@@ -226,13 +228,32 @@ internal static partial class NightVisionEyepieces
             uv = clip.w > 1e-6f ? new Vector2(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f) : Vector2.zero;
             return clip.w > 1e-6f;
         }
-        if (!Seen(glass, out Vector2 centre) || !Seen(glass + lens.right * rim, out Vector2 across) || !Seen(glass + lens.up * rim, out Vector2 up))
+        // A ring about the lens's axis, seen at a slant, is an ellipse spanned by two of its radii; its box.
+        bool Box(Vector3 middle, float radius, out Vector2 low, out Vector2 high)
+        {
+            low = high = Vector2.zero;
+            if (!Seen(middle, out Vector2 centre) || !Seen(middle + lens.right * radius, out Vector2 across) || !Seen(middle + lens.up * radius, out Vector2 up))
+                return false;
+            Vector2 u = across - centre, v = up - centre;
+            var half = new Vector2(Mathf.Sqrt(u.x * u.x + v.x * v.x), Mathf.Sqrt(u.y * u.y + v.y * v.y));
+            low = centre - half;
+            high = centre + half;
+            return true;
+        }
+        // The eye sees the picture through the glass and through the tube's lip before it (the node's own place, the
+        // device's OpeningRadius): no further than either lets it, so within both boxes. (By the glass alone, the region
+        // came to 1952x1376 of 2560x1440 with the goggles close to the eyes, where the picture seen took up 1560 across.)
+        if (!Box(glass, rim, out Vector2 glassLow, out Vector2 glassHigh))
             return;
-        // The rim seen at a slant is an ellipse spanned by these two; its box.
-        Vector2 u = across - centre, v = up - centre;
-        var half = new Vector2(Mathf.Sqrt(u.x * u.x + v.x * v.x), Mathf.Sqrt(u.y * u.y + v.y * v.y));
-        _regionMin = Vector2.Min(_regionMin, centre - half);
-        _regionMax = Vector2.Max(_regionMax, centre + half);
+        if (_device.OpeningRadius > 0f && Box(lens.position, _device.OpeningRadius * scale, out Vector2 lipLow, out Vector2 lipHigh))
+        {
+            glassLow = Vector2.Max(glassLow, lipLow);
+            glassHigh = Vector2.Min(glassHigh, lipHigh);
+            if (glassHigh.x <= glassLow.x || glassHigh.y <= glassLow.y)
+                return;
+        }
+        _regionMin = Vector2.Min(_regionMin, glassLow);
+        _regionMax = Vector2.Max(_regionMax, glassHigh);
         _regionAny = true;
     }
 
@@ -251,6 +272,17 @@ internal static partial class NightVisionEyepieces
         y1 = Mathf.Clamp(y1, 0, screenHeight);
         if (x1 - x0 < 64 || y1 - y0 < 64)
             return new RectInt(0, 0, screenWidth, screenHeight);
+        // Kept as it was while this frame's lies within it and is not much smaller: the head's sway moved its edges by a
+        // step now and again, and each time the picture's texture was made anew (1.8.188, six sizes in a few seconds).
+        RectInt kept = _thermalRegion;
+        if (kept.width > 0 && x0 >= kept.x && y0 >= kept.y && x1 <= kept.xMax && y1 <= kept.yMax
+            && kept.width - (x1 - x0) <= RegionSlack && kept.height - (y1 - y0) <= RegionSlack)
+            return kept;
+        // Anew: with a step to spare each way.
+        x0 = Mathf.Max(x0 - RegionStep, 0);
+        y0 = Mathf.Max(y0 - RegionStep, 0);
+        x1 = Mathf.Min(x1 + RegionStep, screenWidth);
+        y1 = Mathf.Min(y1 + RegionStep, screenHeight);
         return new RectInt(x0, y0, x1 - x0, y1 - y0);
     }
 
@@ -553,7 +585,11 @@ internal static partial class NightVisionEyepieces
         // Only what the eyepieces show, at the screen's own pixels (ThermalRegion below).
         int screenWidth = Mathf.Max(Screen.width, 1), screenHeight = Mathf.Max(Screen.height, 1);
         RectInt region = ThermalRegion(screenWidth, screenHeight);
-        int width = region.width, height = region.height;
+        // At the screen's own pixels while the region has no more of them than the whole view had at the old size
+        // (RegionBudget: what a frame cost then); a larger region (the goggles brought close to the eyes, 1.8.188: 57 frames
+        // a second for 74) at as many of them as that.
+        float density = Mathf.Min(1f, Mathf.Sqrt(RegionBudget / Mathf.Max(region.width * (float)region.height, 1f)));
+        int width = Mathf.Max(Mathf.RoundToInt(region.width * density), 16), height = Mathf.Max(Mathf.RoundToInt(region.height * density), 16);
         bool moved = region.x != _thermalRegion.x || region.y != _thermalRegion.y || region.width != _thermalRegion.width || region.height != _thermalRegion.height
             || _thermalWhole == null || _thermalWhole.width != screenWidth || _thermalWhole.height != screenHeight;
         if (_thermalPicture == null || _thermalPicture.width != width || _thermalPicture.height != height)
@@ -571,8 +607,8 @@ internal static partial class NightVisionEyepieces
             _thermalPicture.Create();
         }
 
-        // The whole frame's worth of it, for the eyepieces to read as they read any picture: this region of it written
-        // each frame, the rest black.
+        // The whole frame's worth of it, for the eyepieces to read as they read any picture: the region laid into its place
+        // each frame (beyond it, its edge drawn out: not seen).
         if (_thermalWhole == null || _thermalWhole.width != screenWidth || _thermalWhole.height != screenHeight || _thermalWhole.format != _thermalPicture.format)
         {
             if (_thermalWhole != null)
@@ -589,21 +625,18 @@ internal static partial class NightVisionEyepieces
         }
         if (moved)
         {
-            RenderTexture? active = RenderTexture.active;
-            RenderTexture.active = _thermalWhole;
-            GL.Clear(false, true, Color.black);
-            RenderTexture.active = active;
             _thermalRegion = region;
-            // No history from another region.
-            _thermalHeldFrame = -10;
             if (!_regionNoted || Time.unscaledTime - _regionNotedAt > 5f)
             {
                 _regionNoted = true;
                 _regionNotedAt = Time.unscaledTime;
-                NewCameraPlugin.Log?.LogInfo($"NVG thermal: our camera draws the eyepieces' region only, {region.width}x{region.height} at {region.x},{region.y} of {screenWidth}x{screenHeight} ({region.width * region.height / 1000}k pixels; the whole view at the old size was {1707 * 960 / 1000}k).");
+                NewCameraPlugin.Log?.LogInfo($"NVG thermal: our camera draws the eyepieces' region only, {region.width}x{region.height} at {region.x},{region.y} of {screenWidth}x{screenHeight} (drawn at {width}x{height}, {width * height / 1000}k pixels; the whole view at the old size was {1707 * 960 / 1000}k).");
             }
         }
-        PrepareThermalHold(width, height);
+        // (No hold over frames, and no jitter: 1.8.171 to 1.8.188 had one, to smooth the edges as the game's temporal
+        // pass smooths the main camera's; it never did smooth them, and with the jitter in truth applied (1.8.188) the
+        // picture shook and stayed behind the head's turn (the user's: "只有成像区域在动", "画面在剧烈颤抖"). A sight's
+        // camera has neither, and its picture is the clear one.)
         if (!_effectsCopied)
             CopyMainEffects(main);
         Camera camera = _thermalCamera;
@@ -628,7 +661,6 @@ internal static partial class NightVisionEyepieces
         // jitter of our own set here, before the render.
         if (camera.TryGetComponent(out PostProcessLayer ownLayer) && ownLayer.enabled)
             ownLayer.enabled = false;
-        JitterThermal(camera);
         HoldMotionBlur(camera);
         try
         {
@@ -645,7 +677,8 @@ internal static partial class NightVisionEyepieces
             GiveMotionBlurBack();
         }
         if (_thermalWhole != null && _thermalPicture != null)
-            Graphics.CopyTexture(_thermalPicture, 0, 0, 0, 0, width, height, _thermalWhole, 0, 0, region.x, region.y);
+            Graphics.Blit(_thermalPicture, _thermalWhole, new Vector2(screenWidth / (float)region.width, screenHeight / (float)region.height),
+                new Vector2(-region.x / (float)region.width, -region.y / (float)region.height));
     }
 
     // No post-processing motion blur on this camera's picture: it is rendered out of turn, from a place set by hand,
