@@ -239,47 +239,24 @@ internal static partial class NightVisionEyepieces
 
     // Its post-processing layer too (2.2 ms a frame, measured above): the whole of it ran over a black frame. Off as
     // the scene is first left out and on again as it is drawn again, not frame by frame. The eyepieces are laid in at
-    // the SSAA stage, which is not the layer's. Checked by the screen saved once with it on and once off.
+    // the SSAA stage, which is not the layer's. (The screen saved with it on and with it off, 1.8.186: alike.)
     private static PostProcessLayer? _mainLayerOff;
-    private static int _aloneFrames;
-    private const int LayerOffAfter = 240, LayerSaveOn = 200, LayerSaveOff = 420;
-    private static bool _layerSaved;
 
     private static void MainLayerOff(Camera? camera)
     {
         if (camera == null)
         {
-            _aloneFrames = 0;
             if (_mainLayerOff != null)
                 _mainLayerOff.enabled = true;
             _mainLayerOff = null;
             return;
         }
-        if (_aloneFrames <= LayerSaveOff)
-            _aloneFrames++;
-        // (The first time, a while with it on, for the screen saved to compare.)
-        bool off = _layerSaved || _aloneFrames > LayerOffAfter;
-        if (off && _mainLayerOff == null && camera.TryGetComponent(out PostProcessLayer layer) && layer.enabled)
+        if (_mainLayerOff == null && camera.TryGetComponent(out PostProcessLayer layer) && layer.enabled)
         {
             layer.enabled = false;
             _mainLayerOff = layer;
             NewCameraPlugin.Log?.LogInfo("NVG thermal: the main camera's post-processing layer off while it draws no scene.");
         }
-        if (_layerSaved || (_aloneFrames != LayerSaveOn && _aloneFrames != LayerSaveOff))
-            return;
-        try
-        {
-            string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgdump", "t7-main-layer");
-            System.IO.Directory.CreateDirectory(folder);
-            ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(folder, _aloneFrames == LayerSaveOn ? "layer-on.png" : "layer-off.png"));
-            NewCameraPlugin.Log?.LogInfo($"NVG thermal: saved the screen with the main camera's layer {(_aloneFrames == LayerSaveOn ? "on" : "off")} to {folder}.");
-        }
-        catch (System.Exception e)
-        {
-            NewCameraPlugin.Log?.LogWarning("NVG thermal: saving the screen failed: " + e.Message);
-        }
-        if (_aloneFrames == LayerSaveOff)
-            _layerSaved = true;
     }
 
     // Once it has rendered (and whenever the goggles are let go of).
@@ -527,8 +504,15 @@ internal static partial class NightVisionEyepieces
         // out of turn, has none worth the name (they smeared a motion blur over its whole picture); with the view moving it
         // left copies of every bright thing behind it, in steps (the lamp in the picture saved 2026-11-22). The hold above
         // is the one smoothing over frames, by this camera's own matrices, with a jitter of our own (JitterThermal).
-        if (camera.TryGetComponent(out PostProcessLayer ownLayer) && ownLayer.antialiasingMode != PostProcessLayer.Antialiasing.None)
-            ownLayer.antialiasingMode = PostProcessLayer.Antialiasing.None;
+        // In its place the layer's morphological one, which needs none: one sample a pixel left every slanted edge in steps
+        // (the user's, 2026-11-22: "边缘的像素还是挺强的", a lamp's edge seen close), and the hold alone did not smooth
+        // them.
+        if (camera.TryGetComponent(out PostProcessLayer ownLayer) && ownLayer.antialiasingMode != PostProcessLayer.Antialiasing.SubpixelMorphologicalAntialiasing)
+        {
+            ownLayer.antialiasingMode = PostProcessLayer.Antialiasing.SubpixelMorphologicalAntialiasing;
+            ownLayer.subpixelMorphologicalAntialiasing.quality = SubpixelMorphologicalAntialiasing.Quality.High;
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: our camera's layer (on {ownLayer.enabled}) smooths edges by SMAA.");
+        }
         HoldMotionBlur(camera);
         try
         {
