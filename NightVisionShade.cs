@@ -89,7 +89,11 @@ internal static partial class NightVisionEyepieces
             apply.SetGlobalVector(ShadeCupIds[k], new Vector4(c.x, c.y, c.z, distinct ? 1f : 0f));
             apply.SetGlobalVector(ShadeAxisIds[k], lens.forward);
             // Thermal goggles' display, kept dim at night, lights nothing.
-            float power = Active && !_device.Thermal ? _power[cups[k]] : 0f;
+            // Nor does the lens light the cup with the eye within it (a soft eyecup, the eye in the cup): what it lit there
+            // was the cup's own rings and the step where it sits on the eyepiece, in the phosphor's colour, arcs at the
+            // frame's edge (the user's: "接眼罩的位置有拼接的痕迹", still there with the whole cup darkened, 1.8.203, which
+            // takes the room's light away but not this).
+            float power = Active && !_device.Thermal && !(_device.CupYields && _eyeWithinCup) ? _power[cups[k]] : 0f;
             apply.SetGlobalVector(ShadeLightIds[k], (Vector4)(PhosphorColor().linear * (LensRadiance * power)));
         }
         apply.SetGlobalVector(ShadeLensId, new Vector4(_lensFloors[cups[0]].w * scale, Mathf.Cos(EyepieceField * 0.5f * Mathf.Deg2Rad), LensFieldSoftness, LensScatter));
