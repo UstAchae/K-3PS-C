@@ -140,8 +140,9 @@ internal static partial class NightVisionEyepieces
     {
         Device device = Envgb(cupOff: false, centreY: 0.02204f, floorDepth: 0.0055f, openingRadius: 0.0144f, rimHeight: 0.0285f, rimRadius: 0.0287f, card: 0.031f);
         device.Sealed = true;
-        // (CupYields left off: on, 1.8.200, the eye within the cup, the eyepieces showed two small discs of the plain scene
-        // and no picture at all, the user's; why is not known. The eye is held at the cup's lip again.)
+        // (On alone, 1.8.200, there was no picture: the lens map's card stayed above the rim, behind the eye. With the card
+        // brought down before the eye, 1.8.202: DrawLensMap.)
+        device.CupYields = true;
         device.CupHeight = 0.0285f;
         device.CupRadii0 = new Vector4(0.0144f, 0.0217f, 0.0223f, 0.0251f);
         device.CupRadii1 = new Vector4(0.0287f, 0.0287f, 0f, 0f);

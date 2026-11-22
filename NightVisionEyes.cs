@@ -594,7 +594,32 @@ internal static partial class NightVisionEyepieces
             _lensMapMaterial.SetVector(LensFloorIds[i], floor);
             _lensMapMaterial.SetVector(AxisIds[i], _lensNodes[i].forward);
         }
-        _lensMapMaterial.SetVector(OpeningId, new Vector4(_device.OpeningRadius, _device.RimRadius, _device.RimHeight, 0f) * scale);
+        // A soft eyecup with the eye within it (CupYields, KeptClear): the card, which stands just above the rim, would be
+        // behind the eye and never drawn, and no line of sight would find a lens: no glass and no picture at all, only the
+        // plain scene through the tubes (1.8.200, the user's: "一带上眼罩就不成像了"). So the card comes down to just before
+        // the eye, and the rim, now behind the eye too, is no longer asked whether the line of sight passes it (a line
+        // carried back to the rim's plane crosses it anywhere).
+        float cardHeight = (_device.RimHeight + _device.CardRaise + 0.001f) * scale, rimRadius = _device.RimRadius * scale;
+        float eyeAbove = float.MaxValue;
+        if (_device.CupYields)
+        {
+            for (int centre = CentreLensA; centre <= CentreLensB; centre += CentreLensB - CentreLensA)
+            {
+                Vector3 mouth = (fromEye * FromCamera(_lensNodes[centre], cameraPlace)).GetColumn(3);
+                eyeAbove = Mathf.Min(eyeAbove, Vector3.Dot(-mouth, _lensNodes[centre].forward));
+            }
+            if (eyeAbove < cardHeight + 0.0015f * scale)
+            {
+                cardHeight = Mathf.Max(eyeAbove - 0.0015f * scale, 0.0003f * scale);
+                rimRadius = 1000f;
+                if (!_cardLoweredNoted)
+                {
+                    _cardLoweredNoted = true;
+                    NewCameraPlugin.Log?.LogInfo($"NVG: the eye within {_device.Node}'s soft eyecup ({eyeAbove / scale * 1000f:F1} mm above its throat, the rim at {_device.RimHeight * 1000f:F1}): the lens map's card brought down to {cardHeight / scale * 1000f:F1} mm.");
+                }
+            }
+        }
+        _lensMapMaterial.SetVector(OpeningId, new Vector4(_device.OpeningRadius * scale, rimRadius, _device.RimHeight * scale, 0f));
         _lensMapMaterial.SetVector(EyeId, eye);
         // A thermal goggles' display lit evenly to its edge (the game's T-7 has no falloff); an image tube's dims at its rim.
         _lensMapMaterial.SetVector(OpticsId, new Vector4(EyeRelief * scale, ExitPupil * scale, ExitPupilEdge * scale, _device.Thermal ? 1f : RimLight));
@@ -627,13 +652,15 @@ internal static partial class NightVisionEyepieces
             Transform a = _lensNodes[centre], b = _lensNodes[centre + 1];
             Vector3 normal = (a.forward + b.forward).normalized;
             Vector3 pa = (fromEye * FromCamera(a, cameraPlace)).GetColumn(3), pb = (fromEye * FromCamera(b, cameraPlace)).GetColumn(3);
-            Vector3 middle = (pa + pb) * 0.5f + normal * ((_device.RimHeight + _device.CardRaise + 0.001f) * scale);
+            Vector3 middle = (pa + pb) * 0.5f + normal * cardHeight;
             Vector2 size = _device.CardSize * scale;
             Matrix4x4 card = Matrix4x4.TRS(middle, Quaternion.LookRotation(normal, _body.forward), new Vector3(size.x, size.y, 1f));
             buffer.DrawMesh(_card, card, _lensMapMaterial, 0, 1);
         }
         Graphics.ExecuteCommandBuffer(buffer);
     }
+
+    private static bool _cardLoweredNoted;
 
     private static Mesh CardMesh()
     {
