@@ -236,7 +236,9 @@ internal static partial class NightVisionEyepieces
     // and the picture saved again, each with the screen as shown. Then as it is to stay.
     private static int _dumpFrames;
     private const int DumpDrawnAt = 180, DumpSkippedAt = 540;
-    private static bool ProbeSmall => false;
+    // The picture at the main camera's size before its SSAA stage, not the screen's (the user's, 2026-11-22, on the numbers
+    // above: 71 frames a second down to 53 "不是更差了吗").
+    private static bool ProbeSmall => true;
     private static bool ProbeSkips => _dumpFrames > DumpDrawnAt;
 
     private static void NoteThermalCost(int width, int height)
