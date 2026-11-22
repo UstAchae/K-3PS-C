@@ -30,138 +30,16 @@ internal static partial class NightVisionEyepieces
     private static ThermalVisionDevice? _thermalDarkened;
     private static CommandBuffer? _thermalFinish;
     private static bool _effectsCopied, _pixelationNoted;
-    private const float SharpenRadius = 1f;
-
-    // What our camera's own image effects cost (the user's, 2026-11-22: "t-7的帧率也还是太低了"; 14 to 16 ms a frame
-    // against the vanilla goggles' 10.5): once the pictures above are saved, 240 frames each of our camera as it is,
-    // without the effects copied from the main camera (bloom, colour, sharpening), and without those and its
-    // post-processing layer; then as it was. Each one's mean frame time to the log.
-    private static int _costStep = -1, _costFrames;
-    private static float _costSeconds;
-    private static readonly System.Collections.Generic.List<MonoBehaviour> _costEffects = new System.Collections.Generic.List<MonoBehaviour>();
-    private static PostProcessLayer? _costLayer;
-    private static readonly string[] CostSteps = { "as it is", "without the main camera's effects", "without them and its post-processing layer", "as it is, the MAIN camera's post-processing layer off" };
-    private static PostProcessLayer? _costMainLayer;
-
-    private static void CostProbe(Camera camera)
-    {
-        if (_sharpenFrames <= SharpenOursAt || _costStep >= CostSteps.Length || !Active || _flip < 0.999f)
-            return;
-        if (_costStep < 0)
-        {
-            _costStep = 0;
-            _costEffects.Clear();
-            foreach (MonoBehaviour behaviour in camera.GetComponents<MonoBehaviour>())
-            {
-                if (behaviour != null && behaviour.enabled && System.Array.IndexOf(MainEffects, behaviour.GetType().Name) >= 0)
-                    _costEffects.Add(behaviour);
-            }
-            _costLayer = camera.TryGetComponent(out PostProcessLayer layer) && layer.enabled ? layer : null;
-            NewCameraPlugin.Log?.LogInfo($"NVG thermal cost: our camera has {_costEffects.Count} effect(s) copied from the main camera and {(_costLayer != null ? "a" : "no")} post-processing layer on.");
-        }
-        _costFrames++;
-        if (_costFrames > 40)
-            _costSeconds += Time.unscaledDeltaTime;
-        if (_costFrames < 240)
-            return;
-        NewCameraPlugin.Log?.LogInfo($"NVG thermal cost {_costStep + 1}/{CostSteps.Length}: {_costSeconds / 200f * 1000f:F1} ms a frame over 200 frames, our camera {CostSteps[_costStep]}.");
-        _costStep++;
-        _costFrames = 0;
-        _costSeconds = 0f;
-        bool effects = _costStep == 0 || _costStep >= 3, layerOn = _costStep != 2;
-        // The main camera draws no scene by now (SkipMainScene), yet its whole post-processing still runs over the black
-        // frame: what that costs (the user's, 2026-11-22: "只画 T-7 和它的目镜成像区域").
-        if (_costStep == 3)
-        {
-            Camera? main = Camera.main;
-            _costMainLayer = main != null && main.TryGetComponent(out PostProcessLayer mainLayer) && mainLayer.enabled ? mainLayer : null;
-            if (_costMainLayer != null)
-                _costMainLayer.enabled = false;
-        }
-        else if (_costMainLayer != null)
-        {
-            _costMainLayer.enabled = true;
-            _costMainLayer = null;
-        }
-        foreach (MonoBehaviour behaviour in _costEffects)
-        {
-            if (behaviour != null)
-                behaviour.enabled = effects;
-        }
-        if (_costLayer != null)
-            _costLayer.enabled = layerOn;
-    }
-
-    // The game's own picture of the same view, to hold ours against (the user's, 2026-11-22: "怎么感觉 T-7 看不到热源了",
-    // and the steps at edges): the first time thermal goggles are switched on, the game is left to draw them its own
-    // way for VanillaFrames frames (over the whole frame, no eyepieces), the screen saved near their end; then ours.
-    private static int _vanillaFrames;
-    private const int VanillaFrames = 240, VanillaSaveAt = 200;
-
-    internal static bool VanillaProbe(bool on)
-    {
-        if (_vanillaFrames >= VanillaFrames)
-            return false;
-        if (!on)
-            return true;
-        _vanillaFrames++;
-        if (_vanillaFrames == VanillaSaveAt)
-        {
-            try
-            {
-                string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgdump", "t7-edges");
-                System.IO.Directory.CreateDirectory(folder);
-                ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(folder, "vanilla-screen.png"));
-                ThermalVision? main = BodyVisibility.Cameras?.ThermalVision;
-                NewCameraPlugin.Log?.LogInfo($"NVG thermal: saved the game's own picture to {folder} (its ThermalVision on {main?.On}, noisy {main?.IsNoisy}, blurred {main?.IsMotionBlurred}, pixelated {main?.IsPixelated}, stuck {main?.IsFpsStuck}, sharpening {main?.UnsharpRadiusBlur}/{main?.UnsharpBias}).");
-            }
-            catch (System.Exception e)
-            {
-                NewCameraPlugin.Log?.LogWarning("NVG thermal: saving the game's picture failed: " + e.Message);
-            }
-        }
-        return true;
-    }
-    private static int _sharpenFrames;
-    private const int SharpenGameUntil = 150, SharpenOursAt = 300;
-
-    // The first frames with the goggles down and settled: the game's own reach (true), then ours.
-    private static bool SharpenProbe() => _sharpenFrames < SharpenGameUntil;
-
-    // Once our camera has rendered: the picture saved at the end of each stretch, as it is and not scaled.
-    private static void SaveSharpenProbe(ThermalVision? source)
-    {
-        if (_sharpenFrames > SharpenOursAt || !Active || _flip < 0.999f || _thermalPicture == null)
-            return;
-        _sharpenFrames++;
-        if (_sharpenFrames != SharpenGameUntil - 1 && _sharpenFrames != SharpenOursAt)
-            return;
-        string tag = _sharpenFrames == SharpenOursAt ? "reach-ours" : "reach-game";
-        try
-        {
-            string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgdump", "t7-edges");
-            System.IO.Directory.CreateDirectory(folder);
-            int width = _thermalPicture.width, height = _thermalPicture.height;
-            RenderTexture plain = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-            plain.filterMode = FilterMode.Point;
-            Graphics.Blit(_thermalPicture, plain);
-            RenderTexture? before = RenderTexture.active;
-            RenderTexture.active = plain;
-            var read = new Texture2D(width, height, TextureFormat.RGB24, false);
-            read.ReadPixels(new Rect(0f, 0f, width, height), 0, 0);
-            read.Apply(false);
-            RenderTexture.active = before;
-            RenderTexture.ReleaseTemporary(plain);
-            System.IO.File.WriteAllBytes(System.IO.Path.Combine(folder, tag + "-picture.png"), read.EncodeToPNG());
-            Object.Destroy(read);
-            ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(folder, tag + "-screen.png"));
-            NewCameraPlugin.Log?.LogInfo($"NVG thermal: saved {tag} to {folder} (picture {width}x{height}; sharpening reach {_thermal?.UnsharpRadiusBlur}, bias {_thermal?.UnsharpBias}; the game's {source?.UnsharpRadiusBlur}, {source?.UnsharpBias}; stuck {_thermal?.IsFpsStuck}).");
-        }
-        catch (System.Exception e)
-        {
-            NewCameraPlugin.Log?.LogWarning("NVG thermal: saving the picture failed: " + e.Message);
-        }
-    }
+    // Found 2026-11-22 (1.8.185, pictures saved of one run, and each way timed over 200 frames):
+    //  - The goggles' sharpening (reach 5, bias 2) is not what made the edges come in steps: still, the picture at that
+    //    reach has clean edges. It is as the game has it.
+    //  - Moving, the picture came in streaks and blocks: the game holds the goggles' frame for a few frames at a time
+    //    (IsFpsStuck, on for the main camera's ThermalVision), a frame standing still on the screen while the hold
+    //    over frames below follows the world; the two together tore it. Not held on ours.
+    //  - 15.8 ms a frame as it was; 15.2 without the effects copied from the main camera, 15.3 without them and our
+    //    camera's post-processing layer (nothing to gain there); 13.6 with the MAIN camera's layer off (SkipMainScene).
+    //  - The game's own picture of the goggles, from where this mod has the camera, is the inside of the eyecups over the
+    //    whole frame: nothing to hold ours against.
 
     // The picture held over frames (NvgIrLight.shader pass 6). The vanilla goggles' frame is the main camera's, jittered
     // and smoothed over frames by the game; ours was one sample a pixel from a camera not jittered, and every edge in
@@ -337,7 +215,11 @@ internal static partial class NightVisionEyepieces
     {
         GiveMainSceneBack();
         if (!ThermalAlone)
+        {
+            MainLayerOff(null);
             return;
+        }
+        MainLayerOff(camera);
         _sceneSkipped = camera;
         _skippedMask = camera.cullingMask;
         _skippedClear = camera.clearFlags;
@@ -353,6 +235,51 @@ internal static partial class NightVisionEyepieces
             _skipNoted = true;
             NewCameraPlugin.Log?.LogInfo("NVG thermal: sealed goggles down, the main camera draws no scene (only the device and the eyepieces).");
         }
+    }
+
+    // Its post-processing layer too (2.2 ms a frame, measured above): the whole of it ran over a black frame. Off as
+    // the scene is first left out and on again as it is drawn again, not frame by frame. The eyepieces are laid in at
+    // the SSAA stage, which is not the layer's. Checked by the screen saved once with it on and once off.
+    private static PostProcessLayer? _mainLayerOff;
+    private static int _aloneFrames;
+    private const int LayerOffAfter = 240, LayerSaveOn = 200, LayerSaveOff = 420;
+    private static bool _layerSaved;
+
+    private static void MainLayerOff(Camera? camera)
+    {
+        if (camera == null)
+        {
+            _aloneFrames = 0;
+            if (_mainLayerOff != null)
+                _mainLayerOff.enabled = true;
+            _mainLayerOff = null;
+            return;
+        }
+        if (_aloneFrames <= LayerSaveOff)
+            _aloneFrames++;
+        // (The first time, a while with it on, for the screen saved to compare.)
+        bool off = _layerSaved || _aloneFrames > LayerOffAfter;
+        if (off && _mainLayerOff == null && camera.TryGetComponent(out PostProcessLayer layer) && layer.enabled)
+        {
+            layer.enabled = false;
+            _mainLayerOff = layer;
+            NewCameraPlugin.Log?.LogInfo("NVG thermal: the main camera's post-processing layer off while it draws no scene.");
+        }
+        if (_layerSaved || (_aloneFrames != LayerSaveOn && _aloneFrames != LayerSaveOff))
+            return;
+        try
+        {
+            string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgdump", "t7-main-layer");
+            System.IO.Directory.CreateDirectory(folder);
+            ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(folder, _aloneFrames == LayerSaveOn ? "layer-on.png" : "layer-off.png"));
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: saved the screen with the main camera's layer {(_aloneFrames == LayerSaveOn ? "on" : "off")} to {folder}.");
+        }
+        catch (System.Exception e)
+        {
+            NewCameraPlugin.Log?.LogWarning("NVG thermal: saving the screen failed: " + e.Message);
+        }
+        if (_aloneFrames == LayerSaveOff)
+            _layerSaved = true;
     }
 
     // Once it has rendered (and whenever the goggles are let go of).
@@ -474,6 +401,7 @@ internal static partial class NightVisionEyepieces
         HoldMainThermal(BodyVisibility.Cameras, false);
         KeepThermalGlow(null);
         GiveMainSceneBack();
+        MainLayerOff(null);
         if (_thermalCamera != null)
             Object.Destroy(_thermalCamera.gameObject);
         _thermalCamera = null;
@@ -517,7 +445,8 @@ internal static partial class NightVisionEyepieces
             _thermal.PixelationUtilities = source.PixelationUtilities;
             // No grain on the goggles' picture (the user's, 2026-11-22: the real T-7 has none to speak of; the game adds it).
             _thermal.IsNoisy = false;
-            _thermal.IsFpsStuck = source.IsFpsStuck;
+            // (Not held for frames at a time: see above.)
+            _thermal.IsFpsStuck = false;
             // Nor the lag the game gives them (each frame blended into the ones before, through a texture of its own, by up
             // to 0.92: at our frame rate everything bright left a trail; the user's, 2026-11-22, "物体也拖影").
             _thermal.IsMotionBlurred = false;
@@ -532,11 +461,7 @@ internal static partial class NightVisionEyepieces
             }
             _thermal.IsPixelated = false;
             _thermal.ChromaticAberrationThermalShift = source.ChromaticAberrationThermalShift;
-            // The goggles' sharpening reaches SharpenRadius of this picture's pixels, not the game's 5: with pixelation
-            // off the edges still came in steps some 5 pixels deep (the user's, 2026-11-22: "物体边缘的地方有像素感"),
-            // which is that reach. Measured, not taken on trust: the first time the goggles are down the picture is
-            // saved once at the game's reach and once at ours (SharpenProbe).
-            _thermal.UnsharpRadiusBlur = SharpenProbe() ? source.UnsharpRadiusBlur : SharpenRadius;
+            _thermal.UnsharpRadiusBlur = source.UnsharpRadiusBlur;
             _thermal.UnsharpBias = source.UnsharpBias;
         }
         if (!_thermal.On)
@@ -619,8 +544,6 @@ internal static partial class NightVisionEyepieces
             camera.targetTexture = null;
             GiveMotionBlurBack();
         }
-        SaveSharpenProbe(source);
-        CostProbe(camera);
     }
 
     // No post-processing motion blur on this camera's picture: it is rendered out of turn, from a place set by hand,
@@ -629,11 +552,14 @@ internal static partial class NightVisionEyepieces
     // volumes this camera's layer takes, for this render only; the main camera's frame keeps it.
     private static readonly System.Collections.Generic.List<PostProcessVolume> _thermalVolumes = new System.Collections.Generic.List<PostProcessVolume>();
     private static readonly System.Collections.Generic.List<MotionBlur> _motionBlurHeld = new System.Collections.Generic.List<MotionBlur>();
-    private static bool _motionBlurNoted;
+    private static bool _motionBlurNoted, _settingsNoted;
+    private static readonly System.Collections.Generic.List<Grain> _grainHeld = new System.Collections.Generic.List<Grain>();
+    private static readonly System.Text.StringBuilder _settingsNames = new System.Text.StringBuilder();
 
     private static void HoldMotionBlur(Camera camera)
     {
         _motionBlurHeld.Clear();
+        _grainHeld.Clear();
         if (!camera.TryGetComponent(out PostProcessLayer layer) || PostProcessManager.instance == null)
             return;
         _thermalVolumes.Clear();
@@ -643,10 +569,32 @@ internal static partial class NightVisionEyepieces
             PostProcessProfile? profile = volume != null ? volume.sharedProfile : null;
             if (volume != null && volume.HasInstantiatedProfile())
                 profile = volume.profile;
-            if (profile == null || !profile.TryGetSettings(out MotionBlur blur) || blur == null || !blur.enabled.value || _motionBlurHeld.Contains(blur))
+            if (profile == null)
+                continue;
+            // Nor a film grain: with the goggles' own grain off there was still grain new on every frame all over the
+            // picture (the pictures saved 2026-11-22; the user's "还有噪点").
+            if (profile.TryGetSettings(out Grain grain) && grain != null && grain.enabled.value && !_grainHeld.Contains(grain))
+            {
+                grain.enabled.value = false;
+                _grainHeld.Add(grain);
+            }
+            if (!_settingsNoted)
+            {
+                foreach (PostProcessEffectSettings setting in profile.settings)
+                {
+                    if (setting != null && setting.enabled.value && setting.active)
+                        _settingsNames.Append(setting.GetType().Name).Append(' ');
+                }
+            }
+            if (!profile.TryGetSettings(out MotionBlur blur) || blur == null || !blur.enabled.value || _motionBlurHeld.Contains(blur))
                 continue;
             blur.enabled.value = false;
             _motionBlurHeld.Add(blur);
+        }
+        if (!_settingsNoted)
+        {
+            _settingsNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: our camera's layer takes {_thermalVolumes.Count} volume(s), with on: {_settingsNames}; grain held off: {_grainHeld.Count}.");
         }
         if (_motionBlurHeld.Count > 0 && !_motionBlurNoted)
         {
@@ -663,6 +611,12 @@ internal static partial class NightVisionEyepieces
                 blur.enabled.value = true;
         }
         _motionBlurHeld.Clear();
+        foreach (Grain grain in _grainHeld)
+        {
+            if (grain != null)
+                grain.enabled.value = true;
+        }
+        _grainHeld.Clear();
     }
 
     // On the main camera the game's SSAA stage gives the thermal frame one more pass of the goggles' own material
