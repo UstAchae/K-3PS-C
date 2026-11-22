@@ -94,6 +94,7 @@ internal static partial class NightVisionEyepieces
         _direct = _directShader != null && LensesOn(camera) && PrepareRelative(camera);
         if (_direct)
             HideDevice(camera);
+        SkipMainScene(camera);
         ClaimFusion(camera);
     }
 
@@ -141,6 +142,8 @@ internal static partial class NightVisionEyepieces
 
     internal static void OnCameraPostRender(Camera camera)
     {
+        if (camera == Camera.main)
+            GiveMainSceneBack();
         if (camera == Camera.main)
             ShowDeviceAgain();
     }

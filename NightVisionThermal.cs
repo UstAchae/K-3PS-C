@@ -179,6 +179,75 @@ internal static partial class NightVisionEyepieces
         on = false;
     }
 
+    // Sealed thermal goggles all the way down: their cups shut out all there is around the eyepieces, and the main
+    // camera's whole scene was drawn only to be hidden behind them, while the picture in the eyepieces is our thermal
+    // camera's, a second drawing of the scene (the user's, 2026-11-22: "只画 T-7 目镜里的东西"). So the main camera
+    // draws no scene then, for that frame only: nothing in its culling mask, cleared to black. This mod's own drawing
+    // on it (the device from each eye, the eyepieces) is by command buffers and goes on. Not while the goggles flip,
+    // when what is around them is seen.
+    private static Camera? _sceneSkipped;
+    private static int _skippedMask;
+    private static CameraClearFlags _skippedClear;
+    private static Color _skippedBackground;
+    private static bool _skipNoted;
+
+    private static bool ThermalAlone => _direct && _device.Thermal && _device.Sealed && Active && _flip >= 0.999f
+        && _thermalCamera != null && _thermalPicture != null;
+
+    // As the main camera is about to cull.
+    private static void SkipMainScene(Camera camera)
+    {
+        GiveMainSceneBack();
+        if (!ThermalAlone)
+            return;
+        _sceneSkipped = camera;
+        _skippedMask = camera.cullingMask;
+        _skippedClear = camera.clearFlags;
+        _skippedBackground = camera.backgroundColor;
+        camera.cullingMask = 0;
+        camera.clearFlags = CameraClearFlags.SolidColor;
+        camera.backgroundColor = Color.black;
+        if (!_skipNoted)
+        {
+            _skipNoted = true;
+            NewCameraPlugin.Log?.LogInfo("NVG thermal: sealed goggles down, the main camera draws no scene (only the device and the eyepieces).");
+        }
+    }
+
+    // Once it has rendered (and whenever the goggles are let go of).
+    private static void GiveMainSceneBack()
+    {
+        if (_sceneSkipped != null)
+        {
+            _sceneSkipped.cullingMask = _skippedMask;
+            _sceneSkipped.clearFlags = _skippedClear;
+            _sceneSkipped.backgroundColor = _skippedBackground;
+        }
+        _sceneSkipped = null;
+    }
+
+    // What a frame takes with the goggles down, for the log: the mean over 300 frames, once for each way it is drawn.
+    private static int _costFrames, _costKind = -1;
+    private static float _costSeconds;
+    private static void NoteThermalCost(int width, int height)
+    {
+        int kind = (_sceneSkipped != null ? 1 : 0) + width * 2;
+        if (kind != _costKind)
+        {
+            _costKind = kind;
+            _costFrames = 0;
+            _costSeconds = 0f;
+        }
+        if (_costFrames < 0)
+            return;
+        _costFrames++;
+        _costSeconds += Time.unscaledDeltaTime;
+        if (_costFrames < 300)
+            return;
+        NewCameraPlugin.Log?.LogInfo($"NVG thermal: {_costSeconds / _costFrames * 1000f:F1} ms a frame over {_costFrames} frames (picture {width}x{height}, the main camera's scene {(_sceneSkipped != null ? "not drawn" : "drawn")}).");
+        _costFrames = -1;
+    }
+
     // The main camera's thermal held off (taken) or given back as the game last asked for it.
     private static void HoldMainThermal(CameraManager? cameras, bool taken)
     {
@@ -273,6 +342,7 @@ internal static partial class NightVisionEyepieces
     {
         HoldMainThermal(BodyVisibility.Cameras, false);
         KeepThermalGlow(null);
+        GiveMainSceneBack();
         if (_thermalCamera != null)
             Object.Destroy(_thermalCamera.gameObject);
         _thermalCamera = null;
@@ -342,10 +412,10 @@ internal static partial class NightVisionEyepieces
             _thermal.TextureMask.enabled = false;
         FinishThermal();
 
-        // At the main camera's own resolution before its SSAA stage scales it to the screen (lower with DLSS and the
-        // like): the goggles' grain and pixels drawn at the scale the game draws them, then spread over the screen.
-        SSAA? ssaa = main.GetComponent<SSAA>();
-        int width = Mathf.Max(ssaa != null ? ssaa.GetInputWidth() : Screen.width, 1), height = Mathf.Max(ssaa != null ? ssaa.GetInputHeight() : Screen.height, 1);
+        // At the screen's own size (the user's, 2026-11-22: what not drawing the main camera's scene saves goes to the
+        // goggles' picture). It had been the main camera's size before its SSAA stage scales it to the screen (two thirds
+        // of it at the user's settings), for the goggles' grain to be at the game's scale; the grain is off now.
+        int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
         if (_thermalPicture == null || _thermalPicture.width != width || _thermalPicture.height != height)
         {
             if (_thermalPicture != null)
@@ -368,6 +438,14 @@ internal static partial class NightVisionEyepieces
         camera.CopyFrom(main);
         camera.transform.SetPositionAndRotation(main.transform.position, main.transform.rotation);
         camera.rect = new Rect(0f, 0f, 1f, 1f);
+        // The main camera as it would be, were its scene not left out for this frame (SkipMainScene).
+        if (_sceneSkipped == main)
+        {
+            camera.cullingMask = _skippedMask;
+            camera.clearFlags = _skippedClear;
+            camera.backgroundColor = _skippedBackground;
+        }
+        NoteThermalCost(width, height);
         camera.projectionMatrix = main.nonJitteredProjectionMatrix;
         camera.targetTexture = _thermalPicture;
         HoldMotionBlur(camera);
