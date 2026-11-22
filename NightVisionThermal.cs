@@ -229,6 +229,7 @@ internal static partial class NightVisionEyepieces
         camera.rect = new Rect(0f, 0f, 1f, 1f);
         camera.projectionMatrix = main.nonJitteredProjectionMatrix;
         camera.targetTexture = _thermalPicture;
+        HoldMotionBlur(camera);
         try
         {
             camera.Render();
@@ -241,7 +242,50 @@ internal static partial class NightVisionEyepieces
         {
             camera.ResetProjectionMatrix();
             camera.targetTexture = null;
+            GiveMotionBlurBack();
         }
+    }
+
+    // No post-processing motion blur on this camera's picture: it is rendered out of turn, from a place set by hand,
+    // and has no motion vectors of its own worth the name; a motion blur in a volume it comes under (any mod's, or
+    // the game's) smeared its whole picture (the user's, 2026-11-22, with another mod's motion blur on). Off in the
+    // volumes this camera's layer takes, for this render only; the main camera's frame keeps it.
+    private static readonly System.Collections.Generic.List<PostProcessVolume> _thermalVolumes = new System.Collections.Generic.List<PostProcessVolume>();
+    private static readonly System.Collections.Generic.List<MotionBlur> _motionBlurHeld = new System.Collections.Generic.List<MotionBlur>();
+    private static bool _motionBlurNoted;
+
+    private static void HoldMotionBlur(Camera camera)
+    {
+        _motionBlurHeld.Clear();
+        if (!camera.TryGetComponent(out PostProcessLayer layer) || PostProcessManager.instance == null)
+            return;
+        _thermalVolumes.Clear();
+        PostProcessManager.instance.GetActiveVolumes(layer, _thermalVolumes, true, true);
+        foreach (PostProcessVolume volume in _thermalVolumes)
+        {
+            PostProcessProfile? profile = volume != null ? volume.sharedProfile : null;
+            if (volume != null && volume.HasInstantiatedProfile())
+                profile = volume.profile;
+            if (profile == null || !profile.TryGetSettings(out MotionBlur blur) || blur == null || !blur.enabled.value || _motionBlurHeld.Contains(blur))
+                continue;
+            blur.enabled.value = false;
+            _motionBlurHeld.Add(blur);
+        }
+        if (_motionBlurHeld.Count > 0 && !_motionBlurNoted)
+        {
+            _motionBlurNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: a post-processing motion blur ({_motionBlurHeld.Count}) kept off our thermal camera's picture.");
+        }
+    }
+
+    private static void GiveMotionBlurBack()
+    {
+        foreach (MotionBlur blur in _motionBlurHeld)
+        {
+            if (blur != null)
+                blur.enabled.value = true;
+        }
+        _motionBlurHeld.Clear();
     }
 
     // On the main camera the game's SSAA stage gives the thermal frame one more pass of the goggles' own material
