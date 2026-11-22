@@ -29,7 +29,7 @@ internal static partial class NightVisionEyepieces
     private static RenderTexture? _thermalPicture;
     private static ThermalVisionDevice? _thermalDarkened;
     private static CommandBuffer? _thermalFinish;
-    private static bool _effectsCopied;
+    private static bool _effectsCopied, _pixelationNoted;
 
     // The picture held over frames (NvgIrLight.shader pass 6). The vanilla goggles' frame is the main camera's, jittered
     // and smoothed over frames by the game; ours was one sample a pixel from a camera not jittered, and every edge in
@@ -204,7 +204,7 @@ internal static partial class NightVisionEyepieces
     private static void SkipMainScene(Camera camera)
     {
         GiveMainSceneBack();
-        if (!ThermalAlone || !ProbeSkips)
+        if (!ThermalAlone)
             return;
         _sceneSkipped = camera;
         _skippedMask = camera.cullingMask;
@@ -240,59 +240,12 @@ internal static partial class NightVisionEyepieces
     // camera's size before its SSAA stage (1707x960) with the scene drawn 18.3 ms a frame, not drawn 14.0; at the
     // screen's size not drawn 19.0, drawn 24.2.
     //
-    // With the scene not drawn, light bands came into what the eyepieces show after a few seconds (the user's: "白色
-    // 阴影", there from the moment the scene was first left out). Where they come in is not known, so the first time
-    // the goggles are down: 180 frames with the scene drawn, then our camera's picture saved; 360 with it not drawn,
-    // and the picture saved again, each with the screen as shown. Then as it is to stay.
-    private static int _dumpFrames;
-    private static float _dumpSeconds;
-    private const int DumpDrawnAt = 180, DumpSkippedAt = 540;
-    // The picture at the main camera's size before its SSAA stage, not the screen's (the user's, 2026-11-22, on the numbers
-    // above: 71 frames a second down to 53 "不是更差了吗").
-    private static bool ProbeSmall => true;
-    private static bool ProbeSkips => _dumpFrames > DumpDrawnAt;
-
-    private static void NoteThermalCost(int width, int height)
-    {
-    }
-
-    // Once our camera has rendered.
-    private static void DumpThermal()
-    {
-        if (_dumpFrames > DumpSkippedAt || !Active || _flip < 0.999f || _thermalPicture == null)
-            return;
-        _dumpFrames++;
-        if (_dumpFrames > DumpDrawnAt + 60)
-            _dumpSeconds += Time.unscaledDeltaTime;
-        if (_dumpFrames == DumpSkippedAt)
-            NewCameraPlugin.Log?.LogInfo($"NVG thermal: {_dumpSeconds / (DumpSkippedAt - DumpDrawnAt - 60) * 1000f:F1} ms a frame over {DumpSkippedAt - DumpDrawnAt - 60} frames, the main camera's scene not drawn and its far plane at {SkippedFar} m (picture {_thermalPicture.width}x{_thermalPicture.height}).");
-        if (_dumpFrames != DumpDrawnAt && _dumpFrames != DumpSkippedAt)
-            return;
-        string tag = _dumpFrames == DumpDrawnAt ? "scene-drawn" : "scene-not-drawn";
-        try
-        {
-            string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgdump", "t7-bands");
-            System.IO.Directory.CreateDirectory(folder);
-            int width = _thermalPicture.width, height = _thermalPicture.height;
-            RenderTexture plain = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-            Graphics.Blit(_thermalPicture, plain);
-            RenderTexture? before = RenderTexture.active;
-            RenderTexture.active = plain;
-            var read = new Texture2D(width, height, TextureFormat.RGB24, false);
-            read.ReadPixels(new Rect(0f, 0f, width, height), 0, 0);
-            read.Apply(false);
-            RenderTexture.active = before;
-            RenderTexture.ReleaseTemporary(plain);
-            System.IO.File.WriteAllBytes(System.IO.Path.Combine(folder, tag + "-picture.png"), read.EncodeToPNG());
-            Object.Destroy(read);
-            ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(folder, tag + "-screen.png"));
-            NewCameraPlugin.Log?.LogInfo($"NVG thermal: saved {tag} (our camera's picture {width}x{height}, and the screen) to {folder}; the main camera's scene {(_sceneSkipped != null ? "not drawn" : "drawn")} this frame.");
-        }
-        catch (System.Exception e)
-        {
-            NewCameraPlugin.Log?.LogWarning("NVG thermal: saving the picture failed: " + e.Message);
-        }
-    }
+    // With the scene not drawn, light bands came into what the eyepieces show ("白色阴影"): the lights' shafts, gone
+    // with the far plane brought in (SkippedFar; 15.6 ms a frame then, elsewhere in the hideout).
+    //
+    // The picture at the main camera's size before its SSAA stage, not the screen's (the user's, on the numbers above:
+    // 71 frames a second down to 53 "不是更差了吗").
+    private static bool PictureAtInputSize => true;
 
     // The main camera's thermal held off (taken) or given back as the game last asked for it.
     private static void HoldMainThermal(CameraManager? cameras, bool taken)
@@ -437,7 +390,15 @@ internal static partial class NightVisionEyepieces
             // to 0.92: at our frame rate everything bright left a trail; the user's, 2026-11-22, "物体也拖影").
             _thermal.IsMotionBlurred = false;
             _thermal.IsGlitch = source.IsGlitch;
-            _thermal.IsPixelated = source.IsPixelated;
+            // Nor the game's blocks (256 across, some 7 pixels of this picture each): the goggles' own data has them off
+            // (items.json: IsPixelated false), yet the main camera's ThermalVision, held off here, still said on, and
+            // the picture came in blocks (the pictures saved 2026-11-22; the user's "还是不清晰").
+            if (!_pixelationNoted)
+            {
+                _pixelationNoted = true;
+                NewCameraPlugin.Log?.LogInfo($"NVG thermal: the main camera's ThermalVision says noisy {source.IsNoisy}, blurred {source.IsMotionBlurred}, pixelated {source.IsPixelated} (mode {source.PixelationUtilities?.Mode}, {source.PixelationUtilities?.BlockCount} blocks), stuck {source.IsFpsStuck}, glitch {source.IsGlitch}; ours: none of the first three.");
+            }
+            _thermal.IsPixelated = false;
             _thermal.ChromaticAberrationThermalShift = source.ChromaticAberrationThermalShift;
             _thermal.UnsharpRadiusBlur = source.UnsharpRadiusBlur;
             _thermal.UnsharpBias = source.UnsharpBias;
@@ -464,7 +425,7 @@ internal static partial class NightVisionEyepieces
         // goggles' picture). It had been the main camera's size before its SSAA stage scales it to the screen (two thirds
         // of it at the user's settings), for the goggles' grain to be at the game's scale; the grain is off now.
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
-        if (ProbeSmall && main.TryGetComponent(out SSAA ssaa))
+        if (PictureAtInputSize && main.TryGetComponent(out SSAA ssaa))
         {
             width = Mathf.Max(ssaa.GetInputWidth(), 1);
             height = Mathf.Max(ssaa.GetInputHeight(), 1);
@@ -499,7 +460,6 @@ internal static partial class NightVisionEyepieces
             camera.backgroundColor = _skippedBackground;
             camera.farClipPlane = _skippedFarPlane;
         }
-        NoteThermalCost(width, height);
         camera.projectionMatrix = main.nonJitteredProjectionMatrix;
         camera.targetTexture = _thermalPicture;
         // Its layer's own temporal anti-aliasing off: that follows the engine's motion vectors, which this camera, rendered
@@ -523,7 +483,6 @@ internal static partial class NightVisionEyepieces
             camera.targetTexture = null;
             GiveMotionBlurBack();
         }
-        DumpThermal();
     }
 
     // No post-processing motion blur on this camera's picture: it is rendered out of turn, from a place set by hand,

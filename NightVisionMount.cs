@@ -94,6 +94,8 @@ internal static partial class NightVisionEyepieces
         internal Vector3 CarriageAlong;
     }
 
+    // Every mount goes 10 mm further down and 10 mm further toward the face than its mesh's stops allow (the user's,
+    // 2026-11-22: "所有支架的往下和后两个方向的调整再给一些距离"); the GPNVG-18's rail two slots further.
     private static readonly Mount[] Mounts =
     {
         new Mount
@@ -102,7 +104,7 @@ internal static partial class NightVisionEyepieces
             Base = "nvg_norotos_tatm_universal_base_LOD0", Arm = "nvg_norotos_tatm_universal_arm_LOD0", Lead = 0.004f,
             TiltPivot = new Vector3(0f, -0.0121f, -0.0232f), TiltAxis = Vector3.right, Slot = new Vector3(0f, -0.994f, -0.109f),
             Screw = new Vector3(0.0256f, -0.02946f, -0.04342f), ScrewAxis = Vector3.right, ScrewFrom = 0.0222f, ScrewLead = 0.003f,
-            HeightMin = 0f, HeightMax = 0.02f, MinTilt = -15f, MaxTilt = 15f, SlideBack = 0.02f, SlideForward = 0.004f,
+            HeightMin = -0.01f, HeightMax = 0.02f, MinTilt = -15f, MaxTilt = 15f, SlideBack = 0.03f, SlideForward = 0.004f,
         },
         // The GPNVG-18 on its Wilcox L4 G24: about 0.9 in of height and 1.4 in of fore and aft travel; 15 degrees of tilt,
         // all of it eyepieces up from where the model has it (the G24's knob turns one way from its stop).
@@ -117,12 +119,12 @@ internal static partial class NightVisionEyepieces
             PlatePlanes = new[] { new Vector4(0f, 1f, 0f, -0.0035f) },
             Slot = Vector3.down,
             // Slots 1 to 10 along the goggle's Y (toward the eyes), about 4 mm apart; the model's pawl sits in the 7th.
-            Slots = new[] { -0.03108f, -0.02699f, -0.02296f, -0.01887f, -0.01485f, -0.01076f, -0.00674f, -0.00271f, 0.00138f, 0.00540f },
+            Slots = new[] { -0.03108f, -0.02699f, -0.02296f, -0.01887f, -0.01485f, -0.01076f, -0.00674f, -0.00271f, 0.00138f, 0.00540f, 0.00943f, 0.01345f },
             ModelSlot = 6,
             ButtonPoint = new Vector3(-0.0430f, -0.0068f, -0.0240f), ButtonPivot = new Vector3(-0.03825f, -0.0068f, -0.0224f),
             ButtonAxis = Vector3.up, ButtonAngle = -12f,
             ButtonBaseLeft = -0.0425f, ButtonBaseRight = -0.0341f, ButtonArchInner = new Vector2(-0.0129f, -0.0006f),
-            HeightMin = -0.0115f, HeightMax = 0.0115f, MinTilt = 0f, MaxTilt = 15f,
+            HeightMin = -0.0215f, HeightMax = 0.0115f, MinTilt = 0f, MaxTilt = 15f,
         },
         // Wilcox's L4 G24 (WTT): the black one has the carriage at the top of its travel, the coyote one at the bottom,
         // 34.3 mm lower. The shoe slides from the arm's end stop to the hinge's block.
@@ -130,14 +132,14 @@ internal static partial class NightVisionEyepieces
         {
             Prefix = "nvg_wilcox_l4g24_mount", Hinge = "axis", Shoe = "axis/mod_nvg", L4 = true,
             Base = "nvg_wilcox_l4g24_mount_LOD0", Arm = "nvg_wilcox_l4g24_mount_axis_LOD0",
-            CarriagePoint = new Vector3(0f, 0.010f, 0.012f), CarriageLow = -0.03748f, ShoeLow = -0.0574f, HeightMin = 0f, HeightMax = 0.0343f,
+            CarriagePoint = new Vector3(0f, 0.010f, 0.012f), CarriageLow = -0.03748f, ShoeLow = -0.0574f, HeightMin = -0.01f, HeightMax = 0.0343f,
             LeverCentre = new Vector3(0f, -0.00775f, 0.0157f), LeverRadius = 0.0106f,
             LeverHandleMin = new Vector2(-0.021f, -0.003f), LeverHandleMax = new Vector2(-0.002f, 0.0135f), LeverFloor = 0.0155f, LeverFace = 0.0157f,
             LeverAxis = Vector3.forward, LeverAngle = -92f,
             TiltScrewPoint = new Vector3(-0.026f, -0.02722f, 0.02303f), TiltScrewAxis = Vector3.right, TiltPerTurn = 5f, MinTilt = -10f, MaxTilt = 10f,
             WasherPoint = new Vector3(0.02438f, -0.01275f, 0.01525f), LockPoint = new Vector3(0.0303f, -0.01275f, 0.01525f), LockTurns = 2f, LockLead = 0.0008f,
             ButtonLeftPoint = new Vector3(-0.0243f, -0.0365f, -0.014f), ButtonRightPoint = new Vector3(0.0243f, -0.0365f, -0.014f), ButtonDepth = 0.002f,
-            SlideForward = 0.009f, SlideBack = 0.013f,
+            SlideForward = 0.009f, SlideBack = 0.023f,
         },
         // The ENVG-B's own mount (K-ENVG-B): a plate on the helmet with a screw that runs a carriage up or down it (1 mm
         // a turn); the device flips on the carriage's hinge; the arm tilts on a pin into a bracket whose rails the
@@ -151,7 +153,7 @@ internal static partial class NightVisionEyepieces
             TiltNode = "nvg_envgb_psq42_mount_LOD0/envgb_carriage/axis/envgb_arm/envgb_tilt",
             SlideNode = "nvg_envgb_psq42_mount_LOD0/envgb_carriage/axis/envgb_arm/envgb_tilt/envgb_bracket/envgb_slide",
             CarriageAlong = new Vector3(0.0003f, 0.9982f, 0.0602f), Lead = 0.001f,
-            HeightMin = -0.003f, HeightMax = 0.014f, MinTilt = -10f, MaxTilt = 20f, SlideBack = 0.040f, SlideForward = 0.006f,
+            HeightMin = -0.013f, HeightMax = 0.014f, MinTilt = -10f, MaxTilt = 20f, SlideBack = 0.050f, SlideForward = 0.006f,
         },
         // The F-PANO's own mount (K-FPANO, 0.1.2), laid out as the ENVG-B's: a carriage that slides up the base plate, the
         // frame flipping on it, the arm tilting on the frame's pin, the device's slide along the optical axis. No height
@@ -164,7 +166,7 @@ internal static partial class NightVisionEyepieces
             TiltNode = "fpano_carriage/axis/fpano_frame/fpano_tilt",
             SlideNode = "fpano_carriage/axis/fpano_frame/fpano_tilt/fpano_arm/fpano_slide",
             CarriageAlong = Vector3.up, Lead = 0.001f,
-            HeightMin = -0.005f, HeightMax = 0.015f, MinTilt = -10f, MaxTilt = 20f, SlideBack = 0.030f, SlideForward = 0.010f,
+            HeightMin = -0.015f, HeightMax = 0.015f, MinTilt = -10f, MaxTilt = 20f, SlideBack = 0.040f, SlideForward = 0.010f,
         },
     };
 
