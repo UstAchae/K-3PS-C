@@ -32,6 +32,51 @@ internal static partial class NightVisionEyepieces
     private static bool _effectsCopied, _pixelationNoted;
     private const float SharpenRadius = 1f;
 
+    // What our camera's own image effects cost (the user's, 2026-11-22: "t-7的帧率也还是太低了"; 14 to 16 ms a frame
+    // against the vanilla goggles' 10.5): once the pictures above are saved, 240 frames each of our camera as it is,
+    // without the effects copied from the main camera (bloom, colour, sharpening), and without those and its
+    // post-processing layer; then as it was. Each one's mean frame time to the log.
+    private static int _costStep = -1, _costFrames;
+    private static float _costSeconds;
+    private static readonly System.Collections.Generic.List<MonoBehaviour> _costEffects = new System.Collections.Generic.List<MonoBehaviour>();
+    private static PostProcessLayer? _costLayer;
+    private static readonly string[] CostSteps = { "as it is", "without the main camera's effects", "without them and its post-processing layer" };
+
+    private static void CostProbe(Camera camera)
+    {
+        if (_sharpenFrames <= SharpenOursAt || _costStep >= CostSteps.Length || !Active || _flip < 0.999f)
+            return;
+        if (_costStep < 0)
+        {
+            _costStep = 0;
+            _costEffects.Clear();
+            foreach (MonoBehaviour behaviour in camera.GetComponents<MonoBehaviour>())
+            {
+                if (behaviour != null && behaviour.enabled && System.Array.IndexOf(MainEffects, behaviour.GetType().Name) >= 0)
+                    _costEffects.Add(behaviour);
+            }
+            _costLayer = camera.TryGetComponent(out PostProcessLayer layer) && layer.enabled ? layer : null;
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal cost: our camera has {_costEffects.Count} effect(s) copied from the main camera and {(_costLayer != null ? "a" : "no")} post-processing layer on.");
+        }
+        _costFrames++;
+        if (_costFrames > 40)
+            _costSeconds += Time.unscaledDeltaTime;
+        if (_costFrames < 240)
+            return;
+        NewCameraPlugin.Log?.LogInfo($"NVG thermal cost {_costStep + 1}/{CostSteps.Length}: {_costSeconds / 200f * 1000f:F1} ms a frame over 200 frames, our camera {CostSteps[_costStep]}.");
+        _costStep++;
+        _costFrames = 0;
+        _costSeconds = 0f;
+        bool effects = _costStep == 0 || _costStep >= CostSteps.Length, layerOn = _costStep != 2;
+        foreach (MonoBehaviour behaviour in _costEffects)
+        {
+            if (behaviour != null)
+                behaviour.enabled = effects;
+        }
+        if (_costLayer != null)
+            _costLayer.enabled = layerOn;
+    }
+
     // The game's own picture of the same view, to hold ours against (the user's, 2026-11-22: "怎么感觉 T-7 看不到热源了",
     // and the steps at edges): the first time thermal goggles are switched on, the game is left to draw them its own
     // way for VanillaFrames frames (over the whole frame, no eyepieces), the screen saved near their end; then ours.
@@ -560,6 +605,7 @@ internal static partial class NightVisionEyepieces
             GiveMotionBlurBack();
         }
         SaveSharpenProbe(source);
+        CostProbe(camera);
     }
 
     // No post-processing motion blur on this camera's picture: it is rendered out of turn, from a place set by hand,
