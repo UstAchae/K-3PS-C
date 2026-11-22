@@ -130,7 +130,13 @@ internal static partial class NightVisionEyepieces
         Vector4 clip = projection * new Vector4(ahead.x, ahead.y, ahead.z, 1f);
         Vector2 uv = clip.w > 1e-4f ? new Vector2(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f) : new Vector2(0.5f, 0.5f);
         float radius = 0.5f * Mathf.Tan(_device.FieldDegrees * 0.5f * Mathf.Deg2Rad) * projection.m11;
-        Interop.EyepieceFusion.FieldInMainUv = new Vector4(uv.x, uv.y, radius, camera.aspect);
+        // The tube's whole field about its axis: only until the glass's own circle is known (FusionField, as the lenses are
+        // drawn, later in the frame). From then on the last frame's glass circle stands until this frame's replaces it:
+        // set here every frame, this far larger circle about another centre was what a mod read that looked before the
+        // lenses were drawn (K-ENVG-B's rectangle, 2026-11-22: "太大了，而且也没有居中"; this 0.414 of the height about
+        // 0.490, the glass 0.298 about 0.563).
+        if (_fusionFieldFrame != Time.frameCount - 1 || _fusionFieldOf != _device.Node)
+            Interop.EyepieceFusion.FieldInMainUv = new Vector4(uv.x, uv.y, radius, camera.aspect);
         Interop.EyepieceFusion.Deployed = _flip;
         Interop.EyepieceFusion.ClaimedFrame = Time.frameCount;
         Interop.EyepieceFusion.ClaimedDevice = _device.Node;
@@ -408,6 +414,8 @@ internal static partial class NightVisionEyepieces
         Vector2 u = across - centre, v = up - centre;
         float radius = Mathf.Sqrt(Mathf.Abs(u.x * v.y - u.y * v.x));
         Interop.EyepieceFusion.FieldInMainUv = new Vector4(centre.x / aspect, centre.y, radius, aspect);
+        _fusionFieldFrame = Time.frameCount;
+        _fusionFieldOf = _device.Node;
         if (!_fusionFieldNoted)
         {
             _fusionFieldNoted = true;
@@ -415,6 +423,8 @@ internal static partial class NightVisionEyepieces
         }
     }
     private static bool _fusionFieldNoted;
+    private static int _fusionFieldFrame = -10;
+    private static string? _fusionFieldOf;
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.
     // A monocular's bare eye aiming, 0 to 1 as the aim comes up: the two eyes' views of the device no longer side by side but
