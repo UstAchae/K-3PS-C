@@ -22,6 +22,10 @@ internal static partial class NightVisionEyepieces
     private static Material? _defocus;
     private static readonly RenderTexture?[] _levelFar = new RenderTexture?[DefocusLevels];
     private static bool _defocusNoted;
+    private const float RegionReach = 28f;              // quarter-size pixels about the glass still worked on
+    private static readonly int UseRegionId = Shader.PropertyToID("_UseRegion"), RegionId = Shader.PropertyToID("_Region"),
+        RegionLensId = Shader.PropertyToID("_RegionLens"), GlassAId = Shader.PropertyToID("_GlassA"), GlassBId = Shader.PropertyToID("_GlassB"),
+        RegionTexelId = Shader.PropertyToID("_RegionTexel");
 
     private static readonly int DefocusLensId = Shader.PropertyToID("_DefocusLens");
     private static readonly int CoverId = Shader.PropertyToID("_Cover");
@@ -50,6 +54,26 @@ internal static partial class NightVisionEyepieces
         int depthWidth = depthTexture != null ? depthTexture.width : frame.width, depthHeight = depthTexture != null ? depthTexture.height : frame.height;
         defocus.SetVector(DepthSizeId, new Vector4(depthWidth, depthHeight, 1f / depthWidth, 1f / depthHeight));
         defocus.SetVector(DepthJitterId, new Vector4(-0.5f * _renderedJitter.x, -0.5f * _renderedJitter.y, 0f, 0f));
+        // Only about the eyepieces (1.8.194; measured 1.8.193: this whole step 3.2 ms a frame, 1.4 of it the bands, 1.8
+        // taking the frame down and laying it back, all of it over the whole frame): where either eye looks at an
+        // eyepiece's glass, at a sixteenth of the frame's size (pass 19), and that spread by RegionReach quarter-size
+        // pixels, as far as a band's blur and the wider one after it reach. The heavy passes give back at once elsewhere
+        // (InRegion), the last one off the glass itself. Without this frame's glass maps, all over the frame as before.
+        RenderTexture? regionLens = null, region = null;
+        defocus.SetFloat(UseRegionId, 0f);
+        if (_eyesFrame == Time.frameCount && _glassMaps[0] != null && _glassMaps[1] != null)
+        {
+            int regionWidth = Mathf.Max(width / 4, 1), regionHeight = Mathf.Max(height / 4, 1);
+            regionLens = Temporary(regionWidth, regionHeight);
+            defocus.SetTexture(GlassAId, _glassMaps[0]);
+            defocus.SetTexture(GlassBId, _glassMaps[1]);
+            defocus.SetVector(RegionTexelId, new Vector2(1f / regionWidth, 1f / regionHeight));
+            Graphics.Blit(Texture2D.blackTexture, regionLens, defocus, 19);
+            region = MinMax(regionLens, Mathf.Ceil(RegionReach / 4f), true, defocus);
+            defocus.SetTexture(RegionLensId, regionLens);
+            defocus.SetTexture(RegionId, region);
+            defocus.SetFloat(UseRegionId, 1f);
+        }
         // the frame's width over its height, and how far about a magnified sight's lens its eyepiece's own dark ring
         // reaches (of the frame's height): neither blurred
         defocus.SetFloat(AspectId, (float)frame.width / frame.height);
@@ -189,6 +213,15 @@ internal static partial class NightVisionEyepieces
         defocus.SetTexture(ScopeSoftId, Texture2D.blackTexture);
         if (scopeSoft != null)
             RenderTexture.ReleaseTemporary(scopeSoft);
+        defocus.SetFloat(UseRegionId, 0f);
+        defocus.SetTexture(RegionLensId, Texture2D.blackTexture);
+        defocus.SetTexture(RegionId, Texture2D.blackTexture);
+        defocus.SetTexture(GlassAId, Texture2D.blackTexture);
+        defocus.SetTexture(GlassBId, Texture2D.blackTexture);
+        if (regionLens != null)
+            RenderTexture.ReleaseTemporary(regionLens);
+        if (region != null)
+            RenderTexture.ReleaseTemporary(region);
         for (int level = 0; level < DefocusLevels; level++)
         {
             defocus.SetTexture(FarIds[level], Texture2D.blackTexture);
@@ -198,7 +231,7 @@ internal static partial class NightVisionEyepieces
         if (!_defocusNoted)
         {
             _defocusNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus by bands of nearness (each blurred 0.35 x its radius, shown as against a table), depth jitter-corrected and gathered over frames ({width}x{height} quarter grid, scale {scale:F2}).");
+            NewCameraPlugin.Log?.LogInfo($"NVG objective: defocus by bands of nearness (each blurred 0.35 x its radius, shown as against a table), depth jitter-corrected and gathered over frames ({width}x{height} quarter grid, scale {scale:F2}; {(region != null ? "about the eyepieces only" : "all over the frame")}).");
         }
         return true;
     }

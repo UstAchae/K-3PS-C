@@ -25,6 +25,9 @@
 //         (r) and the thin parts' (g)), each only its band's share (_BandHat). Pass 15: a Gaussian of _Sigma texels
 //         along _Step. Pass 16: added as it is. Pass 17: the mean of this frame's and the last frame's (_Prev).
 //         Pass 18: _Take of this frame's, the rest the kept (_History) held within this frame's three by three.
+// Pass 19: where either eye looks at an eyepiece's glass (_GlassA, _GlassB: the eyes' glass maps), at a sixteenth of the
+//         frame's size; spread (pass 11) it is _Region: only there is the frame worked on (InRegion), elsewhere the
+//         passes give back at once. The blurred frame is only ever seen through the eyepieces.
 // Pass 0 is left empty, so the others keep their numbers.
 Shader "Justachae/NVG/Defocus" {
  Properties { _MainTex ("frame", 2D) = "black" {} }
@@ -49,6 +52,19 @@ Shader "Justachae/NVG/Defocus" {
   float3 _BandHat;   // a band of radii: rising from x to its middle y, falling to z (x < 0: whole below; z huge: whole above)
   float _EncIn;      // 1: this band also takes what the near parts close about
 
+  // Where the frame is worked on: about the eyepieces' glass as the eyes see it (_Region, pass 19 spread), and the glass
+  // itself (_RegionLens). All over the frame while there is no such map (_UseRegion 0), and as the maps are made.
+  // (Every tap within what these gate is taken at a set level, tex2Dlod: a tap that works its own level out cannot
+  // stand inside a branch, and the compiler then takes both ways.)
+  Texture2D _Region, _RegionLens, _GlassA, _GlassB;
+  float _UseRegion;
+  float2 _RegionTexel;
+  bool InRegion(float2 uv) {
+   return _UseRegion < 0.5 || _Region.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.001;
+  }
+  bool OnGlass(float2 uv) {
+   return _UseRegion < 0.5 || _RegionLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.001;
+  }
   bool InLens(float2 uv) {
    return _ScopeOn > 0.5 && _ScopeLens.SampleLevel(sampler_linear_clamp, uv, 0).r > 0.5;
   }
@@ -79,12 +95,12 @@ Shader "Justachae/NVG/Defocus" {
    float2 o = 2 * _DepthTexel.xy;
    float2 picture = uv;
    uv += _DepthJitter.xy;
-   float raw = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
+   float raw = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0));
    float z = LinearEyeDepth(raw);
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(o.x, o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(-o.x, o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(o.x, -o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(-o.x, -o.y))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv + float2(o.x, o.y), 0, 0))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv + float2(-o.x, o.y), 0, 0))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv + float2(o.x, -o.y), 0, 0))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv + float2(-o.x, -o.y), 0, 0))));
    float2 ray = (picture * 2 - 1) * _TanHalf;
    float d = max(z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z, 0.001);
    float lens = _DefocusLens.y * abs(1 / d - _DefocusLens.x);
@@ -100,11 +116,11 @@ Shader "Justachae/NVG/Defocus" {
    if (scope > 0.999)
     return 0;
    float2 o = _DepthSize.zw;
-   float z = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(o.x, o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(-o.x, o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(o.x, -o.y))));
-   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, du + float2(-o.x, -o.y))));
+   float z = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(du, 0, 0)));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(du + float2(o.x, o.y), 0, 0))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(du + float2(-o.x, o.y), 0, 0))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(du + float2(o.x, -o.y), 0, 0))));
+   z = min(z, LinearEyeDepth(SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(du + float2(-o.x, -o.y), 0, 0))));
    float2 ray = (picture * 2 - 1) * _TanHalf;
    float d = max(z * sqrt(1 + dot(ray, ray)) - _DefocusLens.z, 0.001);
    float lens = _DefocusLens.y * abs(1 / d - _DefocusLens.x);
@@ -249,6 +265,9 @@ Shader "Justachae/NVG/Defocus" {
     float scopeKeep = ScopeNear(i.uv);
     if (scopeKeep > 0.999)
      return f;
+    // Not on an eyepiece's glass: not seen, the frame as it is.
+    if (!OnGlass(i.uv))
+     return f;
     // The look chosen on the tuner page, laid over the frame:
     //  colour: the thick parts (blurred a little), the thin parts (blurred wide) and a wider wash of the thin parts,
     //  each weighted by how near (Front), averaged together;
@@ -344,6 +363,8 @@ Shader "Justachae/NVG/Defocus" {
     // swayed by less than a quarter-size pixel a box's mean stepped, and the blurred gun moved in steps (jitter).
     // A magnified sight's picture left out of the colour: it is no part of what is near, and taken into the colour of
     // a pixel at its rim, its bright parts (an IR laser) were spread over the rim with the gun, a glow about the lens.
+    if (!InRegion(i.uv))
+     return float4(tex2Dlod(_MainTex, float4(i.uv, 0, 0)).rgb, 0);
     float3 sum = 0;
     float near = 0, total = 0, kept = 0;
     for (int y = 0; y < 8; y++)
@@ -352,12 +373,12 @@ Shader "Justachae/NVG/Defocus" {
       float w = (4 - abs(o.x)) * (4 - abs(o.y));
       float2 uv = i.uv + o * t;
       float k = InLens(uv) ? 0 : w;
-      sum += tex2D(_MainTex, uv).rgb * k;
+      sum += tex2Dlod(_MainTex, float4(uv, 0, 0)).rgb * k;
       kept += k;
       near += Nearness(Radius(uv)) * w;
       total += w;
      }
-    return float4(kept > 0 ? sum / kept : tex2D(_MainTex, i.uv).rgb, near / total);
+    return float4(kept > 0 ? sum / kept : tex2Dlod(_MainTex, float4(i.uv, 0, 0)).rgb, near / total);
    }
    ENDCG
   }
@@ -375,6 +396,8 @@ Shader "Justachae/NVG/Defocus" {
     // picture's point it shows this frame (its centre less the jitter), weighted by a tent of four of the frame's
     // pixels about this pixel's middle at that point. Taken by the frame's pixels, which texel each took jumped as the
     // jitter moved by part of a texel, and what was near flickered at every outline.
+    if (!InRegion(i.uv))
+     return 0;
     float2 reach = 4 * t;
     float2 first = floor((i.uv + _DepthJitter.xy - reach) * _DepthSize.xy - 0.5);
     float r = 0, near = 0, total = 0;
@@ -402,10 +425,12 @@ Shader "Justachae/NVG/Defocus" {
    #pragma target 3.5
    float4 frag (v2f_img i) : SV_Target {
     float2 d = _Step * _MainTex_TexelSize.xy;
-    float v = tex2D(_MainTex, i.uv).r;
+    if (!InRegion(i.uv))
+     return 0;
+    float v = tex2Dlod(_MainTex, float4(i.uv, 0, 0)).r;
     for (int k = 1; k <= 48; k++) {
      if (k > _Radius) break;
-     float a = tex2D(_MainTex, i.uv + d * k).r, b = tex2D(_MainTex, i.uv - d * k).r;
+     float a = tex2Dlod(_MainTex, float4(i.uv + d * k, 0, 0)).r, b = tex2Dlod(_MainTex, float4(i.uv - d * k, 0, 0)).r;
      v = _Mode > 0.5 ? max(v, max(a, b)) : min(v, min(a, b));
     }
     return v;
@@ -463,13 +488,15 @@ Shader "Justachae/NVG/Defocus" {
    #pragma target 3.5
    float4 frag (v2f_img i) : SV_Target {
     float2 d = _Step * _MainTex_TexelSize.xy;
-    float4 sum = tex2D(_MainTex, i.uv);
+    if (!InRegion(i.uv))
+     return 0;
+    float4 sum = tex2Dlod(_MainTex, float4(i.uv, 0, 0));
     float total = 1;
     float reach = min(3 * _Sigma, 48);
     for (int k = 1; k <= 48; k++) {
      if (k > reach) break;
      float w = exp(-k * k / (2 * _Sigma * _Sigma));
-     sum += (tex2D(_MainTex, i.uv + d * k) + tex2D(_MainTex, i.uv - d * k)) * w;
+     sum += (tex2Dlod(_MainTex, float4(i.uv + d * k, 0, 0)) + tex2Dlod(_MainTex, float4(i.uv - d * k, 0, 0))) * w;
      total += 2 * w;
     }
     return sum / total;
@@ -515,6 +542,22 @@ Shader "Justachae/NVG/Defocus" {
     // has the part and what is about it both)
     float4 kept = clamp(_History.SampleLevel(sampler_linear_clamp, i.uv, 0), max(lo, now - _Tol), min(hi, now + _Tol));
     return lerp(kept, now, _Take);
+   }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #pragma target 3.5
+   float4 frag (v2f_img i) : SV_Target {
+    float m = 0;
+    for (int y = 0; y < 4; y++)
+     for (int x = 0; x < 4; x++) {
+      float2 uv = i.uv + (float2(x, y) - 1.5) * 0.25 * _RegionTexel;
+      m = max(m, max(_GlassA.SampleLevel(sampler_linear_clamp, uv, 0).r, _GlassB.SampleLevel(sampler_linear_clamp, uv, 0).r));
+     }
+    return m > 0.02 ? 1 : 0;
    }
    ENDCG
   }
