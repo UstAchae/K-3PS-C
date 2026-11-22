@@ -14,6 +14,10 @@
 // 4: the night-vision ambient's difference on the frame's surfaces (NightVisionAmbient.cs), added into the layer: each
 //    surface's diffuse colour and occlusion from the G-buffer, times the difference of the two ambient probes along its
 //    normal (_NvSh*, packed as Unity packs a probe), as Unity's deferred shading lights a surface by the ambient.
+// 6: thermal goggles' picture held over frames (NightVisionThermal.cs), before the goggles' own passes: this frame's
+//    (its camera jittered) blended into the last frames', each pixel's history found from its depth and that camera's
+//    own matrices, now and a frame ago (exact for what stands still; no motion vectors: that camera, rendered out of
+//    turn, has none worth the name), and kept within what this frame has about the pixel.
 Shader "Justachae/NVG/IrLight" {
  Properties { _MainTex ("frame", 2D) = "black" {} }
  SubShader {
@@ -221,6 +225,51 @@ Shader "Justachae/NVG/IrLight" {
     if (tex2D(_DirectGunLens, i.uv).r > 0.5)
      return 0;
     return float4(tex2D(_MainTex, i.uv).rgb, 0);
+   }
+   ENDCG
+  }
+  Pass {
+   CGPROGRAM
+   #pragma vertex vert_img
+   #pragma fragment frag
+   #include "UnityCG.cginc"
+   sampler2D _MainTex, _ThermalHistory;
+   sampler2D_float _CameraDepthTexture;
+   float4 _MainTex_TexelSize;
+   float4x4 _ThermalClipToWorld;   // this frame's, as it was drawn (jittered)
+   float4x4 _ThermalNow, _ThermalThen;   // world to clip, not jittered: this frame's, the last one's
+   float4 _ThermalHold;            // x 1 with a history to follow, y how much of this frame goes in
+   float4 frag (v2f_img i) : SV_Target {
+    float4 c = tex2D(_MainTex, i.uv);
+    if (_ThermalHold.x < 0.5)
+     return c;
+    float2 texel = abs(_MainTex_TexelSize.xy);
+    float4 lo = c, hi = c;
+    [unroll] for (int y = -1; y <= 1; y++)
+     [unroll] for (int x = -1; x <= 1; x++) {
+      float4 n = tex2D(_MainTex, i.uv + float2(x, y) * texel);
+      lo = min(lo, n);
+      hi = max(hi, n);
+     }
+    // The camera's own textures by the image's uv (upside down against the source when its texel size says so).
+    float2 duv = i.uv;
+    float turned = 1;
+    #if UNITY_UV_STARTS_AT_TOP
+    if (_MainTex_TexelSize.y < 0) { duv.y = 1 - duv.y; turned = -1; }
+    #endif
+    float depth = tex2Dlod(_CameraDepthTexture, float4(duv, 0, 0)).r;
+    float4 w = mul(_ThermalClipToWorld, float4(duv * 2 - 1, 1 - 2 * depth, 1));
+    w /= w.w;
+    float4 a = mul(_ThermalNow, float4(w.xyz, 1)), b = mul(_ThermalThen, float4(w.xyz, 1));
+    if (a.w <= 0 || b.w <= 0)
+     return c;
+    float2 moved = (b.xy / b.w - a.xy / a.w) * 0.5;
+    moved.y *= turned;
+    float2 prev = i.uv + moved;
+    if (any(prev < 0) || any(prev > 1))
+     return c;
+    float4 h = clamp(tex2D(_ThermalHistory, prev), lo, hi);
+    return lerp(h, c, _ThermalHold.y);
    }
    ENDCG
   }

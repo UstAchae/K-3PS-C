@@ -31,6 +31,116 @@ internal static partial class NightVisionEyepieces
     private static CommandBuffer? _thermalFinish;
     private static bool _effectsCopied;
 
+    // The picture held over frames (NvgIrLight.shader pass 6). The vanilla goggles' frame is the main camera's, jittered
+    // and smoothed over frames by the game; ours was one sample a pixel from a camera not jittered, and every edge in
+    // it crawled with the breathing (the user's, 2026-11-22: "跟 ENVG-B 遇到的波动差不多"). So: our camera jittered
+    // by a sub-pixel pattern of our own, and its frame, right after the game copies the heat into it and before the
+    // goggles' own passes (their grain is left as it is), blended into the frames before.
+    private static CommandBuffer? _thermalHold;
+    private static Material? _thermalHoldMaterial;
+    private static readonly RenderTexture?[] _thermalHistory = new RenderTexture?[2];
+    private static int _thermalHistoryNow, _thermalHeldFrame = -10, _thermalJitterAt;
+    private static Matrix4x4 _thermalThen;
+    private static bool _thermalJitterHooked, _thermalHoldNoted;
+    private const int ThermalHoldPass = 6;            // NvgIrLight.shader
+    private const float ThermalHoldShare = 0.12f;     // how much of each new frame goes in
+    private const int ThermalJitterCount = 8;
+    private static readonly int ThermalHistoryId = Shader.PropertyToID("_ThermalHistory");
+    private static readonly int ThermalFrameId = Shader.PropertyToID("_JustachaeThermalFrame");
+    private static readonly int ThermalClipToWorldId = Shader.PropertyToID("_ThermalClipToWorld");
+    private static readonly int ThermalNowId = Shader.PropertyToID("_ThermalNow");
+    private static readonly int ThermalThenId = Shader.PropertyToID("_ThermalThen");
+    private static readonly int ThermalHoldId = Shader.PropertyToID("_ThermalHold");
+
+    private static float Halton(int index, int radix)
+    {
+        float result = 0f, fraction = 1f / radix;
+        while (index > 0)
+        {
+            result += index % radix * fraction;
+            index /= radix;
+            fraction /= radix;
+        }
+        return result;
+    }
+
+    // Before our camera renders: this frame's command buffer, the last frame's history to read and the other to write.
+    private static void PrepareThermalHold(int width, int height)
+    {
+        if (_thermalCamera == null || _irLightShader == null)
+            return;
+        for (int i = 0; i < 2; i++)
+        {
+            RenderTexture? history = _thermalHistory[i];
+            if (history != null && history.width == width && history.height == height)
+                continue;
+            if (history != null)
+            {
+                history.Release();
+                Object.Destroy(history);
+            }
+            _thermalHistory[i] = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBHalf)
+            {
+                name = "Justachae thermal history " + i, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontSave,
+            };
+            _thermalHeldFrame = -10;
+        }
+        _thermalHoldMaterial ??= new Material(_irLightShader) { name = "Justachae thermal hold", hideFlags = HideFlags.DontSave };
+        if (_thermalHold == null)
+        {
+            _thermalHold = new CommandBuffer { name = "Justachae thermal held over frames" };
+            // After the game's own buffer there (its copy of the heat into the frame, added as its ThermalVision woke).
+            _thermalCamera.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, _thermalHold);
+        }
+        if (!_thermalJitterHooked)
+        {
+            _thermalJitterHooked = true;
+            Camera.onPreRender += JitterThermal;
+        }
+        int read = _thermalHistoryNow, write = 1 - read;
+        _thermalHistoryNow = write;
+        _thermalHold.Clear();
+        _thermalHold.GetTemporaryRT(ThermalFrameId, -1, -1, 0, FilterMode.Bilinear, RenderTextureFormat.DefaultHDR);
+        _thermalHold.Blit(BuiltinRenderTextureType.CameraTarget, ThermalFrameId);
+        _thermalHold.SetGlobalTexture(ThermalHistoryId, _thermalHistory[read]);
+        _thermalHold.Blit(ThermalFrameId, _thermalHistory[write], _thermalHoldMaterial, ThermalHoldPass);
+        // (Last onto the camera's own target, as the game's buffer before this one leaves it.)
+        _thermalHold.Blit(_thermalHistory[write], BuiltinRenderTextureType.CameraTarget);
+        _thermalHold.ReleaseTemporaryRT(ThermalFrameId);
+    }
+
+    // As our camera is about to render (its layer has set its projection by now): jittered, and the matrices the hold
+    // follows the still world by.
+    private static void JitterThermal(Camera camera)
+    {
+        if (camera != _thermalCamera || _thermalHoldMaterial == null || _thermalPicture == null)
+            return;
+        Matrix4x4 plain = camera.projectionMatrix, jittered = plain;
+        _thermalJitterAt = (_thermalJitterAt + 1) % ThermalJitterCount;
+        float x = Halton(_thermalJitterAt + 1, 2) - 0.5f, y = Halton(_thermalJitterAt + 1, 3) - 0.5f;
+        jittered.m02 += 2f * x / _thermalPicture.width;
+        jittered.m12 += 2f * y / _thermalPicture.height;
+        camera.nonJitteredProjectionMatrix = plain;
+        camera.projectionMatrix = jittered;
+        Matrix4x4 view = camera.worldToCameraMatrix, now = plain * view;
+        // A history only from the frame right before this one.
+        bool follows = _thermalHeldFrame == Time.frameCount - 1;
+        _thermalHoldMaterial.SetMatrix(ThermalClipToWorldId, (jittered * view).inverse);
+        _thermalHoldMaterial.SetMatrix(ThermalNowId, now);
+        _thermalHoldMaterial.SetMatrix(ThermalThenId, follows ? _thermalThen : now);
+        _thermalHoldMaterial.SetVector(ThermalHoldId, new Vector4(follows ? 1f : 0f, ThermalHoldShare, 0f, 0f));
+        _thermalThen = now;
+        _thermalHeldFrame = Time.frameCount;
+        if (!_thermalHoldNoted && follows)
+        {
+            _thermalHoldNoted = true;
+            string own = camera.TryGetComponent(out PostProcessLayer layer) ? layer.antialiasingMode.ToString() : "no layer";
+            Camera? main = Camera.main;
+            string mains = main != null && main.TryGetComponent(out PostProcessLayer mainLayer) ? mainLayer.antialiasingMode.ToString() : "no layer";
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: the picture held over frames ({_thermalPicture.width}x{_thermalPicture.height}, jitter {x:F2},{y:F2} px of {ThermalJitterCount}); anti-aliasing of our camera's layer {own}, of the main camera's {mains}.");
+        }
+    }
+
     private static readonly AccessTools.FieldRef<ThermalVision, Material> ThermalMaterial =
         AccessTools.FieldRefAccess<ThermalVision, Material>("_material");
     private static readonly int ThermalFinishId = Shader.PropertyToID("_JustachaeThermalFinish");
@@ -152,6 +262,18 @@ internal static partial class NightVisionEyepieces
         _thermal = null;
         _thermalFinish?.Release();
         _thermalFinish = null;
+        _thermalHold?.Release();
+        _thermalHold = null;
+        _thermalHeldFrame = -10;
+        for (int i = 0; i < 2; i++)
+        {
+            RenderTexture? history = _thermalHistory[i];
+            if (history == null)
+                continue;
+            history.Release();
+            Object.Destroy(history);
+            _thermalHistory[i] = null;
+        }
         _effectsCopied = false;
         if (_thermalPicture != null)
         {
@@ -221,6 +343,7 @@ internal static partial class NightVisionEyepieces
             _thermalPicture.Create();
         }
 
+        PrepareThermalHold(width, height);
         if (!_effectsCopied)
             CopyMainEffects(main);
         Camera camera = _thermalCamera;
