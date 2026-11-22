@@ -502,6 +502,12 @@ internal static partial class NightVisionEyepieces
         NoteThermalCost(width, height);
         camera.projectionMatrix = main.nonJitteredProjectionMatrix;
         camera.targetTexture = _thermalPicture;
+        // Its layer's own temporal anti-aliasing off: that follows the engine's motion vectors, which this camera, rendered
+        // out of turn, has none worth the name (they smeared a motion blur over its whole picture); with the view moving it
+        // left copies of every bright thing behind it, in steps (the lamp in the picture saved 2026-11-22). The hold above
+        // is the one smoothing over frames, by this camera's own matrices, with a jitter of our own (JitterThermal).
+        if (camera.TryGetComponent(out PostProcessLayer ownLayer) && ownLayer.antialiasingMode != PostProcessLayer.Antialiasing.None)
+            ownLayer.antialiasingMode = PostProcessLayer.Antialiasing.None;
         HoldMotionBlur(camera);
         try
         {
