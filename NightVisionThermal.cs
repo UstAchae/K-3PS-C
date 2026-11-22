@@ -215,11 +215,7 @@ internal static partial class NightVisionEyepieces
     {
         GiveMainSceneBack();
         if (!ThermalAlone)
-        {
-            MainLayerOff(null);
             return;
-        }
-        MainLayerOff(camera);
         _sceneSkipped = camera;
         _skippedMask = camera.cullingMask;
         _skippedClear = camera.clearFlags;
@@ -237,34 +233,10 @@ internal static partial class NightVisionEyepieces
         }
     }
 
-    // Its post-processing layer too (2.2 ms a frame, measured above): the whole of it ran over a black frame. Off as
-    // the scene is first left out and on again as it is drawn again, not frame by frame. The eyepieces are laid in at
-    // the SSAA stage, which is not the layer's. (The screen saved with it on and with it off, 1.8.186: alike.)
-    private static PostProcessLayer? _mainLayerOff;
-
-    private static void MainLayerOff(Camera? camera)
-    {
-        if (camera == null)
-        {
-            if (_mainLayerOff != null)
-                _mainLayerOff.enabled = true;
-            _mainLayerOff = null;
-            return;
-        }
-        if (_mainLayerOff == null && camera.TryGetComponent(out PostProcessLayer layer) && layer.enabled)
-        {
-            layer.enabled = false;
-            _mainLayerOff = layer;
-            NewCameraPlugin.Log?.LogInfo("NVG thermal: the main camera's post-processing layer off while it draws no scene.");
-        }
-        // What the layer did for the camera each frame as it culled, done here in its place: the projection taken back to
-        // the camera's own (its field of view as it is now) and noted as the one not jittered.
-        if (_mainLayerOff != null)
-        {
-            camera.ResetProjectionMatrix();
-            camera.nonJitteredProjectionMatrix = camera.projectionMatrix;
-        }
-    }
+    // Its post-processing layer stays on. Off (1.8.186 to 1.8.190, for 2.2 ms a frame), the frame the eyepieces are laid
+    // on was no longer made anew: it stayed as it last was, the room as seen while the goggles came down, still, with
+    // only the eyepieces' picture moving over it (the user's, four builds running: "只有成像区域在动"; 1.8.186 hid it by
+    // waiting 240 frames, by when that frame was black). The layer is what fills that frame.
 
     // Once it has rendered (and whenever the goggles are let go of).
     private static void GiveMainSceneBack()
@@ -385,7 +357,6 @@ internal static partial class NightVisionEyepieces
         HoldMainThermal(BodyVisibility.Cameras, false);
         KeepThermalGlow(null);
         GiveMainSceneBack();
-        MainLayerOff(null);
         if (_thermalCamera != null)
             Object.Destroy(_thermalCamera.gameObject);
         _thermalCamera = null;
