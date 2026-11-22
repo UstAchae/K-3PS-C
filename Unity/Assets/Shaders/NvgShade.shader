@@ -28,6 +28,7 @@ Shader "Justachae/NVG/Shade" {
    float4 _ShadeShape;          // x the floor below the centre, y the eyecup's top above it (m)
    float4 _ShadeRadii0, _ShadeRadii1;   // the cup's inner radius at 0, 5, 10, 20 mm and at 30, 40 mm above the centre (m)
    float _ShadeKeep;            // how much of the light is kept within the eyecups
+   float _ShadeAll;             // 1: the whole cup, whichever way its surfaces face (the eye within it)
    float4 _ShadeLens;           // x the lens's radius (m), y the cosine of half its field, z its edge's softness (as a cosine), w the share scattered to every side
    float4 _ShadeLight0, _ShadeLight1;   // each eyecup's lens's light (linear rgb, its radiance)
    float _ShadeSkin;            // the share of the light on the face it sends back
@@ -53,9 +54,14 @@ Shader "Justachae/NVG/Shade" {
    bool within (float3 p, float3 n, float3 c, float3 a) {
     float3 d = p - c;
     float t = dot(d, a);
-    if (t < -_ShadeShape.x - 0.002 || t > _ShadeShape.y + 0.002) return false;
     float3 across = d - a * t;
     float r = length(across);
+    // The eye within a soft eyecup (_ShadeAll, NightVisionShade.cs): the cup is against the face, and all of it is in
+    // the dark, its lip too (the lip's top faces the eye, not the axis, and was left as the room lit it: arcs of light
+    // at the frame's edge, the user's "拼接的痕迹"). Whatever stands about the cup, a centimetre past its lip each way.
+    if (_ShadeAll > 0.5)
+     return t > -_ShadeShape.x - 0.002 && t < _ShadeShape.y + 0.012 && r < cupRadius(_ShadeShape.y) + 0.012;
+    if (t < -_ShadeShape.x - 0.002 || t > _ShadeShape.y + 0.002) return false;
     float radius = cupRadius(t);
     if (r > radius + 0.0015) return false;
     // The inner wall faces the axis; the lens, the floor and the steps within the cup face the eye (the steps of the

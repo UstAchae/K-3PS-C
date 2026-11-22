@@ -32,6 +32,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int ShadeSkinId = Shader.PropertyToID("_ShadeSkin");
     private static readonly int[] ShadeLightIds = { Shader.PropertyToID("_ShadeLight0"), Shader.PropertyToID("_ShadeLight1") };
     private static readonly int ShadePlacedId = Shader.PropertyToID("_ShadePlaced");
+    private static readonly int ShadeAllId = Shader.PropertyToID("_ShadeAll");
 
     private static Shader? _shadeShader;
     private static Material? _shadeMaterial;
@@ -101,6 +102,8 @@ internal static partial class NightVisionEyepieces
         apply.SetGlobalVector(ShadeRadii0Id, _device.CupRadii0 * scale);
         apply.SetGlobalVector(ShadeRadii1Id, _device.CupRadii1 * scale);
         apply.SetGlobalFloat(ShadeKeepId, keep);
+        // (The eye within a soft eyecup, as the lens map last found it: the whole cup dark, NvgShade.shader.)
+        apply.SetGlobalFloat(ShadeAllId, _device.CupYields && _eyeWithinCup ? 1f : 0f);
         apply.SetGlobalFloat(ShadePlacedId, placed ? 1f : 0f);
         apply.GetTemporaryRT(ShadeNowId, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf);
         apply.Blit(BuiltinRenderTextureType.CameraTarget, ShadeNowId);

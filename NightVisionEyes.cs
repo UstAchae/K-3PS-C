@@ -601,6 +601,7 @@ internal static partial class NightVisionEyepieces
         // carried back to the rim's plane crosses it anywhere).
         float cardHeight = (_device.RimHeight + _device.CardRaise + 0.001f) * scale, rimRadius = _device.RimRadius * scale;
         float eyeAbove = float.MaxValue;
+        _eyeWithinCup = false;
         if (_device.CupYields)
         {
             for (int centre = CentreLensA; centre <= CentreLensB; centre += CentreLensB - CentreLensA)
@@ -612,6 +613,7 @@ internal static partial class NightVisionEyepieces
             {
                 cardHeight = Mathf.Max(eyeAbove - 0.0015f * scale, 0.0003f * scale);
                 rimRadius = 1000f;
+                _eyeWithinCup = true;
                 if (!_cardLoweredNoted)
                 {
                     _cardLoweredNoted = true;
@@ -660,7 +662,7 @@ internal static partial class NightVisionEyepieces
         Graphics.ExecuteCommandBuffer(buffer);
     }
 
-    private static bool _cardLoweredNoted;
+    private static bool _cardLoweredNoted, _eyeWithinCup;
 
     private static Mesh CardMesh()
     {
