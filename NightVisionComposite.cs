@@ -331,9 +331,16 @@ internal static partial class NightVisionEyepieces
         composite.SetVector(TubeFusedId, fusedPicture != null ? _fusedTubes : Vector4.zero);
         Vector4 field = Interop.EyepieceFusion.FieldInMainUv;
         Vector2 share = Interop.EyepieceFusion.RectOf(_device.Node);
-        // (A clip-on's: no rectangle, which every lens shows; its picture is the one tube's alone.)
-        composite.SetVector(FusedRectId, fusedPicture != null && field.w > 0f && !_clipOnClaimed
-            ? new Vector4(field.x, field.y, share.x * field.z / field.w, share.y * field.z) : Vector4.zero);
+        // A clip-on's: the square about its circle (and a little over, for its soft edge), shown whatever lens is looked
+        // through, as a fusion device's rectangle is: in the one tube alone, a goggle of two tubes whose pictures are
+        // one round one showed the circle cut straight down where the other eye's half begins (the user's, 2026-11-22:
+        // "这个地方还是只有一半…应该让它像 ENVG-B 一样覆盖到另一个目镜上"). Outside the circle dest is the tube's own.
+        Vector4 rect = Vector4.zero;
+        if (fusedPicture != null && field.w > 0f)
+            rect = _clipOnClaimed
+                ? new Vector4(field.x, field.y, 1.06f * field.z / field.w, 1.06f * field.z)
+                : new Vector4(field.x, field.y, share.x * field.z / field.w, share.y * field.z);
+        composite.SetVector(FusedRectId, rect);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
         composite.SetTexture(GlowId, lit != null ? lit : Texture2D.blackTexture);
