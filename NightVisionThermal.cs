@@ -40,7 +40,8 @@ internal static partial class NightVisionEyepieces
     private static float _costSeconds;
     private static readonly System.Collections.Generic.List<MonoBehaviour> _costEffects = new System.Collections.Generic.List<MonoBehaviour>();
     private static PostProcessLayer? _costLayer;
-    private static readonly string[] CostSteps = { "as it is", "without the main camera's effects", "without them and its post-processing layer" };
+    private static readonly string[] CostSteps = { "as it is", "without the main camera's effects", "without them and its post-processing layer", "as it is, the MAIN camera's post-processing layer off" };
+    private static PostProcessLayer? _costMainLayer;
 
     private static void CostProbe(Camera camera)
     {
@@ -67,7 +68,21 @@ internal static partial class NightVisionEyepieces
         _costStep++;
         _costFrames = 0;
         _costSeconds = 0f;
-        bool effects = _costStep == 0 || _costStep >= CostSteps.Length, layerOn = _costStep != 2;
+        bool effects = _costStep == 0 || _costStep >= 3, layerOn = _costStep != 2;
+        // The main camera draws no scene by now (SkipMainScene), yet its whole post-processing still runs over the black
+        // frame: what that costs (the user's, 2026-11-22: "只画 T-7 和它的目镜成像区域").
+        if (_costStep == 3)
+        {
+            Camera? main = Camera.main;
+            _costMainLayer = main != null && main.TryGetComponent(out PostProcessLayer mainLayer) && mainLayer.enabled ? mainLayer : null;
+            if (_costMainLayer != null)
+                _costMainLayer.enabled = false;
+        }
+        else if (_costMainLayer != null)
+        {
+            _costMainLayer.enabled = true;
+            _costMainLayer = null;
+        }
         foreach (MonoBehaviour behaviour in _costEffects)
         {
             if (behaviour != null)
