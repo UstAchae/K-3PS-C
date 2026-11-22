@@ -83,7 +83,8 @@ internal static partial class NightVisionEyepieces
         // and its blur pulsed while the picture stood still (raw floats of four frames, 2026-11-11). A quarter of this
         // frame's is taken each frame, the rest the gathered one held within what this frame has about each pixel (its
         // three by three): what moves is followed at once, only what stands still is gathered.
-        qRad = Gathered(qRad, defocus);
+        if (ProbeDefocusLess < 4)
+            qRad = Gathered(qRad, defocus);
         // What is not near (by the nearness just made, not each pixel's own depth taken at the jittered texel nearest
         // it), for what is filled in behind a near thing: each a Gaussian of the quarter-size one (1.5, 4, 10 and 24
         // quarter-size pixels), not halvings, whose pixels jumped as the gun swayed with the breath.
@@ -92,15 +93,22 @@ internal static partial class NightVisionEyepieces
         Graphics.Blit(frame, farQuarter, defocus, 3);
         for (int level = 0; level < DefocusLevels; level++)
         {
-            _levelFar[level] = BlurWide(farQuarter, DefocusFillSigmas[level] * scale, defocus);
+            _levelFar[level] = ProbeDefocusLess < 2 ? BlurWide(farQuarter, DefocusFillSigmas[level] * scale, defocus) : Copy(farQuarter);
             defocus.SetTexture(FarIds[level], _levelFar[level]);
         }
         RenderTexture.ReleaseTemporary(farQuarter);
         // How near, as it is (no line drawn at a threshold: such a line moved from frame to frame).
         RenderTexture nearSoft = Threshold(qRad, -1f, defocus);
         // What the near parts close about (5 quarter-size pixels): a sight's window and the gaps between parts.
-        RenderTexture grown = MinMax(nearSoft, 5f * scale, true, defocus), closed = MinMax(grown, 5f * scale, false, defocus);
-        RenderTexture.ReleaseTemporary(grown);
+        RenderTexture closed;
+        if (ProbeDefocusLess < 3)
+        {
+            RenderTexture grown = MinMax(nearSoft, 5f * scale, true, defocus);
+            closed = MinMax(grown, 5f * scale, false, defocus);
+            RenderTexture.ReleaseTemporary(grown);
+        }
+        else
+            closed = Copy(nearSoft);
 
         defocus.SetTexture(QColorId, qColor);
         defocus.SetTexture(QRadId, qRad);
@@ -118,7 +126,7 @@ internal static partial class NightVisionEyepieces
         RenderTexture thickBlurred = Temporary(width, height), masksBlurred = Temporary(width, height);
         Graphics.Blit(Texture2D.blackTexture, thickBlurred);
         Graphics.Blit(Texture2D.blackTexture, masksBlurred);
-        for (int band = 0; band < DefocusBandMiddles.Length; band++)
+        for (int band = 0; band < (ProbeDefocusLess < 1 ? DefocusBandMiddles.Length : 0); band++)
         {
             float middle = DefocusBandMiddles[band] * scale;
             float below = band == 0 ? -1f : DefocusBandMiddles[band - 1] * scale;
@@ -138,9 +146,15 @@ internal static partial class NightVisionEyepieces
             RenderTexture.ReleaseTemporary(maskBlurred);
         }
         // About any near thing (one quarter-size pixel out, eased), what lies behind is the filled-in.
-        RenderTexture anyGrown = MinMax(nearSoft, Mathf.Max(1f, Mathf.Round(scale)), true, defocus);
-        RenderTexture seam = Blur(anyGrown, scale, defocus);
-        RenderTexture.ReleaseTemporary(anyGrown);
+        RenderTexture seam;
+        if (ProbeDefocusLess < 3)
+        {
+            RenderTexture anyGrown = MinMax(nearSoft, Mathf.Max(1f, Mathf.Round(scale)), true, defocus);
+            seam = Blur(anyGrown, scale, defocus);
+            RenderTexture.ReleaseTemporary(anyGrown);
+        }
+        else
+            seam = Copy(nearSoft);
         RenderTexture.ReleaseTemporary(nearSoft);
 
         made = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
@@ -237,6 +251,14 @@ internal static partial class NightVisionEyepieces
         MinMaxModeId = Shader.PropertyToID("_Mode"), SigmaId = Shader.PropertyToID("_Sigma"), WhichId = Shader.PropertyToID("_Which"),
         ThreshId = Shader.PropertyToID("_Thresh"), ScaleId = Shader.PropertyToID("_Scale"), ThinNearId = Shader.PropertyToID("_ThinNear");
     private static readonly int[] TunerTextureIds = { LThickBId, LThinBId, LThinFId, MaskBId, MaskFId, SeamId, QColorId, QRadId, ThickId, ClosedId };
+
+    // (For the cost probe: a part left out, its texture a plain copy.)
+    private static RenderTexture Copy(RenderTexture source)
+    {
+        RenderTexture result = Temporary(source.width, source.height);
+        Graphics.Blit(source, result);
+        return result;
+    }
 
     // 1 where how near (green) is above the threshold.
     private static RenderTexture Threshold(RenderTexture source, float threshold, Material defocus)

@@ -2,42 +2,49 @@ using UnityEngine;
 
 namespace EFTNewCamera;
 
-// What each part of the eyepieces' picture costs, measured (the user's, 2026-11-22: "先用一个普通的夜视仪量一下夜视").
-// Nothing of the picture is changed for good: the first time a night-vision goggle (not a thermal one) is down and
-// settled, its parts are switched off one after another, each way held for 240 frames and the mean frame time of the
-// last 200 written to the log; then all is put back as it was. A frame's time is the whole frame's (the game is bound
-// by the graphics card here), so what a part costs is the difference between two lines.
+// What the eyepieces' picture costs, measured (the user's, 2026-11-22). Nothing of the picture is changed for good: the
+// first time a night-vision goggle (not a thermal one) is down and settled, parts are left out one after another, each
+// way held for ProbeWarm + ProbeCount frames and the mean frame time of the last ProbeCount written to the log; then all
+// is put back as it was. A frame's time is the whole frame's (the game is bound by the graphics card here), so what a
+// part costs is the difference between two lines.
+//
+// The first measurement (1.8.192, an N-15 with BRNVG's picture, 2560x1440, the hideout; one run, each figure good to
+// a millisecond or so): as it is 18.5 ms; without the objective's near blur 14.2; without the IR layer too 15.0; no
+// eyepieces at all (the game's own picture) 10.5. So: the near blur 4.3 ms, all the rest of the eyepieces about 4, the
+// IR layer nothing that shows.
+//
+// This one: the near blur's own parts (NightVisionDefocus.cs, DefocusThrough), left out one after another:
 //   1 as it is
-//   2 without the objective's blur of what is near (F12 近处虚化)
-//   3 and without the lenses' glow over the glass and eyecups
-//   4 and without the glass's reflections
-//   5 and without the IR layer (IR lights and lasers for the tubes, the night-vision ambient)
-//   6 no eyepieces at all: the game's own night-vision picture over the whole frame
-// (1 to 5: the device drawn from each eye, the lens maps, the tube's picture and the composite stay; 5 less 6 is what
-// they cost together.)
+//   2 without the seven bands of nearness, each blurred by itself (56 of its 85 or so passes)
+//   3 and without the four blurs of what lies behind a near thing
+//   4 and without closing the near parts' gaps and the seam about them
+//   5 and without gathering the nearness over frames
+//   6 no near blur at all
+// (5 less 6: what is left, the frame taken down to a quarter with its nearness, and the last pass at the frame's size.)
 internal static partial class NightVisionEyepieces
 {
     private static readonly string[] ProbeSteps =
     {
-        "as it is", "without the objective's near blur", "and without the lenses' glow", "and without the glass's reflections",
-        "and without the IR layer", "no eyepieces: the game's own night-vision picture",
+        "the near blur as it is", "without its seven bands", "and without the four blurs of what lies behind", "and without the closing and the seam",
+        "and without the gathering over frames", "no near blur at all",
     };
-    private const int ProbeSettle = 180, ProbeWarm = 40, ProbeCount = 200;
+    private const int ProbeSettle = 180, ProbeWarm = 40, ProbeCount = 400;
     private static int _probeStep = -1, _probeFrames, _probeSettled;
     private static float _probeSeconds;
-    private static bool _probeDone, _probeBlur, _probeGlow, _probeReflections;
+    private static bool _probeDone, _probeBlur;
 
-    // Read by IrWanted and by Update's "worn".
-    internal static bool ProbeNoIr { get; private set; }
-    internal static bool ProbeNoEyepieces { get; private set; }
+    // Read by IrWanted and by Update's "worn" (the first measurement's; not used by this one).
+    internal static bool ProbeNoIr => false;
+    internal static bool ProbeNoEyepieces => false;
+    // Read by DefocusThrough: how many of its parts are left out (0 none, 4 all four).
+    internal static int ProbeDefocusLess { get; private set; }
 
     // Once a frame, as the eyepieces' state for the frame is known.
     private static void CostProbeTick(bool downAndOn)
     {
         if (_probeDone)
             return;
-        // (At the last step the eyepieces are off by our own doing: the goggle is still down.)
-        bool there = _body != null && !_device.Thermal && (ProbeNoEyepieces ? downAndOn : Active && _flip >= 0.999f);
+        bool there = _body != null && !_device.Thermal && Active && _flip >= 0.999f;
         if (!there)
         {
             // Flipped up or taken off part way: put back, and from the start the next time.
@@ -51,13 +58,17 @@ internal static partial class NightVisionEyepieces
         {
             if (++_probeSettled < ProbeSettle)
                 return;
+            if (!NearBlurOn)
+            {
+                NewCameraPlugin.Log?.LogInfo("NVG cost: the near blur is switched off (F12 近处虚化): nothing to measure.");
+                _probeDone = true;
+                return;
+            }
             _probeBlur = NearBlurOn;
-            _probeGlow = EyepieceGlow;
-            _probeReflections = LensReflections;
             _probeStep = 0;
             _probeFrames = 0;
             _probeSeconds = 0f;
-            NewCameraPlugin.Log?.LogInfo($"NVG cost: measuring {_device.Node} at {Screen.width}x{Screen.height} (near blur {NearBlurOn}, glow {EyepieceGlow}, reflections {LensReflections}, picture {Picture}); keep the goggle down and stand still.");
+            NewCameraPlugin.Log?.LogInfo($"NVG cost: measuring the near blur's parts on {_device.Node} at {Screen.width}x{Screen.height} (picture {Picture}); keep the goggle down and stand still.");
         }
         _probeFrames++;
         if (_probeFrames > ProbeWarm)
@@ -75,19 +86,13 @@ internal static partial class NightVisionEyepieces
             NewCameraPlugin.Log?.LogInfo("NVG cost: done, all put back as it was.");
             return;
         }
-        NearBlurOn = _probeStep < 1 && _probeBlur;
-        EyepieceGlow = _probeStep < 2 && _probeGlow;
-        LensReflections = _probeStep < 3 && _probeReflections;
-        ProbeNoIr = _probeStep >= 4;
-        ProbeNoEyepieces = _probeStep >= 5;
+        ProbeDefocusLess = Mathf.Min(_probeStep, 4);
+        NearBlurOn = _probeStep < 5 && _probeBlur;
     }
 
     private static void ProbeRestore()
     {
         NearBlurOn = _probeBlur;
-        EyepieceGlow = _probeGlow;
-        LensReflections = _probeReflections;
-        ProbeNoIr = false;
-        ProbeNoEyepieces = false;
+        ProbeDefocusLess = 0;
     }
 }
