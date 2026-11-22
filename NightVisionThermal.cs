@@ -226,31 +226,55 @@ internal static partial class NightVisionEyepieces
         _sceneSkipped = null;
     }
 
-    // What a frame takes with the goggles down, measured each way in turn, for the log (the user's, 2026-11-22: no more
-    // frames with the main camera's scene left out and the picture at the screen's size; which of the two does what
-    // was not known). The first time the goggles are down and still for long enough: 300 frames each of the picture
-    // at the main camera's size before its SSAA stage with the scene drawn, the same with it not drawn, the screen's
-    // size with it not drawn, the screen's size with it drawn; then as it is to stay (the third).
-    private static int _probeStep, _costFrames;
-    private static float _costSeconds;
-    private const int ProbeWarmUp = 60, ProbeFrames = 300, ProbeDone = 4;
-    private static bool ProbeSmall => _probeStep <= 1;
-    private static bool ProbeSkips => _probeStep == 1 || _probeStep == 2 || _probeStep >= ProbeDone;
+    // Measured 2026-11-22 (1.8.176, the hideout, 2560x1440; the vanilla goggles 10.5 ms): the picture at the main
+    // camera's size before its SSAA stage (1707x960) with the scene drawn 18.3 ms a frame, not drawn 14.0; at the
+    // screen's size not drawn 19.0, drawn 24.2.
+    //
+    // With the scene not drawn, light bands came into what the eyepieces show after a few seconds (the user's: "白色
+    // 阴影", there from the moment the scene was first left out). Where they come in is not known, so the first time
+    // the goggles are down: 180 frames with the scene drawn, then our camera's picture saved; 360 with it not drawn,
+    // and the picture saved again, each with the screen as shown. Then as it is to stay.
+    private static int _dumpFrames;
+    private const int DumpDrawnAt = 180, DumpSkippedAt = 540;
+    private static bool ProbeSmall => false;
+    private static bool ProbeSkips => _dumpFrames > DumpDrawnAt;
 
     private static void NoteThermalCost(int width, int height)
     {
-        if (_probeStep >= ProbeDone || !Active || _flip < 0.999f)
+    }
+
+    // Once our camera has rendered.
+    private static void DumpThermal()
+    {
+        if (_dumpFrames > DumpSkippedAt || !Active || _flip < 0.999f || _thermalPicture == null)
             return;
-        _costFrames++;
-        if (_costFrames <= ProbeWarmUp)
+        _dumpFrames++;
+        if (_dumpFrames != DumpDrawnAt && _dumpFrames != DumpSkippedAt)
             return;
-        _costSeconds += Time.unscaledDeltaTime;
-        if (_costFrames < ProbeWarmUp + ProbeFrames)
-            return;
-        NewCameraPlugin.Log?.LogInfo($"NVG thermal probe {_probeStep + 1}/4: {_costSeconds / ProbeFrames * 1000f:F1} ms a frame over {ProbeFrames} frames (picture {width}x{height}, the main camera's scene {(_sceneSkipped != null ? "not drawn" : "drawn")}).");
-        _probeStep++;
-        _costFrames = 0;
-        _costSeconds = 0f;
+        string tag = _dumpFrames == DumpDrawnAt ? "scene-drawn" : "scene-not-drawn";
+        try
+        {
+            string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgdump", "t7-bands");
+            System.IO.Directory.CreateDirectory(folder);
+            int width = _thermalPicture.width, height = _thermalPicture.height;
+            RenderTexture plain = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            Graphics.Blit(_thermalPicture, plain);
+            RenderTexture? before = RenderTexture.active;
+            RenderTexture.active = plain;
+            var read = new Texture2D(width, height, TextureFormat.RGB24, false);
+            read.ReadPixels(new Rect(0f, 0f, width, height), 0, 0);
+            read.Apply(false);
+            RenderTexture.active = before;
+            RenderTexture.ReleaseTemporary(plain);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(folder, tag + "-picture.png"), read.EncodeToPNG());
+            Object.Destroy(read);
+            ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(folder, tag + "-screen.png"));
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: saved {tag} (our camera's picture {width}x{height}, and the screen) to {folder}; the main camera's scene {(_sceneSkipped != null ? "not drawn" : "drawn")} this frame.");
+        }
+        catch (System.Exception e)
+        {
+            NewCameraPlugin.Log?.LogWarning("NVG thermal: saving the picture failed: " + e.Message);
+        }
     }
 
     // The main camera's thermal held off (taken) or given back as the game last asked for it.
@@ -475,6 +499,7 @@ internal static partial class NightVisionEyepieces
             camera.targetTexture = null;
             GiveMotionBlurBack();
         }
+        DumpThermal();
     }
 
     // No post-processing motion blur on this camera's picture: it is rendered out of turn, from a place set by hand,
