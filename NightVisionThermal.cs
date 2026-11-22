@@ -314,7 +314,8 @@ internal static partial class NightVisionEyepieces
             _thermal.MotionBlurUtilities = source.MotionBlurUtilities;
             _thermal.GlitchUtilities = source.GlitchUtilities;
             _thermal.PixelationUtilities = source.PixelationUtilities;
-            _thermal.IsNoisy = source.IsNoisy;
+            // No grain on the goggles' picture (the user's, 2026-11-22: the real T-7 has none to speak of; the game adds it).
+            _thermal.IsNoisy = false;
             _thermal.IsFpsStuck = source.IsFpsStuck;
             _thermal.IsMotionBlurred = source.IsMotionBlurred;
             _thermal.IsGlitch = source.IsGlitch;
