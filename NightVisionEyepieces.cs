@@ -459,7 +459,10 @@ internal static partial class NightVisionEyepieces
         // game's picture, as without BRNVG.
         bool brnvg = !thermal && UseBrnvg && (renderer != null || player is not HideoutPlayer);
         bool present = _body != null && _body.gameObject.activeInHierarchy;
-        bool worn = present && EyepieceImageReady(cameras) && (thermal ? EnsureThermalCamera() : !brnvg || renderer != null);
+        // (Thermal goggles' first frames switched on are left to the game, for a picture of its own to hold ours against:
+        // VanillaProbe, NightVisionThermal.cs.)
+        bool thermalProbe = thermal && present && VanillaProbe(thermalItem?.Togglable != null && thermalItem.Togglable.On);
+        bool worn = present && EyepieceImageReady(cameras) && (thermal ? !thermalProbe && EnsureThermalCamera() : !brnvg || renderer != null);
         bool switchedOn = worn && (thermal ? thermalItem?.Togglable != null && thermalItem.Togglable.On : nightItem?.Togglable != null ? nightItem.Togglable.On : device != null && SwitchedOn(device));
         // The tubes come on once the device is all the way down and the game has done switching its own filter on
         // (its switch dims the filter for a moment, the picture the lenses show), and go off before it flips up:

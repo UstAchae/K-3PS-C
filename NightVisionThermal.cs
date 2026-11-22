@@ -31,6 +31,37 @@ internal static partial class NightVisionEyepieces
     private static CommandBuffer? _thermalFinish;
     private static bool _effectsCopied, _pixelationNoted;
     private const float SharpenRadius = 1f;
+
+    // The game's own picture of the same view, to hold ours against (the user's, 2026-11-22: "怎么感觉 T-7 看不到热源了",
+    // and the steps at edges): the first time thermal goggles are switched on, the game is left to draw them its own
+    // way for VanillaFrames frames (over the whole frame, no eyepieces), the screen saved near their end; then ours.
+    private static int _vanillaFrames;
+    private const int VanillaFrames = 240, VanillaSaveAt = 200;
+
+    internal static bool VanillaProbe(bool on)
+    {
+        if (_vanillaFrames >= VanillaFrames)
+            return false;
+        if (!on)
+            return true;
+        _vanillaFrames++;
+        if (_vanillaFrames == VanillaSaveAt)
+        {
+            try
+            {
+                string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgdump", "t7-edges");
+                System.IO.Directory.CreateDirectory(folder);
+                ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(folder, "vanilla-screen.png"));
+                ThermalVision? main = BodyVisibility.Cameras?.ThermalVision;
+                NewCameraPlugin.Log?.LogInfo($"NVG thermal: saved the game's own picture to {folder} (its ThermalVision on {main?.On}, noisy {main?.IsNoisy}, blurred {main?.IsMotionBlurred}, pixelated {main?.IsPixelated}, stuck {main?.IsFpsStuck}, sharpening {main?.UnsharpRadiusBlur}/{main?.UnsharpBias}).");
+            }
+            catch (System.Exception e)
+            {
+                NewCameraPlugin.Log?.LogWarning("NVG thermal: saving the game's picture failed: " + e.Message);
+            }
+        }
+        return true;
+    }
     private static int _sharpenFrames;
     private const int SharpenGameUntil = 150, SharpenOursAt = 300;
 
