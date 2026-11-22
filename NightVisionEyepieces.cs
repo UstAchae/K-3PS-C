@@ -196,7 +196,7 @@ internal static partial class NightVisionEyepieces
         // edge.
         new Device
         {
-            Node = "nvg_alfa_pnv-10t_LOD0",
+            Node = "nvg_alfa_pnv-10t_LOD0", FieldDegrees = 40f,   // (40 degrees for every two-tube goggle and the PVS-14: the user's, 2026-11-22, "都改成 40°")
             Tubes = new[] { At(-0.03358f, 0.06246f, -0.03527f), At(-0.03358f, 0.06246f, -0.03527f), At(0.03666f, 0.06246f, -0.03527f), At(0.03666f, 0.06246f, -0.03527f) },
             LensRadius = 0.01573f, FloorDepth = 0.01075f, OpeningRadius = 0.01573f, RimHeight = 0.00324f, RimRadius = 0.01708f,
             CardSize = new Vector2(0.0205f, 0.0205f),
@@ -206,7 +206,7 @@ internal static partial class NightVisionEyepieces
         // the ring's inner lip.
         new Device
         {
-            Node = "Item_equipment_nightvision_57E_part_01_LOD0",
+            Node = "Item_equipment_nightvision_57E_part_01_LOD0", FieldDegrees = 40f,
             Tubes = new[] { At(-0.03576f, 0.01333f, -0.08095f), At(-0.03576f, 0.01333f, -0.08095f), At(0.03576f, 0.01333f, -0.08095f), At(0.03576f, 0.01333f, -0.08095f) },
             LensRadius = 0.01062f, FloorDepth = 0.00528f, OpeningRadius = 0.01062f, RimHeight = 0.00227f, RimRadius = 0.01148f,
             CardSize = new Vector2(0.0155f, 0.0155f),
@@ -216,7 +216,7 @@ internal static partial class NightVisionEyepieces
         // opening is the chamfer's top.
         new Device
         {
-            Node = "nvg_armasight_n-15_LOD0", Sealed = true,
+            Node = "nvg_armasight_n-15_LOD0", Sealed = true, FieldDegrees = 40f,
             CupHeight = 0.031f, CupRadii0 = new Vector4(0.0242f, 0.0252f, 0.0259f, 0.0282f), CupRadii1 = new Vector4(0.0294f, 0.0294f, 0f, 0f),
             Tubes = new[] { At(-0.03026f, 0.04487f, -0.02086f), At(-0.03026f, 0.04487f, -0.02086f), At(0.03026f, 0.04487f, -0.02086f), At(0.03026f, 0.04487f, -0.02086f) },
             LensRadius = 0.01648f, FloorDepth = 0.0025f, OpeningRadius = 0.02001f, RimHeight = 0.0175f, RimRadius = 0.0245f,
