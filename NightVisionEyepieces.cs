@@ -228,7 +228,8 @@ internal static partial class NightVisionEyepieces
         // (NightVisionMount).
         new Device
         {
-            Node = "nvg_l3_pvs31a_device_01_LOD0",
+            // (Its tubes' real field, 40 degrees, as the PVS-14's below.)
+            Node = "nvg_l3_pvs31a_device_01_LOD0", FieldDegrees = 40f,
             Tubes = new[] { At(-0.03481f, 0.06356f, -0.07219f), At(-0.03481f, 0.06356f, -0.07219f), At(0.03480f, 0.06356f, -0.07223f), At(0.03480f, 0.06356f, -0.07223f) },
             LensRadius = 0.01336f, FloorDepth = 0.00687f, OpeningRadius = 0.01336f, RimHeight = 0.00109f, RimRadius = 0.01366f,
             CardSize = new Vector2(0.016f, 0.016f),
@@ -255,7 +256,11 @@ internal static partial class NightVisionEyepieces
         // AN/PVS-14: a monocular, its eyepiece lens bulging out of stepped rings, no eyecup to hide it.
         new Device
         {
-            Node = "nvg_pvs_14_LOD0",
+            // Its tube's real field, 40 degrees (1.9.2): at the 60 every device without a figure has, the glass was lit
+            // out to some 62 degrees, as near the eye as it stands, and a clip-on's true 30 degrees (K-ECOTI's) stood at
+            // half the picture's width, three quarters of it on the real thing (the user's, 2026-11-22: "我感觉 ECOTI 现在
+            // 没有 30，看起来很小", then "那就是 PVS-14 错了").
+            Node = "nvg_pvs_14_LOD0", FieldDegrees = 40f,
             Tubes = new[] { Pvs14, Pvs14, Pvs14, Pvs14 },
             FloorDepth = 0.00459f, OpeningRadius = 0.05f, RimHeight = 0f, RimRadius = 0.05f,
             CardSize = new Vector2(0.016f, 0.016f),
