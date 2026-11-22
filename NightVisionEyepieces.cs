@@ -463,7 +463,8 @@ internal static partial class NightVisionEyepieces
         // game's picture, as without BRNVG.
         bool brnvg = !thermal && UseBrnvg && (renderer != null || player is not HideoutPlayer);
         bool present = _body != null && _body.gameObject.activeInHierarchy;
-        bool worn = present && EyepieceImageReady(cameras) && (thermal ? EnsureThermalCamera() : !brnvg || renderer != null);
+        // (ProbeNoEyepieces: the cost probe's last step, NightVisionCostProbe.cs.)
+        bool worn = present && !ProbeNoEyepieces && EyepieceImageReady(cameras) && (thermal ? EnsureThermalCamera() : !brnvg || renderer != null);
         bool switchedOn = worn && (thermal ? thermalItem?.Togglable != null && thermalItem.Togglable.On : nightItem?.Togglable != null ? nightItem.Togglable.On : device != null && SwitchedOn(device));
         // The tubes come on once the device is all the way down and the game has done switching its own filter on
         // (its switch dims the filter for a moment, the picture the lenses show), and go off before it flips up:
@@ -495,6 +496,7 @@ internal static partial class NightVisionEyepieces
 
         EnsureRendererPatch();
         RestoreMask(cameras);
+        CostProbeTick(present && !thermal && (nightItem?.Togglable != null ? nightItem.Togglable.On : device != null && SwitchedOn(device)), player is not HideoutPlayer);
     }
 
     // The gear changed with the device down (the helmet taken off, or another with its device down put on): the filter stays on for a

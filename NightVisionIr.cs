@@ -172,7 +172,7 @@ internal static partial class NightVisionEyepieces
 
     // IR kept from the frame while the eyepieces are in (flipping too: the game's night vision may be on by then), and
     // not thermal (IR is no heat); drawn for the lenses once the device is on.
-    private static bool IrWanted => !_device.Thermal && _eyepieceImage != null && _eyepieceImage.enabled && _irLightShader != null;
+    private static bool IrWanted => !ProbeNoIr && !_device.Thermal && _eyepieceImage != null && _eyepieceImage.enabled && _irLightShader != null;
 
     private static void InstallIr(Harmony harmony)
     {
