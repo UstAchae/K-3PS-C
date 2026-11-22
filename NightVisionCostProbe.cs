@@ -26,9 +26,15 @@ internal static partial class NightVisionEyepieces
         "as it is", "without the objective's near blur", "and without the IR layer", "and without the other mod's picture (the fusion)",
         "and without the device drawn from each eye", "no eyepieces: the game's own night-vision picture",
     };
-    private const int ProbeSettle = 180, ProbeWarm = 40, ProbeCount = 300;
-    private static int _probeStep = -1, _probeFrames, _probeSettled;
-    private static float _probeSeconds;
+    // The first run in a raid (1.8.205, an F-PANO on Ground Zero) told nothing: begun as the raid began, its first step
+    // came to 86 ms a frame, and the game's own picture (28.2) to more than the eyepieces without their near blur (22.5).
+    // So: not before the raid has run RaidSettleSeconds; each step's MEDIAN frame time, not its mean (a hitch then counts
+    // for nothing); and the six steps gone through twice, so two figures for each show how far one can be trusted.
+    private const int ProbeSettle = 180, ProbeWarm = 30, ProbeCount = 150, ProbeRounds = 2;
+    private const float RaidSettleSeconds = 60f;
+    private static int _probeStep = -1, _probeFrames, _probeSettled, _probeRound;
+    private static float _probeSeconds, _raidSince = -1f;
+    private static readonly float[] _probeTimes = new float[ProbeCount];
     private static bool _probeDone, _probeBlur;
 
     // Read by IrWanted, Fused, OnCameraPreCull's "_direct" and Update's "worn".
@@ -43,7 +49,11 @@ internal static partial class NightVisionEyepieces
         if (_probeDone)
             return;
         // (At the last step the eyepieces are off by our own doing: the goggle is still down.)
-        bool there = inRaid && _body != null && !_device.Thermal && (ProbeNoEyepieces ? downAndOn : Active && _flip >= 0.999f);
+        if (!inRaid)
+            _raidSince = -1f;
+        else if (_raidSince < 0f)
+            _raidSince = Time.unscaledTime;
+        bool there = inRaid && Time.unscaledTime - _raidSince >= RaidSettleSeconds && _body != null && !_device.Thermal && (ProbeNoEyepieces ? downAndOn : Active && _flip >= 0.999f);
         if (!there)
         {
             // Flipped up or taken off part way: put back, and from the start the next time.
@@ -65,13 +75,23 @@ internal static partial class NightVisionEyepieces
         }
         _probeFrames++;
         if (_probeFrames > ProbeWarm)
+        {
+            _probeTimes[_probeFrames - ProbeWarm - 1] = Time.unscaledDeltaTime;
             _probeSeconds += Time.unscaledDeltaTime;
+        }
         if (_probeFrames < ProbeWarm + ProbeCount)
             return;
-        NewCameraPlugin.Log?.LogInfo($"NVG cost {_probeStep + 1}/{ProbeSteps.Length}: {_probeSeconds / ProbeCount * 1000f:F2} ms a frame ({ProbeCount / _probeSeconds:F0} a second), {ProbeSteps[_probeStep]}.");
+        System.Array.Sort(_probeTimes);
+        float median = _probeTimes[ProbeCount / 2];
+        NewCameraPlugin.Log?.LogInfo($"NVG cost round {_probeRound + 1}, {_probeStep + 1}/{ProbeSteps.Length}: median {median * 1000f:F2} ms a frame ({1f / median:F0} a second; mean {_probeSeconds / ProbeCount * 1000f:F2}, slowest {_probeTimes[ProbeCount - 1] * 1000f:F0}), {ProbeSteps[_probeStep]}.");
         _probeStep++;
         _probeFrames = 0;
         _probeSeconds = 0f;
+        if (_probeStep >= ProbeSteps.Length && _probeRound + 1 < ProbeRounds)
+        {
+            _probeRound++;
+            _probeStep = 0;
+        }
         if (_probeStep >= ProbeSteps.Length)
         {
             ProbeRestore();
