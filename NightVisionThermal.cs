@@ -198,7 +198,7 @@ internal static partial class NightVisionEyepieces
     private static void SkipMainScene(Camera camera)
     {
         GiveMainSceneBack();
-        if (!ThermalAlone)
+        if (!ThermalAlone || !ProbeSkips)
             return;
         _sceneSkipped = camera;
         _skippedMask = camera.cullingMask;
@@ -226,26 +226,31 @@ internal static partial class NightVisionEyepieces
         _sceneSkipped = null;
     }
 
-    // What a frame takes with the goggles down, for the log: the mean over 300 frames, once for each way it is drawn.
-    private static int _costFrames, _costKind = -1;
+    // What a frame takes with the goggles down, measured each way in turn, for the log (the user's, 2026-11-22: no more
+    // frames with the main camera's scene left out and the picture at the screen's size; which of the two does what
+    // was not known). The first time the goggles are down and still for long enough: 300 frames each of the picture
+    // at the main camera's size before its SSAA stage with the scene drawn, the same with it not drawn, the screen's
+    // size with it not drawn, the screen's size with it drawn; then as it is to stay (the third).
+    private static int _probeStep, _costFrames;
     private static float _costSeconds;
+    private const int ProbeWarmUp = 60, ProbeFrames = 300, ProbeDone = 4;
+    private static bool ProbeSmall => _probeStep <= 1;
+    private static bool ProbeSkips => _probeStep == 1 || _probeStep == 2 || _probeStep >= ProbeDone;
+
     private static void NoteThermalCost(int width, int height)
     {
-        int kind = (_sceneSkipped != null ? 1 : 0) + width * 2;
-        if (kind != _costKind)
-        {
-            _costKind = kind;
-            _costFrames = 0;
-            _costSeconds = 0f;
-        }
-        if (_costFrames < 0)
+        if (_probeStep >= ProbeDone || !Active || _flip < 0.999f)
             return;
         _costFrames++;
-        _costSeconds += Time.unscaledDeltaTime;
-        if (_costFrames < 300)
+        if (_costFrames <= ProbeWarmUp)
             return;
-        NewCameraPlugin.Log?.LogInfo($"NVG thermal: {_costSeconds / _costFrames * 1000f:F1} ms a frame over {_costFrames} frames (picture {width}x{height}, the main camera's scene {(_sceneSkipped != null ? "not drawn" : "drawn")}).");
-        _costFrames = -1;
+        _costSeconds += Time.unscaledDeltaTime;
+        if (_costFrames < ProbeWarmUp + ProbeFrames)
+            return;
+        NewCameraPlugin.Log?.LogInfo($"NVG thermal probe {_probeStep + 1}/4: {_costSeconds / ProbeFrames * 1000f:F1} ms a frame over {ProbeFrames} frames (picture {width}x{height}, the main camera's scene {(_sceneSkipped != null ? "not drawn" : "drawn")}).");
+        _probeStep++;
+        _costFrames = 0;
+        _costSeconds = 0f;
     }
 
     // The main camera's thermal held off (taken) or given back as the game last asked for it.
@@ -416,6 +421,11 @@ internal static partial class NightVisionEyepieces
         // goggles' picture). It had been the main camera's size before its SSAA stage scales it to the screen (two thirds
         // of it at the user's settings), for the goggles' grain to be at the game's scale; the grain is off now.
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
+        if (ProbeSmall && main.TryGetComponent(out SSAA ssaa))
+        {
+            width = Mathf.Max(ssaa.GetInputWidth(), 1);
+            height = Mathf.Max(ssaa.GetInputHeight(), 1);
+        }
         if (_thermalPicture == null || _thermalPicture.width != width || _thermalPicture.height != height)
         {
             if (_thermalPicture != null)
