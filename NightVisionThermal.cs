@@ -392,7 +392,9 @@ internal static partial class NightVisionEyepieces
             // No grain on the goggles' picture (the user's, 2026-11-22: the real T-7 has none to speak of; the game adds it).
             _thermal.IsNoisy = false;
             _thermal.IsFpsStuck = source.IsFpsStuck;
-            _thermal.IsMotionBlurred = source.IsMotionBlurred;
+            // Nor the lag the game gives them (each frame blended into the ones before, through a texture of its own, by up
+            // to 0.92: at our frame rate everything bright left a trail; the user's, 2026-11-22, "物体也拖影").
+            _thermal.IsMotionBlurred = false;
             _thermal.IsGlitch = source.IsGlitch;
             _thermal.IsPixelated = source.IsPixelated;
             _thermal.ChromaticAberrationThermalShift = source.ChromaticAberrationThermalShift;
