@@ -123,6 +123,73 @@ public static class EyepieceFusion
     // Set by the other mod: (i2, dest) -> whether dest was written.
     public static Func<RenderTexture, RenderTexture, bool>? Fuse;
 
+    // A clip-on of another mod's, hung before one tube's objective of a goggle that is not itself a fusion device (K-ECOTI's
+    // on the PVS-14, or on one pod of a PVS-31A). (Added 1.9.1, Version still 1: look for the members by name.)
+    // RegisterClipOn once, with the clip-on's name (any, its own), its whole field in degrees and its handler, as Fuse's.
+    // FitClipOn whenever that changes: the clip-on's model as it hangs on a goggle (any node of it, under the goggle's
+    // own model), or null when there is none. K-3PS-C looks for nothing itself: only what is told here.
+    // While the model told hangs on the goggle whose eyepieces are shown, each frame is claimed as for a fusion device:
+    // ClaimedFrame, Deployed; ClaimedDevice the goggle's node, ClaimedClipOn the clip-on's name (null on every other
+    // claimed frame); FieldInMainUv the clip-on's own field, a cone of that many degrees about the axis of the tube it
+    // hangs before, as it stands on the main camera's screen (the tubes' picture is the main camera's own, one to one:
+    // 30 degrees are 30 degrees of the screen): not cut by the eyepiece's glass, the eyepieces show of it what the eye
+    // sees through that tube. The handler's dest is shown in that tube alone, all over it (no rectangle, no gain):
+    // dest is to be i2 wherever the clip-on's picture is not. The other tube, and the bare eye, show nothing of it.
+    private sealed class ClipOn
+    {
+        internal string Name = "";
+        internal float Field;
+        internal Transform? Fitted;
+    }
+    private static readonly List<ClipOn> ClipOns = new List<ClipOn>();
+
+    public static string? ClaimedClipOn { get; internal set; }
+
+    public static void RegisterClipOn(string clipOn, float fieldDegrees, Func<RenderTexture, RenderTexture, bool> fuse)
+    {
+        if (string.IsNullOrEmpty(clipOn) || fuse == null)
+            return;
+        ClipOnOf(clipOn).Field = Mathf.Clamp(fieldDegrees, 1f, 120f);
+        Register(clipOn, fuse);
+    }
+
+    public static void FitClipOn(string clipOn, Transform? fitted)
+    {
+        if (!string.IsNullOrEmpty(clipOn))
+            ClipOnOf(clipOn).Fitted = fitted;
+    }
+
+    private static ClipOn ClipOnOf(string name)
+    {
+        foreach (ClipOn known in ClipOns)
+        {
+            if (known.Name == name)
+                return known;
+        }
+        var made = new ClipOn { Name = name };
+        ClipOns.Add(made);
+        return made;
+    }
+
+    // The clip-on hung on this goggle (its model's root) with a handler to call: its name, model and field.
+    internal static string? ClipOnOn(Transform goggle, out Transform? fitted, out float fieldDegrees)
+    {
+        for (int i = 0; i < ClipOns.Count; i++)
+        {
+            ClipOn known = ClipOns[i];
+            if (known.Field <= 0f || known.Fitted == null || !known.Fitted.gameObject.activeInHierarchy || !known.Fitted.IsChildOf(goggle))
+                continue;
+            if (HandlerOf(known.Name) == null)
+                continue;
+            fitted = known.Fitted;
+            fieldDegrees = known.Field;
+            return known.Name;
+        }
+        fitted = null;
+        fieldDegrees = 0f;
+        return null;
+    }
+
     // Infrared things of another mod's (an IR strobe's flash): seen through the tubes only. (Added 1.8.167, Version
     // still 1: look for the members by name.)
     // IrLayerActive: K-3PS-C has the night-vision picture in its own hands now (eyepieces shown, or a goggle on its way

@@ -308,6 +308,7 @@ internal static partial class NightVisionEyepieces
     private static Texture2D? _openTexture;
 
     private static Transform? _body;
+    private static Transform? _deviceRoot;   // the worn device's own model (its NightVisionDevice): a clip-on's hangs under it
     private static Device _device = Devices[0];
     private static GameObject? _lenses;
     private static Transform[] _lensNodes = Array.Empty<Transform>();
@@ -569,6 +570,7 @@ internal static partial class NightVisionEyepieces
         _lensPods = Array.Empty<Transform?>();
         _lensFloors = Array.Empty<Vector4>();
         _body = null;
+        _deviceRoot = null;
         _rotator = null;
         // What was learned of one device's rotator is not the next's.
         _rotatorReversed = false;
@@ -682,6 +684,8 @@ internal static partial class NightVisionEyepieces
 
         // Where each tube's lens sits and where it looks, following the device.
         _body = body;
+        NightVisionDevice? device = body.GetComponentInParent<NightVisionDevice>();
+        _deviceRoot = device != null ? device.transform : null;
         _rotator = body.GetComponentInParent<CurveRotator>();
         _lenses = new GameObject("Justachae NVG eyepieces");
         _lenses.layer = body.gameObject.layer;

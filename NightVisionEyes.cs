@@ -104,11 +104,21 @@ internal static partial class NightVisionEyepieces
     // screen and how far it is down. The ENVG-B lays its thermal into the right tube only (the wearer's right, of the
     // two eyepieces the one further along the camera's right); the left stays the tube's own.
     private static Vector4 _fusedTubes;
+    // Whose handler this frame's claim is for: the device's own node, or the clip-on's name (ClaimClipOn).
+    private static string _fusionKey = "";
+    private static bool _clipOnClaimed;
     private static void ClaimFusion(Camera camera)
     {
-        // (Only a device some mod serves: one with no handler registered is left to its own mod's way of drawing.)
-        if (!_device.Fusion || _lensNodes.Length == 0 || !LensesOn(camera) || !Interop.EyepieceFusion.Serves(_device.Node))
+        _clipOnClaimed = false;
+        if (_lensNodes.Length == 0 || !LensesOn(camera))
             return;
+        if (ClaimClipOn(camera))
+            return;
+        // (Only a device some mod serves: one with no handler registered is left to its own mod's way of drawing.)
+        if (!_device.Fusion || !Interop.EyepieceFusion.Serves(_device.Node))
+            return;
+        _fusionKey = _device.Node;
+        Interop.EyepieceFusion.ClaimedClipOn = null;
         // Which is which by where the eyepieces stand down before the eyes (not where a pod has swung one).
         int indexB = Mathf.Min(CentreLensB, _lensNodes.Length - 1);
         Transform a = _lensRest[CentreLensA], b = _lensRest[indexB];
@@ -148,6 +158,54 @@ internal static partial class NightVisionEyepieces
         }
     }
     private static string? _fusionClaimNoted;
+
+    // Another mod's clip-on hung before one of this goggle's objectives (EyepieceFusion.FitClipOn; K-ECOTI's): the frame
+    // claimed for it, its picture into the tube it hangs before alone (the tubes nearest it across the device), the
+    // field given its own cone about that tube's axis.
+    private static bool ClaimClipOn(Camera camera)
+    {
+        if (_deviceRoot == null || _body == null)
+            return false;
+        string? name = Interop.EyepieceFusion.ClipOnOn(_deviceRoot, out Transform? fitted, out float fieldDegrees);
+        if (name == null || fitted == null)
+            return false;
+        float across = _body.InverseTransformPoint(fitted.position).x, nearest = float.MaxValue;
+        int tube = 0;
+        for (int i = 0; i < _device.Tubes.Length && i < 4; i++)
+        {
+            float off = Mathf.Abs(_device.Tubes[i].Centre.x - across);
+            if (off < nearest - 1e-5f)
+            {
+                nearest = off;
+                tube = i;
+            }
+        }
+        if (tube >= _lensRest.Length || PodGone(tube) >= 1f)
+            return false;
+        for (int i = 0; i < 4; i++)
+            _fusedTubes[i] = i < _device.Tubes.Length && Mathf.Abs(_device.Tubes[i].Centre.x - across) <= nearest + 0.001f ? 1f : 0f;
+        Vector3 axis = -_lensRest[tube].forward;
+        Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
+        Vector3 ahead = camera.worldToCameraMatrix.MultiplyVector(axis);
+        Vector4 clip = projection * new Vector4(ahead.x, ahead.y, ahead.z, 0f);
+        Vector2 uv = clip.w > 1e-4f ? new Vector2(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f) : new Vector2(0.5f, 0.5f);
+        float radius = 0.5f * Mathf.Tan(fieldDegrees * 0.5f * Mathf.Deg2Rad) * projection.m11;
+        Interop.EyepieceFusion.FieldInMainUv = new Vector4(uv.x, uv.y, radius, camera.aspect);
+        Interop.EyepieceFusion.Deployed = _flip;
+        Interop.EyepieceFusion.ClaimedFrame = Time.frameCount;
+        Interop.EyepieceFusion.ClaimedDevice = _device.Node;
+        Interop.EyepieceFusion.ClaimedClipOn = name;
+        _fusionKey = name;
+        _clipOnClaimed = true;
+        if (_clipOnNoted != name || _clipOnNotedOn != _device.Node)
+        {
+            _clipOnNoted = name;
+            _clipOnNotedOn = _device.Node;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the clip-on {name} on {_device.Node} claimed, before tube {tube} ({across * 1000f:F1} mm across, tubes {_fusedTubes}); its {fieldDegrees:F0} degree field at {uv.x:F3},{uv.y:F3}, radius {radius:F3}.");
+        }
+        return true;
+    }
+    private static string? _clipOnNoted, _clipOnNotedOn;
 
     internal static void OnCameraPostRender(Camera camera)
     {
@@ -395,7 +453,8 @@ internal static partial class NightVisionEyepieces
     // the eyepiece. Where the cup's lip or throat hides some of it, it is hidden there like the rest of the picture.
     private static void FusionField(Camera camera, int rightLens, Vector3 eye)
     {
-        if (!_device.Fusion || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || rightLens >= _lensNodes.Length)
+        // (Not a clip-on's: its field is its own cone, given as the frame is claimed.)
+        if (!_device.Fusion || _clipOnClaimed || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || rightLens >= _lensNodes.Length)
             return;
         Transform lens = _lensNodes[rightLens];
         float scale = lens.lossyScale.x;

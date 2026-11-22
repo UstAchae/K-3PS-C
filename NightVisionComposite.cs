@@ -192,7 +192,8 @@ internal static partial class NightVisionEyepieces
         // (The handler of the device worn: its own mod's, EyepieceFusion.Register; the ENVG-B's the old Fuse.)
         if (Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || picture is not RenderTexture i2)
             return null;
-        Func<RenderTexture, RenderTexture, bool>? fuse = Interop.EyepieceFusion.HandlerOf(_device.Node);
+        string key = _fusionKey;
+        Func<RenderTexture, RenderTexture, bool>? fuse = Interop.EyepieceFusion.HandlerOf(key);
         if (fuse == null)
             return null;
         fused = RenderTexture.GetTemporary(i2.width, i2.height, 0, i2.format);
@@ -203,14 +204,14 @@ internal static partial class NightVisionEyepieces
         }
         catch (Exception e)
         {
-            Interop.EyepieceFusion.Failed(_device.Node);
-            NewCameraPlugin.Log?.LogError($"NVG fusion: the other mod's picture for {_device.Node} failed, its eyepieces show the tube's alone from now on: {e}");
+            Interop.EyepieceFusion.Failed(key);
+            NewCameraPlugin.Log?.LogError($"NVG fusion: the other mod's picture for {key} failed, its eyepieces show the tube's alone from now on: {e}");
             return null;
         }
-        if (wrote && _fuseNoted != _device.Node)
+        if (wrote && _fuseNoted != key)
         {
-            _fuseNoted = _device.Node;
-            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the other mod's picture laid into the eyepieces of {_device.Node} ({i2.width}x{i2.height} {i2.format}; tubes {_fusedTubes}).");
+            _fuseNoted = key;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the other mod's picture ({key}) laid into the eyepieces of {_device.Node} ({i2.width}x{i2.height} {i2.format}; tubes {_fusedTubes}).");
         }
         return wrote ? fused : null;
     }
@@ -330,7 +331,8 @@ internal static partial class NightVisionEyepieces
         composite.SetVector(TubeFusedId, fusedPicture != null ? _fusedTubes : Vector4.zero);
         Vector4 field = Interop.EyepieceFusion.FieldInMainUv;
         Vector2 share = Interop.EyepieceFusion.RectOf(_device.Node);
-        composite.SetVector(FusedRectId, fusedPicture != null && field.w > 0f
+        // (A clip-on's: no rectangle, which every lens shows; its picture is the one tube's alone.)
+        composite.SetVector(FusedRectId, fusedPicture != null && field.w > 0f && !_clipOnClaimed
             ? new Vector4(field.x, field.y, share.x * field.z / field.w, share.y * field.z) : Vector4.zero);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
