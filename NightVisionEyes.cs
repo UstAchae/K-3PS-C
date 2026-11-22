@@ -320,6 +320,7 @@ internal static partial class NightVisionEyepieces
         turned.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));
         Matrix4x4 projection = Matrix4x4.Perspective(camera.fieldOfView, camera.aspect, EyeNear, LensMapRange);
         Matrix4x4 inverse = (Matrix4x4.Perspective(camera.fieldOfView, camera.aspect, RayNear, RayFar) * turned).inverse;
+        ThermalRegionBegin();
         for (int side = 0; side < 2; side++)
         {
             Vector3 shift = side == 0 ? leftShift : rightShift;
@@ -338,6 +339,7 @@ internal static partial class NightVisionEyepieces
             Transform lens = _lensNodes[side == 0 ? (a <= b ? CentreLensA : CentreLensB) : (a <= b ? CentreLensB : CentreLensA)];
             float eyeBack = Mathf.InverseLerp(DistortionNear, DistortionFar, (lens.position - position - shift).magnitude / lens.lossyScale.x);
             Vector3 eye = position + shift;
+            ThermalRegionAdd(camera, side == 0 ? (a <= b ? CentreLensA : CentreLensB) : (a <= b ? CentreLensB : CentreLensA), eye);
             binocular.SetTexture(EyeIds[side], Texture2D.blackTexture);
             binocular.SetTexture(LensIds[side], lensMap);
             binocular.SetTexture(GlassIds[side], glassMap);
