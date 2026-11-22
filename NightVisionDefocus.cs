@@ -61,7 +61,7 @@ internal static partial class NightVisionEyepieces
         // (InRegion), the last one off the glass itself. Without this frame's glass maps, all over the frame as before.
         RenderTexture? regionLens = null, region = null;
         defocus.SetFloat(UseRegionId, 0f);
-        if (_eyesFrame == Time.frameCount && _glassMaps[0] != null && _glassMaps[1] != null)
+        if (!ProbeNoRegion && _eyesFrame == Time.frameCount && _glassMaps[0] != null && _glassMaps[1] != null)
         {
             int regionWidth = Mathf.Max(width / 4, 1), regionHeight = Mathf.Max(height / 4, 1);
             regionLens = Temporary(regionWidth, regionHeight);

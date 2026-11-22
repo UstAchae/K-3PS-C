@@ -23,11 +23,19 @@ namespace EFTNewCamera;
 // (5 less 6: what is left, the frame taken down to a quarter with its nearness, and the last pass at the frame's size.)
 internal static partial class NightVisionEyepieces
 {
+    // (That measurement, 1.8.193, a PNV-10T: as it is 18.2 ms; without the bands 16.8; the three after it no different;
+    // no near blur 15.0. So the bands 1.4 ms, taking the frame down and laying it back 1.8, the rest nothing.)
+    //
+    // This one (1.8.195): what working the near blur only about the eyepieces (1.8.194) saves, the two ways turn and
+    // turn about in one stand, so the same goggle, place and view: about the eyepieces, all over the frame, about the
+    // eyepieces, all over the frame, then no near blur.
     private static readonly string[] ProbeSteps =
     {
-        "the near blur as it is", "without its seven bands", "and without the four blurs of what lies behind", "and without the closing and the seam",
-        "and without the gathering over frames", "no near blur at all",
+        "the near blur about the eyepieces only", "the near blur all over the frame", "about the eyepieces only (again)", "all over the frame (again)",
+        "no near blur at all",
     };
+    // Read by DefocusThrough: the frame worked all over, as before 1.8.194.
+    internal static bool ProbeNoRegion { get; private set; }
     private const int ProbeSettle = 180, ProbeWarm = 40, ProbeCount = 400;
     private static int _probeStep = -1, _probeFrames, _probeSettled;
     private static float _probeSeconds;
@@ -86,13 +94,14 @@ internal static partial class NightVisionEyepieces
             NewCameraPlugin.Log?.LogInfo("NVG cost: done, all put back as it was.");
             return;
         }
-        ProbeDefocusLess = Mathf.Min(_probeStep, 4);
-        NearBlurOn = _probeStep < 5 && _probeBlur;
+        ProbeNoRegion = _probeStep == 1 || _probeStep == 3;
+        NearBlurOn = _probeStep < 4 && _probeBlur;
     }
 
     private static void ProbeRestore()
     {
         NearBlurOn = _probeBlur;
         ProbeDefocusLess = 0;
+        ProbeNoRegion = false;
     }
 }
