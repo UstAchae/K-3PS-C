@@ -34,8 +34,11 @@ internal static partial class NightVisionEyepieces
     // The picture held over frames (NvgIrLight.shader pass 6). The vanilla goggles' frame is the main camera's, jittered
     // and smoothed over frames by the game; ours was one sample a pixel from a camera not jittered, and every edge in
     // it crawled with the breathing (the user's, 2026-11-22: "跟 ENVG-B 遇到的波动差不多"). So: our camera jittered
-    // by a sub-pixel pattern of our own, and its frame, right after the game copies the heat into it and before the
-    // goggles' own passes (their grain is left as it is), blended into the frames before.
+    // by a sub-pixel pattern (its own layer's, when that has temporal anti-aliasing on; else one of our own), and its
+    // frame blended into the frames before. Where: after the goggles' own passes (their grain with them) and before
+    // the one the SSAA stage gives the main camera's (FinishThermal), which is where the game's smoothing stands for
+    // the main camera's frame: the grain is smoothed with the rest, as the vanilla goggles' is. (1.8.171 had it
+    // before the goggles' passes, the grain left whole and new every frame: the user's "感觉还是有噪点".)
     private static CommandBuffer? _thermalHold;
     private static Material? _thermalHoldMaterial;
     private static readonly RenderTexture?[] _thermalHistory = new RenderTexture?[2];
@@ -89,8 +92,13 @@ internal static partial class NightVisionEyepieces
         if (_thermalHold == null)
         {
             _thermalHold = new CommandBuffer { name = "Justachae thermal held over frames" };
-            // After the game's own buffer there (its copy of the heat into the frame, added as its ThermalVision woke).
-            _thermalCamera.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, _thermalHold);
+            // After the game's own buffer there (the goggles' passes, added as its ThermalVision woke), before ours
+            // that finishes the picture.
+            if (_thermalFinish != null)
+                _thermalCamera.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha, _thermalFinish);
+            _thermalCamera.AddCommandBuffer(CameraEvent.AfterForwardAlpha, _thermalHold);
+            if (_thermalFinish != null)
+                _thermalCamera.AddCommandBuffer(CameraEvent.AfterForwardAlpha, _thermalFinish);
         }
         if (!_thermalJitterHooked)
         {
@@ -115,13 +123,22 @@ internal static partial class NightVisionEyepieces
     {
         if (camera != _thermalCamera || _thermalHoldMaterial == null || _thermalPicture == null)
             return;
-        Matrix4x4 plain = camera.projectionMatrix, jittered = plain;
-        _thermalJitterAt = (_thermalJitterAt + 1) % ThermalJitterCount;
-        float x = Halton(_thermalJitterAt + 1, 2) - 0.5f, y = Halton(_thermalJitterAt + 1, 3) - 0.5f;
-        jittered.m02 += 2f * x / _thermalPicture.width;
-        jittered.m12 += 2f * y / _thermalPicture.height;
-        camera.nonJitteredProjectionMatrix = plain;
-        camera.projectionMatrix = jittered;
+        // Its own layer's temporal anti-aliasing has jittered it by now (the log of 1.8.171: on, for ours as for the main
+        // camera): that jitter taken as it is. Else one of our own.
+        bool layerJitters = camera.TryGetComponent(out PostProcessLayer ownLayer) && ownLayer.enabled
+            && ownLayer.antialiasingMode == PostProcessLayer.Antialiasing.TemporalAntialiasing;
+        Matrix4x4 plain = layerJitters ? camera.nonJitteredProjectionMatrix : camera.projectionMatrix, jittered = camera.projectionMatrix;
+        float x = (jittered.m02 - plain.m02) * 0.5f * _thermalPicture.width, y = (jittered.m12 - plain.m12) * 0.5f * _thermalPicture.height;
+        if (!layerJitters)
+        {
+            _thermalJitterAt = (_thermalJitterAt + 1) % ThermalJitterCount;
+            x = Halton(_thermalJitterAt + 1, 2) - 0.5f;
+            y = Halton(_thermalJitterAt + 1, 3) - 0.5f;
+            jittered.m02 += 2f * x / _thermalPicture.width;
+            jittered.m12 += 2f * y / _thermalPicture.height;
+            camera.nonJitteredProjectionMatrix = plain;
+            camera.projectionMatrix = jittered;
+        }
         Matrix4x4 view = camera.worldToCameraMatrix, now = plain * view;
         // A history only from the frame right before this one.
         bool follows = _thermalHeldFrame == Time.frameCount - 1;
@@ -137,7 +154,7 @@ internal static partial class NightVisionEyepieces
             string own = camera.TryGetComponent(out PostProcessLayer layer) ? layer.antialiasingMode.ToString() : "no layer";
             Camera? main = Camera.main;
             string mains = main != null && main.TryGetComponent(out PostProcessLayer mainLayer) ? mainLayer.antialiasingMode.ToString() : "no layer";
-            NewCameraPlugin.Log?.LogInfo($"NVG thermal: the picture held over frames ({_thermalPicture.width}x{_thermalPicture.height}, jitter {x:F2},{y:F2} px of {ThermalJitterCount}); anti-aliasing of our camera's layer {own}, of the main camera's {mains}.");
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: the picture held over frames ({_thermalPicture.width}x{_thermalPicture.height}, jitter {x:F2},{y:F2} px, {(layerJitters ? "its layer's" : "our own")}; after the goggles' passes); anti-aliasing of our camera's layer {own}, of the main camera's {mains}.");
         }
     }
 
