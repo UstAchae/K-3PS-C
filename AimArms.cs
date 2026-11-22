@@ -1743,56 +1743,65 @@ internal static class AimArms
     private static float EyeDepth(ProceduralWeaponAnimation animation)
     {
         var hands = animation.HandsContainer;
-        WeaponPrefab.AimPlane? plane = GunAimPlane(animation);
+        WeaponPrefab.AimPlane? plane = GunAimPlane(animation, out float far);
         if (plane == null)
             return float.NaN;
         float shift = hands.Weapon.localPosition.y;
-        float depth = plane.Depth;
-        if (animation._farPlane != null)
-            depth = Mathf.Min(depth, animation._farPlane.Depth - shift);
+        float depth = Mathf.Min(plane.Depth, far - shift);
+        if (!ReferenceEquals(animation._currentAimingPlane, _loggedGamePlane) || !ReferenceEquals(animation._farPlane, _loggedGameFar))
+        {
+            _loggedGamePlane = animation._currentAimingPlane;
+            _loggedGameFar = animation._farPlane;
+            WeaponPrefab.AimPlane? game = animation._currentAimingPlane ?? hands.DefaultAimPlane;
+            float gameDepth = game == null ? float.NaN
+                : animation._farPlane != null ? Mathf.Min(game.Depth, animation._farPlane.Depth - shift) : game.Depth;
+            if (game != null && Mathf.Abs(gameDepth - depth) > 0.001f)
+                NewCameraPlugin.Log?.LogInfo($"Eye along the gun {(depth + shift) * 1000f:F0} mm (aim plane {plane.Name}), the game's for this sight as it is set {(gameDepth + shift) * 1000f:F0} mm ({game.Name})");
+        }
         return depth + shift;
     }
 
-    // One aim plane for the gun, whichever of its sights is aimed through: the game picks one for each sight (FindCameraDepth), and the
-    // arms moved forward or back with Alt or Ctrl and the right button, or when the aim began on another sight than last time. The plane
-    // is the one the game picks for the gun's magnified sight if it has one (its eye stays behind the eyepiece), else for its first sight
-    // (the one the game starts on). The far plane, behind every magnified sight's eyepiece, holds for all of them.
-    private static WeaponPrefab.AimPlane? GunAimPlane(ProceduralWeaponAnimation animation)
+    // One aim plane for the gun, whichever of its sights is aimed through and whatever it is set to: the game picks one for each sight
+    // and each of its settings (FindCameraDepth; a sight counts as magnified only while set so, IsOptic), and the arms moved forward or back
+    // with Alt or Ctrl and the right button (an EOTech's magnifier and its holographic sight), or when the aim began on another sight than
+    // last time. The plane is the one the game picks for the gun's first sight that can magnify, as it picks it while that is set to
+    // magnify (its eye behind the eyepiece), else for its first sight (the one the game starts on). The far plane, behind each such sight's
+    // eyepiece (UpdateFarPlane), likewise counts every sight that can magnify, however it is set.
+    private static WeaponPrefab.AimPlane? GunAimPlane(ProceduralWeaponAnimation animation, out float far)
     {
         var hands = animation.HandsContainer;
         var sights = animation.ScopeAimTransforms;
-        WeaponPrefab.AimPlane? game = animation._currentAimingPlane ?? hands.DefaultAimPlane;
+        far = hands.FarPlane != null ? hands.FarPlane.Depth : float.PositiveInfinity;
         if (sights == null || sights.Count == 0)
-            return game;
-        ProceduralWeaponAnimation.SightNBone main = sights[0];
+        {
+            if (animation._farPlane != null)
+                far = animation._farPlane.Depth;
+            return animation._currentAimingPlane ?? hands.DefaultAimPlane;
+        }
+        ProceduralWeaponAnimation.SightNBone? main = null;
         for (int i = 0; i < sights.Count; i++)
-            if (sights[i] != null && sights[i].IsOptic)
-            {
-                main = sights[i];
-                break;
-            }
-        WeaponPrefab.AimPlane? plane = null;
+        {
+            ProceduralWeaponAnimation.SightNBone sight = sights[i];
+            if (!CanMagnify(sight))
+                continue;
+            main ??= sight;
+            if (sight.Bone != null)
+                far = Mathf.Min(far, animation.AimTransformDepth(sight.Bone) - sight.EyeGuardShift);
+        }
+        bool magnifies = main != null;
+        main ??= sights[0];
         string? custom = main?.Mod?.CustomAimPlane;
         if (!string.IsNullOrEmpty(custom) && hands.CustomAimPlanes != null)
             foreach (WeaponPrefab.AimPlane p in hands.CustomAimPlanes)
                 if (p != null && p.Name == custom)
-                {
-                    plane = p;
-                    break;
-                }
-        plane ??= main != null && main.IsOptic ? hands.FarPlane : hands.DefaultAimPlane;
-        plane ??= game;
-        if (!ReferenceEquals(plane, _loggedPlane) || !ReferenceEquals(game, _loggedGamePlane))
-        {
-            _loggedPlane = plane;
-            _loggedGamePlane = game;
-            if (plane != null && game != null && !ReferenceEquals(plane, game))
-                NewCameraPlugin.Log?.LogInfo($"Eye along the gun from its sight {main?.Bone?.name}'s aim plane {plane.Name} ({plane.Depth * 1000f:F0} mm), not this sight's {game.Name} ({game.Depth * 1000f:F0} mm)");
-        }
-        return plane;
+                    return p;
+        return (magnifies ? hands.FarPlane : hands.DefaultAimPlane) ?? animation._currentAimingPlane;
     }
 
-    private static WeaponPrefab.AimPlane? _loggedPlane, _loggedGamePlane;
+    private static bool CanMagnify(ProceduralWeaponAnimation.SightNBone? sight)
+        => sight != null && sight.ScopePrefabCache != null && sight.ScopePrefabCache.HasOptics && sight.BoneRelatesToOptics;
+
+    private static WeaponPrefab.AimPlane? _loggedGamePlane, _loggedGameFar;
 
     private static float SightRelief(ProceduralWeaponAnimation animation, Transform bone)
     {
