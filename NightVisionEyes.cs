@@ -135,6 +135,7 @@ internal static partial class NightVisionEyepieces
         // set here every frame, this far larger circle about another centre was what a mod read that looked before the
         // lenses were drawn (K-ENVG-B's rectangle, 2026-11-22: "太大了，而且也没有居中"; this 0.414 of the height about
         // 0.490, the glass 0.298 about 0.563).
+        _fusionCone = new Vector3(uv.x, uv.y, radius);
         if (_fusionFieldFrame != Time.frameCount - 1 || _fusionFieldOf != _device.Node)
             Interop.EyepieceFusion.FieldInMainUv = new Vector4(uv.x, uv.y, radius, camera.aspect);
         Interop.EyepieceFusion.Deployed = _flip;
@@ -413,17 +414,34 @@ internal static partial class NightVisionEyepieces
         // circle of the same area.
         Vector2 u = across - centre, v = up - centre;
         float radius = Mathf.Sqrt(Mathf.Abs(u.x * v.y - u.y * v.x));
+        // What of the tube's picture the eye in fact sees is where the glass and the tube's own field (its cone about its
+        // axis, ClaimFusion) both are: the picture is at infinity, the glass only a window on it. With the eye far from the
+        // glass the glass is the smaller, and the circle is the glass's (the rectangle fixed to the eyepiece, the user's
+        // choice of 2026-11-14). With the goggle brought close (the mounts' longer travel, 1.8.181) the glass grew to twice
+        // the field and stood off to one side of it (20 mm from the eye: 0.55 of the height about 0.62, the field 0.26
+        // about 0.49), and the rectangle with it, twice too large and to the right (the user's, 2026-11-22, their own
+        // marking of where it should be fitting the field). So: the smaller of the two radii, about the field's centre
+        // as far as that keeps the circle within the glass.
+        Vector2 glassCentre = centre;
+        float glassRadius = radius;
+        var coneCentre = new Vector2(_fusionCone.x * aspect, _fusionCone.y);
+        if (_fusionCone.z > 0f)
+        {
+            radius = Mathf.Min(glassRadius, _fusionCone.z);
+            centre = glassCentre + Vector2.ClampMagnitude(coneCentre - glassCentre, Mathf.Max(glassRadius - radius, 0f));
+        }
         Interop.EyepieceFusion.FieldInMainUv = new Vector4(centre.x / aspect, centre.y, radius, aspect);
         _fusionFieldFrame = Time.frameCount;
         _fusionFieldOf = _device.Node;
         if (!_fusionFieldNoted)
         {
             _fusionFieldNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the right eyepiece's glass as the right eye sees it: {Interop.EyepieceFusion.FieldInMainUv} (rim {rim * 1000f:F1} mm, {(glass - eye).magnitude * 1000f:F0} mm from the eye).");
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the field given {Interop.EyepieceFusion.FieldInMainUv}: the glass as the right eye sees it ({glassCentre.x / aspect:F3}, {glassCentre.y:F3}) radius {glassRadius:F3} (rim {rim * 1000f:F1} mm, {(glass - eye).magnitude * 1000f:F0} mm from the eye), the tube's own field ({_fusionCone.x:F3}, {_fusionCone.y:F3}) radius {_fusionCone.z:F3}.");
         }
     }
     private static bool _fusionFieldNoted;
     private static int _fusionFieldFrame = -10;
+    private static Vector3 _fusionCone;   // the tube's own field this frame: its centre (uv) and radius (of the height)
     private static string? _fusionFieldOf;
 
     // Where across the frame (0 left, 1 right) something at this place from an eye is seen straight on.
