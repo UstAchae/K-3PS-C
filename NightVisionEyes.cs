@@ -370,7 +370,11 @@ internal static partial class NightVisionEyepieces
     {
         float scale = Mathf.Max(lens.lossyScale.x, 1e-6f);
         float along = lens.InverseTransformPoint(position + shift).z * scale;
-        float least = (Mathf.Max(_device.RimHeight, 0f) + EyeClear) * scale;
+        // A soft eyecup gives against the face: the eye stands within it, as near the glass as without the cup. Held at its
+        // lip (the ENVG-B's, 28.5 mm over the throat), the eye was some 15 mm further from the glass with the cups on than
+        // off, the glass smaller before it and the two eyes' fields one round one (the user's, 2026-11-22: "不应该让它被顶远").
+        float rim = _device.CupYields ? 0f : Mathf.Max(_device.RimHeight, 0f);
+        float least = (rim + EyeClear) * scale;
         if (along >= least)
             return shift;
         if (!_eyeHeldNoted)

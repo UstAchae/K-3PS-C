@@ -71,6 +71,7 @@ internal static partial class NightVisionEyepieces
         internal bool Thermal;                     // a thermal device: its picture is our thermal camera's (NightVisionThermal)
         internal bool Sealed;                      // its eyecups close against the face (NightVisionShade)
         internal float CupHeight;                  // a sealed eyecup's flared rim above the Centre, along the axis
+        internal bool CupYields;                   // a soft eyecup: it gives against the face, the eye is not held at its lip (KeptClear)
         internal Vector4 CupRadii0, CupRadii1;     // its inner radius at 0, 5, 10, 20 mm and at 30, 40 mm above the Centre
         internal bool Fusion;                      // another mod may lay its picture into the eyepieces (EyepieceFusion)
         internal int[]? FusionTubes;               // the tubes it goes into; null: those of the right eyepiece
@@ -139,6 +140,7 @@ internal static partial class NightVisionEyepieces
     {
         Device device = Envgb(cupOff: false, centreY: 0.02204f, floorDepth: 0.0055f, openingRadius: 0.0144f, rimHeight: 0.0285f, rimRadius: 0.0287f, card: 0.031f);
         device.Sealed = true;
+        device.CupYields = true;
         device.CupHeight = 0.0285f;
         device.CupRadii0 = new Vector4(0.0144f, 0.0217f, 0.0223f, 0.0251f);
         device.CupRadii1 = new Vector4(0.0287f, 0.0287f, 0f, 0f);
