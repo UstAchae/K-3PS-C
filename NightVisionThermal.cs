@@ -30,6 +30,47 @@ internal static partial class NightVisionEyepieces
     private static ThermalVisionDevice? _thermalDarkened;
     private static CommandBuffer? _thermalFinish;
     private static bool _effectsCopied, _pixelationNoted;
+    private const float SharpenRadius = 1f;
+    private static int _sharpenFrames;
+    private const int SharpenGameUntil = 150, SharpenOursAt = 300;
+
+    // The first frames with the goggles down and settled: the game's own reach (true), then ours.
+    private static bool SharpenProbe() => _sharpenFrames < SharpenGameUntil;
+
+    // Once our camera has rendered: the picture saved at the end of each stretch, as it is and not scaled.
+    private static void SaveSharpenProbe(ThermalVision? source)
+    {
+        if (_sharpenFrames > SharpenOursAt || !Active || _flip < 0.999f || _thermalPicture == null)
+            return;
+        _sharpenFrames++;
+        if (_sharpenFrames != SharpenGameUntil - 1 && _sharpenFrames != SharpenOursAt)
+            return;
+        string tag = _sharpenFrames == SharpenOursAt ? "reach-ours" : "reach-game";
+        try
+        {
+            string folder = System.IO.Path.Combine(BepInEx.Paths.GameRootPath, ".codex-work", "nvgdump", "t7-edges");
+            System.IO.Directory.CreateDirectory(folder);
+            int width = _thermalPicture.width, height = _thermalPicture.height;
+            RenderTexture plain = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            plain.filterMode = FilterMode.Point;
+            Graphics.Blit(_thermalPicture, plain);
+            RenderTexture? before = RenderTexture.active;
+            RenderTexture.active = plain;
+            var read = new Texture2D(width, height, TextureFormat.RGB24, false);
+            read.ReadPixels(new Rect(0f, 0f, width, height), 0, 0);
+            read.Apply(false);
+            RenderTexture.active = before;
+            RenderTexture.ReleaseTemporary(plain);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(folder, tag + "-picture.png"), read.EncodeToPNG());
+            Object.Destroy(read);
+            ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(folder, tag + "-screen.png"));
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: saved {tag} to {folder} (picture {width}x{height}; sharpening reach {_thermal?.UnsharpRadiusBlur}, bias {_thermal?.UnsharpBias}; the game's {source?.UnsharpRadiusBlur}, {source?.UnsharpBias}; stuck {_thermal?.IsFpsStuck}).");
+        }
+        catch (System.Exception e)
+        {
+            NewCameraPlugin.Log?.LogWarning("NVG thermal: saving the picture failed: " + e.Message);
+        }
+    }
 
     // The picture held over frames (NvgIrLight.shader pass 6). The vanilla goggles' frame is the main camera's, jittered
     // and smoothed over frames by the game; ours was one sample a pixel from a camera not jittered, and every edge in
@@ -400,7 +441,11 @@ internal static partial class NightVisionEyepieces
             }
             _thermal.IsPixelated = false;
             _thermal.ChromaticAberrationThermalShift = source.ChromaticAberrationThermalShift;
-            _thermal.UnsharpRadiusBlur = source.UnsharpRadiusBlur;
+            // The goggles' sharpening reaches SharpenRadius of this picture's pixels, not the game's 5: with pixelation
+            // off the edges still came in steps some 5 pixels deep (the user's, 2026-11-22: "物体边缘的地方有像素感"),
+            // which is that reach. Measured, not taken on trust: the first time the goggles are down the picture is
+            // saved once at the game's reach and once at ours (SharpenProbe).
+            _thermal.UnsharpRadiusBlur = SharpenProbe() ? source.UnsharpRadiusBlur : SharpenRadius;
             _thermal.UnsharpBias = source.UnsharpBias;
         }
         if (!_thermal.On)
@@ -483,6 +528,7 @@ internal static partial class NightVisionEyepieces
             camera.targetTexture = null;
             GiveMotionBlurBack();
         }
+        SaveSharpenProbe(source);
     }
 
     // No post-processing motion blur on this camera's picture: it is rendered out of turn, from a place set by hand,
