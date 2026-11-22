@@ -88,13 +88,15 @@ internal static partial class NightVisionEyepieces
         HideIrLaserLights(camera);
         if (_body != null)
             AdjustMount(camera);
+        // (Before anything here reads the camera's projection: sealed thermal goggles down, it sees no further than the
+        // device this frame, NightVisionThermal.cs; by how the last frame stood.)
+        SkipMainScene(camera);
         // Once the device's mount is set for this frame: the camera has been placed by now. The device drawn into the
         // main camera by this mod (NightVisionDirect.cs), its lenses left open, so the lenses' picture is made from the
         // scene behind them; drawn with the eye at the origin, so it does not shake far out in a map.
         _direct = _directShader != null && LensesOn(camera) && PrepareRelative(camera);
         if (_direct)
             HideDevice(camera);
-        SkipMainScene(camera);
         ClaimFusion(camera);
     }
 

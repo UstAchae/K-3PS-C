@@ -189,6 +189,12 @@ internal static partial class NightVisionEyepieces
     private static int _skippedMask;
     private static CameraClearFlags _skippedClear;
     private static Color _skippedBackground;
+    // And it sees no further than the device (SkippedFar): with nothing in its culling mask the lights were still lit
+    // and their shafts through the air still marched, and with no scene to stop at they went on to the far plane,
+    // long and bright, into the frame the eyepieces are laid on (the user's "白色阴影", "看起来很像光", there from
+    // the frame the scene was first left out). A light or a fog further off than that is not in its sight at all.
+    private static float _skippedFarPlane;
+    private const float SkippedFar = 2f;
     private static bool _skipNoted;
 
     private static bool ThermalAlone => _direct && _device.Thermal && _device.Sealed && Active && _flip >= 0.999f
@@ -204,6 +210,9 @@ internal static partial class NightVisionEyepieces
         _skippedMask = camera.cullingMask;
         _skippedClear = camera.clearFlags;
         _skippedBackground = camera.backgroundColor;
+        _skippedFarPlane = camera.farClipPlane;
+        if (camera.farClipPlane > SkippedFar)
+            camera.farClipPlane = SkippedFar;
         camera.cullingMask = 0;
         camera.clearFlags = CameraClearFlags.SolidColor;
         camera.backgroundColor = Color.black;
@@ -222,6 +231,7 @@ internal static partial class NightVisionEyepieces
             _sceneSkipped.cullingMask = _skippedMask;
             _sceneSkipped.clearFlags = _skippedClear;
             _sceneSkipped.backgroundColor = _skippedBackground;
+            _sceneSkipped.farClipPlane = _skippedFarPlane;
         }
         _sceneSkipped = null;
     }
@@ -235,6 +245,7 @@ internal static partial class NightVisionEyepieces
     // the goggles are down: 180 frames with the scene drawn, then our camera's picture saved; 360 with it not drawn,
     // and the picture saved again, each with the screen as shown. Then as it is to stay.
     private static int _dumpFrames;
+    private static float _dumpSeconds;
     private const int DumpDrawnAt = 180, DumpSkippedAt = 540;
     // The picture at the main camera's size before its SSAA stage, not the screen's (the user's, 2026-11-22, on the numbers
     // above: 71 frames a second down to 53 "不是更差了吗").
@@ -251,6 +262,10 @@ internal static partial class NightVisionEyepieces
         if (_dumpFrames > DumpSkippedAt || !Active || _flip < 0.999f || _thermalPicture == null)
             return;
         _dumpFrames++;
+        if (_dumpFrames > DumpDrawnAt + 60)
+            _dumpSeconds += Time.unscaledDeltaTime;
+        if (_dumpFrames == DumpSkippedAt)
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: {_dumpSeconds / (DumpSkippedAt - DumpDrawnAt - 60) * 1000f:F1} ms a frame over {DumpSkippedAt - DumpDrawnAt - 60} frames, the main camera's scene not drawn and its far plane at {SkippedFar} m (picture {_thermalPicture.width}x{_thermalPicture.height}).");
         if (_dumpFrames != DumpDrawnAt && _dumpFrames != DumpSkippedAt)
             return;
         string tag = _dumpFrames == DumpDrawnAt ? "scene-drawn" : "scene-not-drawn";
@@ -482,6 +497,7 @@ internal static partial class NightVisionEyepieces
             camera.cullingMask = _skippedMask;
             camera.clearFlags = _skippedClear;
             camera.backgroundColor = _skippedBackground;
+            camera.farClipPlane = _skippedFarPlane;
         }
         NoteThermalCost(width, height);
         camera.projectionMatrix = main.nonJitteredProjectionMatrix;
