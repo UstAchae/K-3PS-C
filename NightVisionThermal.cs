@@ -29,7 +29,7 @@ internal static partial class NightVisionEyepieces
     private static RenderTexture? _thermalPicture;
     private static ThermalVisionDevice? _thermalDarkened;
     private static CommandBuffer? _thermalFinish;
-    private static bool _effectsCopied, _pixelationNoted;
+    private static bool _effectsCopied;
     // Found 2026-11-22 (1.8.185, pictures saved of one run, and each way timed over 200 frames):
     //  - The goggles' sharpening (reach 5, bias 2) is not what made the edges come in steps: still, the picture at that
     //    reach has clean edges. It is as the game has it.
@@ -260,7 +260,6 @@ internal static partial class NightVisionEyepieces
     //
     // The picture at the main camera's size before its SSAA stage, not the screen's (the user's, on the numbers above:
     // 71 frames a second down to 53 "不是更差了吗").
-    private static bool PictureAtInputSize => true;
 
     // The main camera's thermal held off (taken) or given back as the game last asked for it.
     private static void HoldMainThermal(CameraManager? cameras, bool taken)
@@ -408,12 +407,8 @@ internal static partial class NightVisionEyepieces
             _thermal.IsGlitch = source.IsGlitch;
             // Nor the game's blocks (256 across, some 7 pixels of this picture each): the goggles' own data has them off
             // (items.json: IsPixelated false), yet the main camera's ThermalVision, held off here, still said on, and
-            // the picture came in blocks (the pictures saved 2026-11-22; the user's "还是不清晰").
-            if (!_pixelationNoted)
-            {
-                _pixelationNoted = true;
-                NewCameraPlugin.Log?.LogInfo($"NVG thermal: the main camera's ThermalVision says noisy {source.IsNoisy}, blurred {source.IsMotionBlurred}, pixelated {source.IsPixelated} (mode {source.PixelationUtilities?.Mode}, {source.PixelationUtilities?.BlockCount} blocks), stuck {source.IsFpsStuck}, glitch {source.IsGlitch}; ours: none of the first three.");
-            }
+            // the picture came in blocks (the user's "还是不清晰"). (It says, in the hideout: noisy false, blurred false, pixelated
+            // true at 635 blocks, stuck true: not the goggles' own values.)
             _thermal.IsPixelated = false;
             _thermal.ChromaticAberrationThermalShift = source.ChromaticAberrationThermalShift;
             _thermal.UnsharpRadiusBlur = source.UnsharpRadiusBlur;
@@ -437,11 +432,10 @@ internal static partial class NightVisionEyepieces
             _thermal.TextureMask.enabled = false;
         FinishThermal();
 
-        // At the screen's own size (the user's, 2026-11-22: what not drawing the main camera's scene saves goes to the
-        // goggles' picture). It had been the main camera's size before its SSAA stage scales it to the screen (two thirds
-        // of it at the user's settings), for the goggles' grain to be at the game's scale; the grain is off now.
+        // At the main camera's own size before its SSAA stage scales it to the screen (two thirds of the screen's at the
+        // user's settings; lower with DLSS and the like): what a frame of it costs is what the goggles' own cost the game.
         int width = Mathf.Max(Screen.width, 1), height = Mathf.Max(Screen.height, 1);
-        if (PictureAtInputSize && main.TryGetComponent(out SSAA ssaa))
+        if (main.TryGetComponent(out SSAA ssaa))
         {
             width = Mathf.Max(ssaa.GetInputWidth(), 1);
             height = Mathf.Max(ssaa.GetInputHeight(), 1);
@@ -510,14 +504,11 @@ internal static partial class NightVisionEyepieces
     // volumes this camera's layer takes, for this render only; the main camera's frame keeps it.
     private static readonly System.Collections.Generic.List<PostProcessVolume> _thermalVolumes = new System.Collections.Generic.List<PostProcessVolume>();
     private static readonly System.Collections.Generic.List<MotionBlur> _motionBlurHeld = new System.Collections.Generic.List<MotionBlur>();
-    private static bool _motionBlurNoted, _settingsNoted;
-    private static readonly System.Collections.Generic.List<Grain> _grainHeld = new System.Collections.Generic.List<Grain>();
-    private static readonly System.Text.StringBuilder _settingsNames = new System.Text.StringBuilder();
+    private static bool _motionBlurNoted;
 
     private static void HoldMotionBlur(Camera camera)
     {
         _motionBlurHeld.Clear();
-        _grainHeld.Clear();
         if (!camera.TryGetComponent(out PostProcessLayer layer) || PostProcessManager.instance == null)
             return;
         _thermalVolumes.Clear();
@@ -527,32 +518,10 @@ internal static partial class NightVisionEyepieces
             PostProcessProfile? profile = volume != null ? volume.sharedProfile : null;
             if (volume != null && volume.HasInstantiatedProfile())
                 profile = volume.profile;
-            if (profile == null)
-                continue;
-            // Nor a film grain: with the goggles' own grain off there was still grain new on every frame all over the
-            // picture (the pictures saved 2026-11-22; the user's "还有噪点").
-            if (profile.TryGetSettings(out Grain grain) && grain != null && grain.enabled.value && !_grainHeld.Contains(grain))
-            {
-                grain.enabled.value = false;
-                _grainHeld.Add(grain);
-            }
-            if (!_settingsNoted)
-            {
-                foreach (PostProcessEffectSettings setting in profile.settings)
-                {
-                    if (setting != null && setting.enabled.value && setting.active)
-                        _settingsNames.Append(setting.GetType().Name).Append(' ');
-                }
-            }
-            if (!profile.TryGetSettings(out MotionBlur blur) || blur == null || !blur.enabled.value || _motionBlurHeld.Contains(blur))
+            if (profile == null || !profile.TryGetSettings(out MotionBlur blur) || blur == null || !blur.enabled.value || _motionBlurHeld.Contains(blur))
                 continue;
             blur.enabled.value = false;
             _motionBlurHeld.Add(blur);
-        }
-        if (!_settingsNoted)
-        {
-            _settingsNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG thermal: our camera's layer takes {_thermalVolumes.Count} volume(s), with on: {_settingsNames}; grain held off: {_grainHeld.Count}.");
         }
         if (_motionBlurHeld.Count > 0 && !_motionBlurNoted)
         {
@@ -569,12 +538,6 @@ internal static partial class NightVisionEyepieces
                 blur.enabled.value = true;
         }
         _motionBlurHeld.Clear();
-        foreach (Grain grain in _grainHeld)
-        {
-            if (grain != null)
-                grain.enabled.value = true;
-        }
-        _grainHeld.Clear();
     }
 
     // On the main camera the game's SSAA stage gives the thermal frame one more pass of the goggles' own material

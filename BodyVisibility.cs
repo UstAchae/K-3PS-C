@@ -278,7 +278,6 @@ internal static class BodyVisibility
 
             _nightRendererType = assembly.GetType("BorkelRNVG.Controllers.RealisticNightVisionRenderer");
             Type? helper = assembly.GetType("BorkelRNVG.Helpers.NvgHelper");
-            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             _usesCustomPipeline = helper?.GetMethod("UsesCustomPipeline", BindingFlags.Public | BindingFlags.Static);
             return;
         }

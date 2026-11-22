@@ -190,7 +190,7 @@ internal static partial class NightVisionEyepieces
     private static Texture? Fused(Texture picture, ref RenderTexture? fused)
     {
         // (The handler of the device worn: its own mod's, EyepieceFusion.Register; the ENVG-B's the old Fuse.)
-        if (ProbeNoFuse || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || picture is not RenderTexture i2)
+        if (Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || picture is not RenderTexture i2)
             return null;
         Func<RenderTexture, RenderTexture, bool>? fuse = Interop.EyepieceFusion.HandlerOf(_device.Node);
         if (fuse == null)
