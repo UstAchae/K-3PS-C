@@ -106,7 +106,10 @@ internal static partial class NightVisionEyepieces
             Base = "nvg_norotos_tatm_universal_base_LOD0", Arm = "nvg_norotos_tatm_universal_arm_LOD0", Lead = 0.004f,
             TiltPivot = new Vector3(0f, -0.0121f, -0.0232f), TiltAxis = Vector3.right, Slot = new Vector3(0f, -0.994f, -0.109f),
             Screw = new Vector3(0.0256f, -0.02946f, -0.04342f), ScrewAxis = Vector3.right, ScrewFrom = 0.0222f, ScrewLead = 0.003f,
-            HeightMin = -0.01f, HeightMax = 0.02f, MinTilt = -15f, MaxTilt = 15f, SlideBack = 0.03f, SlideForward = 0.004f,
+            // (Toward the face 40 mm, 1.9.11, 20 past the slot's end: the user's, 2026-11-23, "让游戏原版里的那几种支架往后调整的
+            // 上限再多一些", told that the slide then stands past its rail as seen from outside. The GPNVG-18's is not a
+            // mount to them, and stays.)
+            HeightMin = -0.01f, HeightMax = 0.02f, MinTilt = -15f, MaxTilt = 15f, SlideBack = 0.04f, SlideForward = 0.004f,
         },
         // The GPNVG-18 on its Wilcox L4 G24: about 0.9 in of height and 1.4 in of fore and aft travel; 15 degrees of tilt,
         // all of it eyepieces up from where the model has it (the G24's knob turns one way from its stop).
