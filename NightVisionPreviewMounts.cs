@@ -72,6 +72,7 @@ internal static partial class NightVisionEyepieces
         GameObject? model = __instance._model;
         if (model == null)
             return;
+        DropDestroyedRenderers(__instance, model);
         HeadwearTilt.Forget(model.transform);
         ForgetGlow(model.transform);
         if (_previewMountOf.TryGetValue(model, out MountRig rig))
@@ -82,6 +83,37 @@ internal static partial class NightVisionEyepieces
         }
         if (_mountOf != null && _mountOf.IsChildOf(model.transform))
             ReleaseMount();
+    }
+
+    // The game keeps the renderers a slot's model had when it was hung on the body (CreateAndParent), and switches each
+    // of them on again as the model goes, your own player's: one of them destroyed since, that throws, the model is
+    // never given back to the pool and the move of the item is left half done (the user's, 2026-11-23, a goggle changed
+    // in a raid: "原先的夜视仪换下后建模还在头上", then the item flickering in the rig; Player.log: NullReferenceException
+    // in Renderer.set_enabled under SlotView.DestroyCurrentModel). Renderers made under a model and destroyed again are
+    // this mod's own (the mount's pieces, the lenses) and other mods'; whoever's, the destroyed ones are taken out of
+    // the game's list before it goes through it. (A new array only then: when a model goes and has one.)
+    private static void DropDestroyedRenderers(PlayerBody.SlotView view, GameObject model)
+    {
+        Renderer[] renderers = view._renderers;
+        if (renderers == null)
+            return;
+        int gone = 0;
+        foreach (Renderer r in renderers)
+        {
+            if (r == null)
+                gone++;
+        }
+        if (gone == 0)
+            return;
+        var kept = new Renderer[renderers.Length - gone];
+        int at = 0;
+        foreach (Renderer r in renderers)
+        {
+            if (r != null)
+                kept[at++] = r;
+        }
+        view._renderers = kept;
+        NewCameraPlugin.Log?.LogInfo($"Slot model going ({model.name}): {gone} destroyed renderer(s) of {renderers.Length} taken out of the game's list, which would have stopped it there.");
     }
 
     // Each frame, the models' mounts set again; all whole again with this mod off.

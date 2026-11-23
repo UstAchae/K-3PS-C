@@ -609,9 +609,10 @@ internal static partial class NightVisionEyepieces
         // (Where the field stands against its glass, whenever that changes by a thirtieth of the height: at most twice a
         // second. For a field seen off its glass, 1.9.15: which state it was in.)
         Vector2 against = centre - glassCentre;
-        if ((against - _fieldAgainstNoted).sqrMagnitude > 0.03f * 0.03f && Time.frameCount - _fieldAgainstFrame > 30)
+        if (_fieldAgainstNotes < 40 && (against - _fieldAgainstNoted).sqrMagnitude > 0.03f * 0.03f && Time.frameCount - _fieldAgainstFrame > 30)
         {
             _fieldAgainstNoted = against;
+            _fieldAgainstNotes++;   // (forty a session: with the eye at the glass it moved with every turn of the head, and filled the log)
             _fieldAgainstFrame = Time.frameCount;
             NewCameraPlugin.Log?.LogInfo($"NVG fusion: the field now ({centre.x / aspect:F3}, {centre.y:F3}) radius {radius:F3}, its glass ({glassCentre.x / aspect:F3}, {glassCentre.y:F3}) radius {glassRadius:F3}, the tube's field ({coneCentre.x / aspect:F3}, {coneCentre.y:F3}) radius {_fusionCone.z:F3}; apart {_fieldApart:F2}, a pod away {_notePod:F2}, the eyepieces {_noteA * 1000f:F0} and {_noteB * 1000f:F0} mm across from the camera, eyes moved {_noteLeft * 1000f:F0} and {_noteRight * 1000f:F0} mm, down {_split:F2}, the eyes' own places {_noteOwn:F2}.");
         }
@@ -623,7 +624,7 @@ internal static partial class NightVisionEyepieces
     }
     private static string? _fusionFieldNoted;
     private static Vector2 _fieldAgainstNoted;
-    private static int _fieldAgainstFrame = -1000;
+    private static int _fieldAgainstFrame = -1000, _fieldAgainstNotes;
     private static float _notePod, _noteA, _noteB, _noteOwn;
     private static Vector3 _noteLeft, _noteRight;
     private static int _fusionFieldFrame = -10;
