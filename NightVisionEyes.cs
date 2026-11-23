@@ -328,6 +328,8 @@ internal static partial class NightVisionEyepieces
         // view left to lay over, the user's, 2026-11-18.)
         _sideGone[0] *= 1f - _blend.Apart;
         _sideGone[1] *= 1f - _blend.Apart;
+        // (Each eye as it stands with both eyepieces down, for how far the two fields are apart, below.)
+        Vector3 leftDown = leftShift, rightDown = rightShift;
         leftShift = Vector3.Lerp(leftShift, -back, _sideGone[0]);
         rightShift = Vector3.Lerp(rightShift, -back, _sideGone[1]);
         bool monocularLeft = a + CameraPosition.Horizontal <= 0f;
@@ -387,9 +389,16 @@ internal static partial class NightVisionEyepieces
         Vector3 leftLine = (leftGlass - leftShift).normalized, rightLine = (rightGlass - rightShift).normalized;
         float RadiusOf(int tube, Vector3 glass, Vector3 shift) => tube < _lensFloors.Length
             ? Mathf.Atan2(_lensFloors[tube].w * _lensRest[tube].lossyScale.x, Mathf.Max((glass - shift).magnitude, 1e-4f)) : 0f;
-        float together = RadiusOf(leftTube, leftGlass, leftShift) + RadiusOf(rightTube, rightGlass, rightShift);
+        // (With an eyepiece swung away on its pod, 1.9.14: its side's eye goes back to the camera, the line from there to
+        // its glass turns far out, 50 to 65 degrees from the other's in the log of 2026-11-23, and the two counted as
+        // apart on and off: the eyepiece left had its lines turned 7 to 16 degrees and its fused rectangle moved off its
+        // glass, the user's, 2026-11-23, "另一个目镜的位置偏了". So measured by the eyes as they stand with both down;
+        // and with one away the one left is one eye's, as a monocular: not turned.)
+        Vector3 leftDownLine = (leftGlass - leftDown).normalized, rightDownLine = (rightGlass - rightDown).normalized;
+        float together = RadiusOf(leftTube, leftGlass, leftDown) + RadiusOf(rightTube, rightGlass, rightDown);
+        float podAway = Mathf.SmoothStep(0f, 1f, Mathf.Max(PodGone(leftTube), PodGone(rightTube)) * 3f);
         _fieldApart = _device.Monocular ? 0f
-            : together > 1e-4f ? Mathf.SmoothStep(0f, 1f, (Vector3.Angle(leftLine, rightLine) * Mathf.Deg2Rad / together - 0.8f) / 0.2f) : 0f;
+            : together > 1e-4f ? Mathf.SmoothStep(0f, 1f, (Vector3.Angle(leftDownLine, rightDownLine) * Mathf.Deg2Rad / together - 0.8f) / 0.2f) * (1f - podAway) : 0f;
         // (Only with the device down and its eyepieces before the eyes: flipping up, an eyepiece's axis turns away from the
         // line to its glass, 99 degrees in the log of 2026-11-23, and the lines were turned by as much.)
         float AimShare(Vector3 axis, Vector3 line) => _fieldApart * Mathf.Clamp01(_split) * (1f - Mathf.SmoothStep(0f, 1f, (Vector3.Angle(axis, line) - 25f) / 15f));
@@ -402,7 +411,7 @@ internal static partial class NightVisionEyepieces
         {
             _fieldApartNoted = true;
             _fieldApartWas = _fieldApart;
-            NewCameraPlugin.Log?.LogInfo($"NVG eyepieces: their fields {(_fieldApart > 0.5f ? "each about its own eyepiece" : "one round field")} (apart {_fieldApart:F2}; the glasses {Vector3.Angle(leftLine, rightLine):F1} degrees apart, {together * Mathf.Rad2Deg:F1} their radii together; lines turned {Vector3.Angle(leftLine, leftLine + aimLeft):F1} and {Vector3.Angle(rightLine, rightLine + _aimRight):F1} degrees).");
+            NewCameraPlugin.Log?.LogInfo($"NVG eyepieces: their fields {(_fieldApart > 0.5f ? "each about its own eyepiece" : "one round field")} (apart {_fieldApart:F2}, a pod away {podAway:F2}; the glasses {Vector3.Angle(leftDownLine, rightDownLine):F1} degrees apart, {together * Mathf.Rad2Deg:F1} their radii together; lines turned {Vector3.Angle(leftLine, leftLine + aimLeft):F1} and {Vector3.Angle(rightLine, rightLine + _aimRight):F1} degrees).");
         }
         float split = asMonocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftGlass - leftShift) + Across(camera, rightGlass - rightShift)), 0.2f, 0.8f);
         // One eyepiece swung away: the halves meet past the far side of the one left, its cup and housing about its glass
