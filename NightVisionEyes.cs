@@ -194,7 +194,13 @@ internal static partial class NightVisionEyepieces
         Vector4 clip = projection * new Vector4(ahead.x, ahead.y, ahead.z, 0f);
         Vector2 uv = clip.w > 1e-4f ? new Vector2(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f) : new Vector2(0.5f, 0.5f);
         float radius = 0.5f * Mathf.Tan(fieldDegrees * 0.5f * Mathf.Deg2Rad) * projection.m11;
-        Interop.EyepieceFusion.FieldInMainUv = new Vector4(uv.x, uv.y, radius, camera.aspect);
+        // (Its cone about the tube's axis only until its place in its own eyepiece is known, as the lenses are drawn,
+        // later in the frame: FusionField; from then on the last frame's stands till this frame's replaces it.)
+        _fusionCone = new Vector3(uv.x, uv.y, radius);
+        _clipTube = tube;
+        _clipShare = Mathf.Clamp01(fieldDegrees / Mathf.Max(_device.FieldDegrees, 1f));
+        if (_fusionFieldFrame != Time.frameCount - 1 || _fusionFieldOf != name)
+            Interop.EyepieceFusion.FieldInMainUv = new Vector4(uv.x, uv.y, radius, camera.aspect);
         Interop.EyepieceFusion.Deployed = _flip;
         Interop.EyepieceFusion.ClaimedFrame = Time.frameCount;
         Interop.EyepieceFusion.ClaimedDevice = _device.Node;
@@ -210,6 +216,8 @@ internal static partial class NightVisionEyepieces
         return true;
     }
     private static string? _clipOnNoted, _clipOnNotedOn;
+    private static int _clipTube;       // the tube the clip-on hangs before
+    private static float _clipShare;    // its field as a share of the tube's
 
     internal static void OnCameraPostRender(Camera camera)
     {
@@ -442,7 +450,14 @@ internal static partial class NightVisionEyepieces
         if (_direct)
             DrawDirect(camera, leftShift, rightShift, split);
         // (The tube the other mod's picture goes into: the device's own first such, or the right eyepiece's.)
-        FusionField(camera, _device.FusionTubes != null && _device.FusionTubes.Length > 0 ? _device.FusionTubes[0] : a <= b ? CentreLensB : CentreLensA, position + rightShift);
+        if (_clipOnClaimed)
+        {
+            // (A clip-on's: its own tube's eyepiece, from that eyepiece's eye.)
+            bool clipLeft = _device.Monocular ? monocularLeft : (_clipTube < CentreLensB) == (leftTube == CentreLensA);
+            FusionField(camera, clipLeft ? leftTube : rightTube, position + (clipLeft ? leftShift : rightShift));
+        }
+        else
+            FusionField(camera, _device.FusionTubes != null && _device.FusionTubes.Length > 0 ? _device.FusionTubes[0] : a <= b ? CentreLensB : CentreLensA, position + rightShift);
     }
     private static bool _fieldApartNoted;
     private static float _fieldApartWas;
@@ -485,8 +500,7 @@ internal static partial class NightVisionEyepieces
     // the eyepiece. Where the cup's lip or throat hides some of it, it is hidden there like the rest of the picture.
     private static void FusionField(Camera camera, int rightLens, Vector3 eye)
     {
-        // (Not a clip-on's: its field is its own cone, given as the frame is claimed.)
-        if (!_device.Fusion || _clipOnClaimed || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || rightLens >= _lensNodes.Length)
+        if (!_device.Fusion && !_clipOnClaimed || Interop.EyepieceFusion.ClaimedFrame != Time.frameCount || rightLens >= _lensNodes.Length)
             return;
         Transform lens = _lensNodes[rightLens];
         float scale = lens.lossyScale.x;
@@ -520,7 +534,18 @@ internal static partial class NightVisionEyepieces
         Vector2 glassCentre = centre;
         float glassRadius = radius;
         var coneCentre = new Vector2(_fusionCone.x * aspect, _fusionCone.y);
-        if (_fusionCone.z > 0f)
+        if (_clipOnClaimed)
+        {
+            // A clip-on's circle (1.9.7): in the middle of its own tube's eyepiece as that eye sees it, and its field's
+            // share of what that eyepiece shows of the tube's (30 of 40 degrees: three quarters of the glass where the
+            // glass is the narrower), never more than its own field. About the tube's axis at its full 30 degrees it
+            // stood, with the two eyepieces one round field, between the two and nearly as large as either (the
+            // user's, 2026-11-23: "热融合区域怎么可能占这么大面积还在两个物镜的中键位置？"). Given as where in the picture
+            // that is: the picture is shown moved by _fieldApart of the way from the glass's middle to the axis.
+            radius = Mathf.Min(_fusionCone.z, _clipShare * Mathf.Min(glassRadius, _fusionCone.z / Mathf.Max(_clipShare, 1e-3f)));
+            centre = glassCentre - (glassCentre - coneCentre) * _fieldApart;
+        }
+        else if (_fusionCone.z > 0f)
         {
             // (With the eyepieces apart, 1.9.5, the field stands about the glass's own middle on the screen; and what is
             // given is where in the picture that is, the picture then shown moved by as much: both by _fieldApart.)
@@ -531,14 +556,14 @@ internal static partial class NightVisionEyepieces
         }
         Interop.EyepieceFusion.FieldInMainUv = new Vector4(centre.x / aspect, centre.y, radius, aspect);
         _fusionFieldFrame = Time.frameCount;
-        _fusionFieldOf = _device.Node;
-        if (!_fusionFieldNoted)
+        _fusionFieldOf = _clipOnClaimed ? _fusionKey : _device.Node;
+        if (_fusionFieldNoted != _fusionFieldOf)
         {
-            _fusionFieldNoted = true;
-            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the field given {Interop.EyepieceFusion.FieldInMainUv}: the glass as the right eye sees it ({glassCentre.x / aspect:F3}, {glassCentre.y:F3}) radius {glassRadius:F3} (rim {rim * 1000f:F1} mm, {(glass - eye).magnitude * 1000f:F0} mm from the eye), the tube's own field ({_fusionCone.x:F3}, {_fusionCone.y:F3}) radius {_fusionCone.z:F3}.");
+            _fusionFieldNoted = _fusionFieldOf;
+            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the field given {Interop.EyepieceFusion.FieldInMainUv}: the glass as its eye sees it ({glassCentre.x / aspect:F3}, {glassCentre.y:F3}) radius {glassRadius:F3} (rim {rim * 1000f:F1} mm, {(glass - eye).magnitude * 1000f:F0} mm from the eye), the tube's own field ({_fusionCone.x:F3}, {_fusionCone.y:F3}) radius {_fusionCone.z:F3}.");
         }
     }
-    private static bool _fusionFieldNoted;
+    private static string? _fusionFieldNoted;
     private static int _fusionFieldFrame = -10;
     private static Vector3 _fusionCone;   // the tube's own field this frame: its centre (uv) and radius (of the height)
     private static string? _fusionFieldOf;
