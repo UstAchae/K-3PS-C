@@ -199,6 +199,7 @@ internal static partial class NightVisionEyepieces
         _fusionCone = new Vector3(uv.x, uv.y, radius);
         _clipTube = tube;
         _clipShare = Mathf.Clamp01(fieldDegrees / Mathf.Max(_device.FieldDegrees, 1f));
+        _clipHostCone = 0.5f * Mathf.Tan(_device.FieldDegrees * 0.5f * Mathf.Deg2Rad) * projection.m11;
         if (_fusionFieldFrame != Time.frameCount - 1 || _fusionFieldOf != name)
             Interop.EyepieceFusion.FieldInMainUv = new Vector4(uv.x, uv.y, radius, camera.aspect);
         Interop.EyepieceFusion.Deployed = _flip;
@@ -218,6 +219,7 @@ internal static partial class NightVisionEyepieces
     private static string? _clipOnNoted, _clipOnNotedOn;
     private static int _clipTube;       // the tube the clip-on hangs before
     private static float _clipShare;    // its field as a share of the tube's
+    private static float _clipHostCone; // the tube's own field's radius on the screen (of the height)
 
     internal static void OnCameraPostRender(Camera camera)
     {
@@ -544,8 +546,16 @@ internal static partial class NightVisionEyepieces
             // stood, with the two eyepieces one round field, between the two and nearly as large as either (the
             // user's, 2026-11-23: "热融合区域怎么可能占这么大面积还在两个物镜的中键位置？"). Given as where in the picture
             // that is: the picture is shown moved by _fieldApart of the way from the glass's middle to the axis.
-            radius = Mathf.Min(_fusionCone.z, _clipShare * Mathf.Min(glassRadius, _fusionCone.z / Mathf.Max(_clipShare, 1e-3f)));
-            centre = glassCentre - (glassCentre - coneCentre) * _fieldApart;
+            // (1.9.9) Not the glass's middle whatever the distance: about the middle of what that eyepiece shows of its
+            // tube's field, the circle where its glass and the tube's cone about its axis both are (as a fusion
+            // device's, below), and its field's share of that circle's radius. Far from the eye the glass is the
+            // narrower: the glass's middle, and smaller the further. Brought near, the glass grows past the field,
+            // and the circle goes over toward the axis, the middle of the one round picture, at its own 30 degrees
+            // (the user's, 2026-11-23: "应该会随着目镜变近而像中间靠拢的，而且应该是离得越远越小").
+            float seen = Mathf.Min(glassRadius, _clipHostCone);
+            centre = glassCentre + Vector2.ClampMagnitude(coneCentre - glassCentre, Mathf.Max(glassRadius - seen, 0f));
+            radius = Mathf.Min(_fusionCone.z, _clipShare * seen);
+            centre -= (glassCentre - coneCentre) * _fieldApart;
         }
         else if (_fusionCone.z > 0f)
         {
