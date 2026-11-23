@@ -329,7 +329,11 @@ internal static partial class NightVisionEyepieces
         _sideGone[0] *= 1f - _blend.Apart;
         _sideGone[1] *= 1f - _blend.Apart;
         // (Each eye as it stands with both eyepieces down, for how far the two fields are apart, below.)
-        Vector3 leftDown = leftShift, rightDown = rightShift;
+        // (And not held back of a camera come forward to a sight, 1.9.16: aiming, the eyes stood some 78 mm from their
+        // glasses for 31, the glasses 22 degrees together for 55, and counted as apart on and off, lines turned up to 18
+        // degrees in the log of 2026-11-23: the ENVG-B's fused rectangle off its glass while aiming, the user's, "用
+        // ENVG-B 瞄准的时候，热融合区域偏了".)
+        Vector3 leftDown = leftShift + back, rightDown = rightShift + back;
         leftShift = Vector3.Lerp(leftShift, -back, _sideGone[0]);
         rightShift = Vector3.Lerp(rightShift, -back, _sideGone[1]);
         bool monocularLeft = a + CameraPosition.Horizontal <= 0f;
