@@ -367,14 +367,15 @@ internal static partial class NightVisionEyepieces
         // field, a sliver of it at 40 degrees, and of a clip-on's circle (the user's, 2026-11-23: "它应该是在自己所在的
         // 那个夜视仪物镜的中间位置才对"). An eye at an eyepiece is on its tube's axis: so each eye's lines are turned by what
         // takes the middle of its glass to its tube's axis (NvgEyes.cginc, _EyeAim), as far as the two glasses stand
-        // apart: not at all while they overlap well (their middles nearer than 0.8 of their radii together), in full
-        // once they no longer touch. A monocular, always: it is one eye's.
+        // apart against the tubes' field: not at all while each glass's middle is within half the field's radius of the
+        // axis (the one round field then covers both: the glasses 16 degrees apart in the user's picture of it, a
+        // field of 40), in full from 0.7 of it. (By the glasses' own radii, 1.9.5, apart only once they no longer
+        // touched: 29 degrees apart they were still one field by that, 51.6 their radii together, with a clip-on's
+        // circle between the two eyepieces: the user's, 2026-11-23, "ECOTI 的热融合区域还是不对".) A monocular, always:
+        // it is one eye's.
         Vector3 leftLine = (leftGlass - leftShift).normalized, rightLine = (rightGlass - rightShift).normalized;
-        float RadiusOf(int tube, Vector3 glass, Vector3 shift) => tube < _lensFloors.Length
-            ? Mathf.Atan2(_lensFloors[tube].w * _lensRest[tube].lossyScale.x, Mathf.Max((glass - shift).magnitude, 1e-4f)) : 0f;
-        float together = RadiusOf(leftTube, leftGlass, leftShift) + RadiusOf(rightTube, rightGlass, rightShift);
-        _fieldApart = _device.Monocular ? 1f
-            : together > 1e-4f ? Mathf.SmoothStep(0f, 1f, (Vector3.Angle(leftLine, rightLine) * Mathf.Deg2Rad / together - 0.8f) / 0.2f) : 0f;
+        float offAxis = Vector3.Angle(leftLine, rightLine) / Mathf.Max(_device.FieldDegrees, 1f);
+        _fieldApart = _device.Monocular ? 1f : Mathf.SmoothStep(0f, 1f, (offAxis - 0.5f) / 0.2f);
         Vector3 aimLeft = (-_lensRest[leftTube].forward - leftLine) * _fieldApart;
         _aimRight = (-_lensRest[rightTube].forward - rightLine) * _fieldApart;
         binocular.SetVector(EyeAimIds[0], aimLeft);
@@ -383,7 +384,7 @@ internal static partial class NightVisionEyepieces
         {
             _fieldApartNoted = true;
             _fieldApartWas = _fieldApart;
-            NewCameraPlugin.Log?.LogInfo($"NVG eyepieces: their fields {(_fieldApart > 0.5f ? "each about its own eyepiece" : "one round field")} (apart {_fieldApart:F2}; the glasses {Vector3.Angle(leftLine, rightLine):F1} degrees apart, {together * Mathf.Rad2Deg:F1} their radii together; lines turned {Vector3.Angle(leftLine, leftLine + aimLeft):F1} and {Vector3.Angle(rightLine, rightLine + _aimRight):F1} degrees).");
+            NewCameraPlugin.Log?.LogInfo($"NVG eyepieces: their fields {(_fieldApart > 0.5f ? "each about its own eyepiece" : "one round field")} (apart {_fieldApart:F2}; the glasses {Vector3.Angle(leftLine, rightLine):F1} degrees apart, the field {_device.FieldDegrees:F0}; lines turned {Vector3.Angle(leftLine, leftLine + aimLeft):F1} and {Vector3.Angle(rightLine, rightLine + _aimRight):F1} degrees).");
         }
         float split = asMonocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftGlass - leftShift) + Across(camera, rightGlass - rightShift)), 0.2f, 0.8f);
         // One eyepiece swung away: the halves meet past the far side of the one left, its cup and housing about its glass
