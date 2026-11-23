@@ -380,13 +380,15 @@ internal static partial class NightVisionEyepieces
         // apart: not at all while they overlap (their middles nearer than 0.8 of their radii together), in full once
         // they no longer touch. (By how far the glasses stand off the axis against the field, 1.9.6: brought near the
         // eyes the glasses are large and far apart in angle, and counted as apart while overlapping: the one picture
-        // became two side by side, the user's, 2026-11-23, "怎么离近了以后画面变成两个了？".) A monocular, always: it is
-        // one eye's.
+        // became two side by side, the user's, 2026-11-23, "怎么离近了以后画面变成两个了？".) A monocular, never (1.9.13;
+        // always, 1.9.5 to 1.9.12): turned, a line through its glass shows the frame somewhere else, and with the device
+        // near and off the axis that was where the device itself is drawn into the frame: its own eyepiece ring inside
+        // its picture (the user's, 2026-11-23: "夜视仪里面还能看到一个夜视仪"). Its lines are the screen's own again.
         Vector3 leftLine = (leftGlass - leftShift).normalized, rightLine = (rightGlass - rightShift).normalized;
         float RadiusOf(int tube, Vector3 glass, Vector3 shift) => tube < _lensFloors.Length
             ? Mathf.Atan2(_lensFloors[tube].w * _lensRest[tube].lossyScale.x, Mathf.Max((glass - shift).magnitude, 1e-4f)) : 0f;
         float together = RadiusOf(leftTube, leftGlass, leftShift) + RadiusOf(rightTube, rightGlass, rightShift);
-        _fieldApart = _device.Monocular ? 1f
+        _fieldApart = _device.Monocular ? 0f
             : together > 1e-4f ? Mathf.SmoothStep(0f, 1f, (Vector3.Angle(leftLine, rightLine) * Mathf.Deg2Rad / together - 0.8f) / 0.2f) : 0f;
         // (Only with the device down and its eyepieces before the eyes: flipping up, an eyepiece's axis turns away from the
         // line to its glass, 99 degrees in the log of 2026-11-23, and the lines were turned by as much.)
