@@ -95,7 +95,9 @@ internal static partial class NightVisionEyepieces
     }
 
     // Every mount goes 10 mm further down and 10 mm further toward the face than its mesh's stops allow (the user's,
-    // 2026-11-22: "所有支架的往下和后两个方向的调整再给一些距离"); the GPNVG-18's rail two slots further.
+    // 2026-11-22: "所有支架的往下和后两个方向的调整再给一些距离"). Not the GPNVG-18's (1.9.5): two slots past its rack's ten
+    // and 10 mm under its plate, its parts came apart (the user's, 2026-11-22: "让模型直接脱节"); it has its model's own
+    // travel again.
     private static readonly Mount[] Mounts =
     {
         new Mount
@@ -119,12 +121,12 @@ internal static partial class NightVisionEyepieces
             PlatePlanes = new[] { new Vector4(0f, 1f, 0f, -0.0035f) },
             Slot = Vector3.down,
             // Slots 1 to 10 along the goggle's Y (toward the eyes), about 4 mm apart; the model's pawl sits in the 7th.
-            Slots = new[] { -0.03108f, -0.02699f, -0.02296f, -0.01887f, -0.01485f, -0.01076f, -0.00674f, -0.00271f, 0.00138f, 0.00540f, 0.00943f, 0.01345f },
+            Slots = new[] { -0.03108f, -0.02699f, -0.02296f, -0.01887f, -0.01485f, -0.01076f, -0.00674f, -0.00271f, 0.00138f, 0.00540f },
             ModelSlot = 6,
             ButtonPoint = new Vector3(-0.0430f, -0.0068f, -0.0240f), ButtonPivot = new Vector3(-0.03825f, -0.0068f, -0.0224f),
             ButtonAxis = Vector3.up, ButtonAngle = -12f,
             ButtonBaseLeft = -0.0425f, ButtonBaseRight = -0.0341f, ButtonArchInner = new Vector2(-0.0129f, -0.0006f),
-            HeightMin = -0.0215f, HeightMax = 0.0115f, MinTilt = 0f, MaxTilt = 15f,
+            HeightMin = -0.0115f, HeightMax = 0.0115f, MinTilt = 0f, MaxTilt = 15f,
         },
         // Wilcox's L4 G24 (WTT): the black one has the carriage at the top of its travel, the coyote one at the bottom,
         // 34.3 mm lower. The shoe slides from the arm's end stop to the hinge's block.

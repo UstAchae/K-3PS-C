@@ -677,7 +677,10 @@ internal static partial class NightVisionEyepieces
         // What the composite works out what is open by.
         Material composite = _binocularMaterial!;
         for (int side = 0; side < 2; side++)
+        {
             _directMaterial.SetMatrix(EyeInvVpIds[side], composite.GetMatrix(EyeInvVpIds[side]));
+            _directMaterial.SetVector(EyeAimIds[side], composite.GetVector(EyeAimIds[side]));
+        }
         for (int i = 0; i < TubeAxisIds.Length; i++)
             _directMaterial.SetVector(TubeAxisIds[i], composite.GetVector(TubeAxisIds[i]));
         _directMaterial.SetVector(TubeFieldId, composite.GetVector(TubeFieldId));

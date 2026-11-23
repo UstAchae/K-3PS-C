@@ -15,6 +15,7 @@ Shader "Justachae/NVG/Direct" {
  float _DirectSplit, _DirectStrip, _DirectBehind;
  float4x4 _EyeInvVP0, _EyeInvVP1;
  float4 _TubeField, _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;
+ float4 _EyeAim0, _EyeAim1;   // as the composite's (NvgEyes.cginc)
  float4 _DirectInset;    // how far past the lens's edge the device goes, as a share of the frame
  float4 _DirectPlanes;   // x its near plane's 1/depth, y its far plane's, z the main camera's near plane's, w its far plane's
 
@@ -58,9 +59,9 @@ Shader "Justachae/NVG/Direct" {
   return dot(tex2D(map, uv) * fields, 1) > 0.01;
  }
 
- bool within (sampler2D map, float2 uv, float4x4 inverse) {
+ bool within (sampler2D map, float2 uv, float4x4 inverse, float4 aim) {
   float4 far = mul(inverse, float4(uv * 2 - 1, 1, 1));
-  float3 ray = normalize(far.xyz / far.w);
+  float3 ray = normalize(normalize(far.xyz / far.w) + aim.xyz);
   float4 fields = float4(smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis0.xyz)),
       smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis1.xyz)),
       smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis2.xyz)),
@@ -95,7 +96,7 @@ Shader "Justachae/NVG/Direct" {
  float _DirectBareRight;   // the bare eye's side of the device's two views: 0 the left's, 1 the right's
  float coverage (float2 uv, float rawL, float rawR, out float toRight) {
   float t = smoothstep(_DirectSplit - _DirectStrip * 0.5, _DirectSplit + _DirectStrip * 0.5, uv.x);
-  bool inL = within(_DirectLens0, uv, _EyeInvVP0), inR = within(_DirectLens1, uv, _EyeInvVP1);
+  bool inL = within(_DirectLens0, uv, _EyeInvVP0, _EyeAim0), inR = within(_DirectLens1, uv, _EyeInvVP1, _EyeAim1);
   bool hasL = shown(rawL), hasR = shown(rawR);
   float c = 0, side = t;
   if (_DirectOver.x > 0) {
@@ -247,7 +248,7 @@ Shader "Justachae/NVG/Direct" {
   bool leadRight = (_DirectOver.z > _DirectOver.y) == (_DirectBareRight > 0.5);   // the leading eye's view: the right's
   bool before = false;
   if (_DirectOver.x > 0) {
-   bool lens = leadRight ? within(_DirectLens1, uv, _EyeInvVP1) : within(_DirectLens0, uv, _EyeInvVP0);
+   bool lens = leadRight ? within(_DirectLens1, uv, _EyeInvVP1, _EyeAim1) : within(_DirectLens0, uv, _EyeInvVP0, _EyeAim0);
    before = deviceNearer(leadRight ? rawR : rawL, lens, gun);
   } else if (coverage(uv, rawL, rawR, toRight) > 0) {
    float device = pickedDepth(rawL, rawR, toRight);

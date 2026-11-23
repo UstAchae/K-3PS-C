@@ -54,6 +54,10 @@ internal static partial class NightVisionEyepieces
     private static readonly int[] GlassIds = { Shader.PropertyToID("_LeftGlass"), Shader.PropertyToID("_RightGlass") };
     private static readonly int[] EyeInvVpIds = { Shader.PropertyToID("_EyeInvVP0"), Shader.PropertyToID("_EyeInvVP1") };
     private static readonly int[] EyePosIds = { Shader.PropertyToID("_EyePos0"), Shader.PropertyToID("_EyePos1") };
+    private static readonly int[] EyeAimIds = { Shader.PropertyToID("_EyeAim0"), Shader.PropertyToID("_EyeAim1") };
+    // How far the two eyepieces stand apart on the screen this frame: 0 one round field, 1 each its own (RenderLenses).
+    private static float _fieldApart;
+    private static Vector3 _aimRight;   // the right eye's lines of sight's turn this frame (as _EyeAim1)
 
     private static readonly RenderTexture?[] _lensMaps = new RenderTexture?[2];
     // Each eye's glass: where it looks at a lens at all, whether or not light reaches it through the exit pupil (the
@@ -356,6 +360,31 @@ internal static partial class NightVisionEyepieces
         // where each eye sees its own eyepiece's middle (the user's, 2026-11-17).
         Vector3 GlassOf(int tube) => tube < _lensFloors.Length ? FromCamera(_lensRest[tube], position).MultiplyPoint3x4(_lensFloors[tube]) : (Vector3)FromCamera(_lensRest[tube], position).GetColumn(3);
         Vector3 leftGlass = GlassOf(a <= b ? CentreLensA : CentreLensB), rightGlass = GlassOf(a <= b ? CentreLensB : CentreLensA);
+        // Each tube's field about the middle of its own eyepiece, once the two eyepieces stand apart on the screen (1.9.5).
+        // The lenses' picture is the main camera's, each line of sight showing what lies along it, each tube's field a
+        // cone about its axis: right while the two eyepieces are one round field about that axis. With the goggle far
+        // from the eyes they stand apart, each off to its side of the axis, and each showed only the inner edge of the
+        // field, a sliver of it at 40 degrees, and of a clip-on's circle (the user's, 2026-11-23: "它应该是在自己所在的
+        // 那个夜视仪物镜的中间位置才对"). An eye at an eyepiece is on its tube's axis: so each eye's lines are turned by what
+        // takes the middle of its glass to its tube's axis (NvgEyes.cginc, _EyeAim), as far as the two glasses stand
+        // apart: not at all while they overlap well (their middles nearer than 0.8 of their radii together), in full
+        // once they no longer touch. A monocular, always: it is one eye's.
+        Vector3 leftLine = (leftGlass - leftShift).normalized, rightLine = (rightGlass - rightShift).normalized;
+        float RadiusOf(int tube, Vector3 glass, Vector3 shift) => tube < _lensFloors.Length
+            ? Mathf.Atan2(_lensFloors[tube].w * _lensRest[tube].lossyScale.x, Mathf.Max((glass - shift).magnitude, 1e-4f)) : 0f;
+        float together = RadiusOf(leftTube, leftGlass, leftShift) + RadiusOf(rightTube, rightGlass, rightShift);
+        _fieldApart = _device.Monocular ? 1f
+            : together > 1e-4f ? Mathf.SmoothStep(0f, 1f, (Vector3.Angle(leftLine, rightLine) * Mathf.Deg2Rad / together - 0.8f) / 0.2f) : 0f;
+        Vector3 aimLeft = (-_lensRest[leftTube].forward - leftLine) * _fieldApart;
+        _aimRight = (-_lensRest[rightTube].forward - rightLine) * _fieldApart;
+        binocular.SetVector(EyeAimIds[0], aimLeft);
+        binocular.SetVector(EyeAimIds[1], _aimRight);
+        if (!_fieldApartNoted || Mathf.Abs(_fieldApart - _fieldApartWas) > 0.5f)
+        {
+            _fieldApartNoted = true;
+            _fieldApartWas = _fieldApart;
+            NewCameraPlugin.Log?.LogInfo($"NVG eyepieces: their fields {(_fieldApart > 0.5f ? "each about its own eyepiece" : "one round field")} (apart {_fieldApart:F2}; the glasses {Vector3.Angle(leftLine, rightLine):F1} degrees apart, {together * Mathf.Rad2Deg:F1} their radii together; lines turned {Vector3.Angle(leftLine, leftLine + aimLeft):F1} and {Vector3.Angle(rightLine, rightLine + _aimRight):F1} degrees).");
+        }
         float split = asMonocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftGlass - leftShift) + Across(camera, rightGlass - rightShift)), 0.2f, 0.8f);
         // One eyepiece swung away: the halves meet past the far side of the one left, its cup and housing about its glass
         // (twice the glass's radius), as its own eye sees it: it is seen whole (cut nearer, it was cut through, the user's,
@@ -414,6 +443,8 @@ internal static partial class NightVisionEyepieces
         // (The tube the other mod's picture goes into: the device's own first such, or the right eyepiece's.)
         FusionField(camera, _device.FusionTubes != null && _device.FusionTubes.Length > 0 ? _device.FusionTubes[0] : a <= b ? CentreLensB : CentreLensA, position + rightShift);
     }
+    private static bool _fieldApartNoted;
+    private static float _fieldApartWas;
     private const float RayFar = 2f;                               // m: the lines of sight's frame (only their direction counts)
     private static float RayNear => Mathf.Max(EyeNear, RayFar / 2e5f);
 
@@ -490,8 +521,12 @@ internal static partial class NightVisionEyepieces
         var coneCentre = new Vector2(_fusionCone.x * aspect, _fusionCone.y);
         if (_fusionCone.z > 0f)
         {
+            // (With the eyepieces apart, 1.9.5, the field stands about the glass's own middle on the screen; and what is
+            // given is where in the picture that is, the picture then shown moved by as much: both by _fieldApart.)
+            Vector2 shown = Vector2.Lerp(coneCentre, glassCentre, _fieldApart);
             radius = Mathf.Min(glassRadius, _fusionCone.z);
-            centre = glassCentre + Vector2.ClampMagnitude(coneCentre - glassCentre, Mathf.Max(glassRadius - radius, 0f));
+            centre = glassCentre + Vector2.ClampMagnitude(shown - glassCentre, Mathf.Max(glassRadius - radius, 0f));
+            centre -= (glassCentre - coneCentre) * _fieldApart;
         }
         Interop.EyepieceFusion.FieldInMainUv = new Vector4(centre.x / aspect, centre.y, radius, aspect);
         _fusionFieldFrame = Time.frameCount;

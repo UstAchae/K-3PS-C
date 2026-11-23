@@ -323,6 +323,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int FusedId = Shader.PropertyToID("_Fused");
     private static readonly int TubeFusedId = Shader.PropertyToID("_TubeFused");
     private static readonly int FusedRectId = Shader.PropertyToID("_FusedRect");
+    private static readonly int FusedShareId = Shader.PropertyToID("_FusedShare");
     private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture, Texture? fusedPicture)
     {
         composite.SetFloat(ModeId, 1f);
@@ -341,6 +342,8 @@ internal static partial class NightVisionEyepieces
                 ? new Vector4(field.x, field.y, 1.06f * field.z / field.w, 1.06f * field.z)
                 : new Vector4(field.x, field.y, share.x * field.z / field.w, share.y * field.z);
         composite.SetVector(FusedRectId, rect);
+        // In whatever lens only while the eyepieces are one round field: apart, in its own tubes alone.
+        composite.SetFloat(FusedShareId, 1f - _fieldApart);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
         composite.SetTexture(GlowId, lit != null ? lit : Texture2D.blackTexture);

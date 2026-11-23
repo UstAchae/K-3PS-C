@@ -18,6 +18,12 @@ float _Mode;
 float _LensClear;                 // 1: the lenses' own surface (its reflections, its highlights) left out over their picture
 
 float4 _FusedRect;                // the other mod's picture (EyepieceFusion): xy its centre, zw its half width and height (uv); z 0: none
+float _FusedShare;                // how far that rectangle shows in every lens (1 the eyepieces one round field; 0 apart: only in its own tubes)
+// Each eye's lines of sight turned so that the middle of its eyepiece's glass looks along its tube's axis (added to the
+// line, which is then made a unit again): the eye on its tube's axis, as an eye at an eyepiece is. Zero while the two
+// eyepieces stand as one round field on the screen (the lines as the screen has them: the two halves are one picture);
+// in full once they stand apart, each then showing its tube's whole field about its own middle.
+float4 _EyeAim0, _EyeAim1;
 
 float3 nightVision (float3 ray, float fused) {
  float4 c = mul(_NightVisionVP, float4(ray, 0));
@@ -27,7 +33,8 @@ float3 nightVision (float3 ray, float fused) {
  // Within the fused picture's rectangle, it whatever lens is looked through: one whole rectangle, not cut where the
  // left eye's view takes over or at the edge of the right lens.
  float inRect = _FusedRect.z > 0 ? step(abs(uv.x - _FusedRect.x), _FusedRect.z) * step(abs(uv.y - _FusedRect.y), _FusedRect.w) : 0;
- if (fused > 0.5 || inRect > 0.5) tube = tex2D(_Fused, uv).rgb;
+ float share = max(step(0.5, fused), inRect * _FusedShare);
+ if (share > 0) tube = lerp(tube, tex2D(_Fused, uv).rgb, share);
  return tube * inside;
 }
 
@@ -63,7 +70,7 @@ void eyeSide (float2 uv, bool right, out float4 eye, out float4 light, out float
  float2 local = float2((uv.x - (right ? 1 - span : 0)) / span, uv.y);
  eye = right ? tex2D(_RightEye, local) : tex2D(_LeftEye, local);
  float4 far = mul(right ? _EyeInvVP1 : _EyeInvVP0, float4(local * 2 - 1, 1, 1));
- float3 ray = normalize(far.xyz / far.w);
+ float3 ray = normalize(normalize(far.xyz / far.w) + (right ? _EyeAim1.xyz : _EyeAim0.xyz));
  float4 lens = right ? tex2D(_RightLens, local) : tex2D(_LeftLens, local);
  float4 open = lens * float4(field(ray, _TubeAxis0), field(ray, _TubeAxis1), field(ray, _TubeAxis2), field(ray, _TubeAxis3));
  float4 through = open * _TubePower * lerp(1, 0.35 + 0.9 * blotches(uv), _TubeMottle);
