@@ -144,7 +144,8 @@ internal static partial class NightVisionEyepieces
             TiltScrewPoint = new Vector3(-0.026f, -0.02722f, 0.02303f), TiltScrewAxis = Vector3.right, TiltPerTurn = 5f, MinTilt = -10f, MaxTilt = 10f,
             WasherPoint = new Vector3(0.02438f, -0.01275f, 0.01525f), LockPoint = new Vector3(0.0303f, -0.01275f, 0.01525f), LockTurns = 2f, LockLead = 0.0008f,
             ButtonLeftPoint = new Vector3(-0.0243f, -0.0365f, -0.014f), ButtonRightPoint = new Vector3(0.0243f, -0.0365f, -0.014f), ButtonDepth = 0.002f,
-            SlideForward = 0.009f, SlideBack = 0.023f,
+            // (Toward the face 33 mm, 1.9.12, 20 past the hinge's block: the user's, 2026-11-23, "这个支架往后调的上限也多加一些".)
+            SlideForward = 0.009f, SlideBack = 0.033f,
         },
         // The ENVG-B's own mount (K-ENVG-B): a plate on the helmet with a screw that runs a carriage up or down it (1 mm
         // a turn); the device flips on the carriage's hinge; the arm tilts on a pin into a bracket whose rails the
