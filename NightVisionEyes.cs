@@ -388,8 +388,12 @@ internal static partial class NightVisionEyepieces
         float together = RadiusOf(leftTube, leftGlass, leftShift) + RadiusOf(rightTube, rightGlass, rightShift);
         _fieldApart = _device.Monocular ? 1f
             : together > 1e-4f ? Mathf.SmoothStep(0f, 1f, (Vector3.Angle(leftLine, rightLine) * Mathf.Deg2Rad / together - 0.8f) / 0.2f) : 0f;
-        Vector3 aimLeft = (-_lensRest[leftTube].forward - leftLine) * _fieldApart;
-        _aimRight = (-_lensRest[rightTube].forward - rightLine) * _fieldApart;
+        // (Only with the device down and its eyepieces before the eyes: flipping up, an eyepiece's axis turns away from the
+        // line to its glass, 99 degrees in the log of 2026-11-23, and the lines were turned by as much.)
+        float AimShare(Vector3 axis, Vector3 line) => _fieldApart * Mathf.Clamp01(_split) * (1f - Mathf.SmoothStep(0f, 1f, (Vector3.Angle(axis, line) - 25f) / 15f));
+        Vector3 leftAxis = -_lensRest[leftTube].forward, rightAxis = -_lensRest[rightTube].forward;
+        Vector3 aimLeft = (leftAxis - leftLine) * AimShare(leftAxis, leftLine);
+        _aimRight = (rightAxis - rightLine) * AimShare(rightAxis, rightLine);
         binocular.SetVector(EyeAimIds[0], aimLeft);
         binocular.SetVector(EyeAimIds[1], _aimRight);
         if (!_fieldApartNoted || Mathf.Abs(_fieldApart - _fieldApartWas) > 0.5f)
@@ -552,10 +556,26 @@ internal static partial class NightVisionEyepieces
             // narrower: the glass's middle, and smaller the further. Brought near, the glass grows past the field,
             // and the circle goes over toward the axis, the middle of the one round picture, at its own 30 degrees
             // (the user's, 2026-11-23: "应该会随着目镜变近而像中间靠拢的，而且应该是离得越远越小").
-            float seen = Mathf.Min(glassRadius, _clipHostCone);
-            centre = glassCentre + Vector2.ClampMagnitude(coneCentre - glassCentre, Mathf.Max(glassRadius - seen, 0f));
+            // (1.9.10) By the largest circle within what is seen of the tube's field, of two: within this eyepiece's own
+            // glass and the field (its middle halfway along where the two overlap), or, while the two eyepieces are
+            // one picture, about the axis within both glasses together and the field (out to where the two glasses'
+            // edges cross). The larger of the two, eased from one to the other. Far, the glasses small and apart: its
+            // own glass's. Near, the two glasses one round field: the axis, the picture's middle. By the own glass
+            // alone (1.9.9) it stayed off to its side in the one round picture, each glass there about as large as
+            // the field and 7 degrees off the axis (the user's, 2026-11-23: "离近的时候又感觉没居中").
+            float field = _clipHostCone;
+            float off = (coneCentre - glassCentre).magnitude;
+            float own = Mathf.Clamp(0.5f * (glassRadius + field - off), 0f, Mathf.Min(glassRadius, field));
+            Vector2 toAxis = off > 1e-5f ? (coneCentre - glassCentre) / off : Vector2.zero;
+            // (The overlap's middle along the line from the glass's middle to the axis.)
+            Vector2 ownCentre = glassCentre + toAxis * (0.5f * (Mathf.Max(-glassRadius, off - field) + Mathf.Min(glassRadius, off + field)));
+            float both = off < glassRadius ? Mathf.Min(field, Mathf.Sqrt(glassRadius * glassRadius - off * off)) : 0f;
+            float atAxis = _device.Monocular ? 0f
+                : Mathf.SmoothStep(0f, 1f, (both - own) / Mathf.Max(own, 1e-4f) / 0.3f + 0.5f) * (1f - _fieldApart);
+            float seen = Mathf.Lerp(own, both, atAxis);
+            Vector2 onScreen = Vector2.Lerp(ownCentre, coneCentre, atAxis);
             radius = Mathf.Min(_fusionCone.z, _clipShare * seen);
-            centre -= (glassCentre - coneCentre) * _fieldApart;
+            centre = onScreen - (glassCentre - coneCentre) * _fieldApart;
         }
         else if (_fusionCone.z > 0f)
         {
