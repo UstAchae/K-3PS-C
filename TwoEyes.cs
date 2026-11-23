@@ -357,6 +357,7 @@ internal static partial class TwoEyes
         if (hide == _gunHidden)
             return;
         _gunHidden = hide;
+        _gunShownFor = null;
         if (hide)
         {
             _castings.Clear();
@@ -390,6 +391,44 @@ internal static partial class TwoEyes
         {
             _lensKept = _collimatorKept = null;
             _lensMaterialKept = _collimatorMaterialKept = null;
+        }
+    }
+
+    // Any other camera that renders while the game's copy is kept to its shadow sees it as it is (1.9.17): the copy is
+    // hidden for the main camera's frame alone, where the bare eye's gun is drawn in its place. Another mod's camera at
+    // the goggle's objective (K-ECOTI's and K-ENVG-B's thermal lens) found no gun, only what is not the gun's own
+    // renderers (the user's, 2026-11-23: "只要一进入裸眼瞄准的状态热融合里的枪就不见了，只剩下被挖掉的区域和子弹").
+    // From that camera's pre-cull to its post-render.
+    private static Camera? _gunShownFor;
+    private static bool _gunShownNoted;
+    internal static void OnCameraPreCull(Camera camera)
+    {
+        if (!_gunHidden || _gunShownFor != null || camera == Camera.main)
+            return;
+        _gunShownFor = camera;
+        foreach ((Renderer r, UnityEngine.Rendering.ShadowCastingMode casting) in _castings)
+        {
+            if (r != null)
+                r.shadowCastingMode = casting;
+        }
+        if (!_gunShownNoted)
+        {
+            _gunShownNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"Two eyes: the game's gun, hidden while the bare eye aims, shown to another camera for its render ({camera.name}; {_castings.Count} renderers).");
+        }
+    }
+
+    internal static void OnCameraPostRender(Camera camera)
+    {
+        if (_gunShownFor != camera)
+            return;
+        _gunShownFor = null;
+        if (!_gunHidden)
+            return;
+        foreach ((Renderer r, UnityEngine.Rendering.ShadowCastingMode _) in _castings)
+        {
+            if (r != null)
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
         }
     }
 
