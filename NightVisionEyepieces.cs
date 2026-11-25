@@ -469,7 +469,8 @@ internal static partial class NightVisionEyepieces
         // game's picture, as without BRNVG.
         bool brnvg = !thermal && UseBrnvg && (renderer != null || player is not HideoutPlayer);
         bool present = _body != null && _body.gameObject.activeInHierarchy;
-        bool worn = present && EyepieceImageReady(cameras) && (thermal ? EnsureThermalCamera() : !brnvg || renderer != null);
+        // (ProbeNoEyepieces: the thermal probe's last step, NightVisionThermalProbe.cs.)
+        bool worn = present && !ProbeNoEyepieces && EyepieceImageReady(cameras) && (thermal ? EnsureThermalCamera() : !brnvg || renderer != null);
         bool switchedOn = worn && (thermal ? thermalItem?.Togglable != null && thermalItem.Togglable.On : nightItem?.Togglable != null ? nightItem.Togglable.On : device != null && SwitchedOn(device));
         // The tubes come on once the device is all the way down and the game has done switching its own filter on
         // (its switch dims the filter for a moment, the picture the lenses show), and go off before it flips up:
@@ -492,6 +493,7 @@ internal static partial class NightVisionEyepieces
             _phosphorOf[_device.Node] = PhosphorColor();
         _split = _flip;
         HoldMainThermal(cameras, thermal && worn);
+        ThermalProbeTick(present && thermal && thermalItem?.Togglable != null && thermalItem.Togglable.On, player is not HideoutPlayer);
         KeepThermalGlow(thermalDevice);
         if (thermal && on && _thermalNoted != _body)
         {

@@ -259,7 +259,7 @@ internal static partial class NightVisionEyepieces
             PrepareRelative(camera);
         RenderLenses(camera, binocular, view, position);
         // Thermal goggles' picture, for the lenses (LensPicture).
-        if (_device.Thermal && Active)
+        if (_device.Thermal && Active && !(ProbeKeepPicture && _thermalPicture != null))
             RenderThermal(camera);
     }
 
