@@ -26,6 +26,9 @@ internal static partial class NightVisionEyepieces
     private const float TubeFieldFade = 5f;   // the field fades out over this past its edge (half the device's FieldDegrees)
 
     private static readonly int TubeFieldId = Shader.PropertyToID("_TubeField");
+    private static readonly int TubeRectId = Shader.PropertyToID("_TubeRect"), TubeUpId = Shader.PropertyToID("_TubeUp");
+    private const float TubeRectFade = 0.012f;   // in tangent: the screen's edge, a little soft
+    private static string? _rectNoted;
     private static readonly int[] TubeAxisIds =
     {
         Shader.PropertyToID("_TubeAxis0"), Shader.PropertyToID("_TubeAxis1"), Shader.PropertyToID("_TubeAxis2"), Shader.PropertyToID("_TubeAxis3"),
@@ -247,6 +250,16 @@ internal static partial class NightVisionEyepieces
             binocular.SetVector(TubeAxisIds[i], -_lensNodes[i].forward);
         float half = _device.FieldDegrees * 0.5f;
         binocular.SetVector(TubeFieldId, new Vector4(Mathf.Cos((half + TubeFieldFade) * Mathf.Deg2Rad), Mathf.Cos(half * Mathf.Deg2Rad), 0f, 0f));
+        // (A screen's field: a rectangle, level with the camera; NvgEyes.cginc, tubeField.)
+        Vector2 rect = _device.FieldRect;
+        binocular.SetVector(TubeRectId, rect.x > 0f
+            ? new Vector4(Mathf.Tan(rect.x * 0.5f * Mathf.Deg2Rad), Mathf.Tan(rect.y * 0.5f * Mathf.Deg2Rad), TubeRectFade, 0f) : Vector4.zero);
+        binocular.SetVector(TubeUpId, view.up);
+        if (rect.x > 0f && _rectNoted != _device.Node)
+        {
+            _rectNoted = _device.Node;
+            NewCameraPlugin.Log?.LogInfo($"NVG eyepieces: {_device.Node}'s field a rectangle of {rect.x:F0} by {rect.y:F0} degrees about each tube's axis (the camera's own field {Camera.VerticalToHorizontalFieldOfView(camera.fieldOfView, camera.aspect):F0} by {camera.fieldOfView:F0}).");
+        }
 
         ShadeMain(camera, !_direct);
         if (!_direct)

@@ -75,6 +75,8 @@ internal static partial class NightVisionEyepieces
         internal Vector4 CupRadii0, CupRadii1;     // its inner radius at 0, 5, 10, 20 mm and at 30, 40 mm above the Centre
         internal bool Fusion;                      // another mod may lay its picture into the eyepieces (EyepieceFusion)
         internal int[]? FusionTubes;               // the tubes it goes into; null: those of the right eyepiece
+        // A screen behind the eyepieces, not a tube's cone: its field's width and height in degrees (zero: the cone below).
+        internal Vector2 FieldRect;
         internal float FieldDegrees = 60f;         // the tubes' whole field (each eyepiece shows this cone about its axis; EyepieceFusion.FieldInMainUv)
         // Eyecups that come off (an item of their own in a slot under the device's node, CupSlot): their root's name starts
         // with CupNode. A device with CupNode set is this entry only while its cups are on (CupOff false) or off (true).
@@ -244,7 +246,11 @@ internal static partial class NightVisionEyepieces
             // side saw the cone's edge inside the glass, the glass grey beyond it: arcs along the top and bottom of the
             // picture, the user's, 2026-11-25, "夜视仪画面周围有什么东西把画面挡住了"; still there in the screen saved
             // with 1.9.23, so not the turned lines 1.9.22 took them for.)
-            Node = "thermal_spi_t7_LOD0", Thermal = true, Sealed = true, FieldDegrees = 150f,
+            // The field of the SPI T7's wide lens (1.9.26, at the user's word, 2026-11-25: "把模组的 T-7 做成那颗"): 8.5 mm,
+            // 50 by 35 degrees, a 320x240 sensor's picture on a screen (SPI's data sheet; its standard 25 mm lens is 17
+            // by 12, some three times magnified, which nobody walks with; the game's goggles show the scene at its own
+            // size). Shown at its own size: 50 by 35 degrees of what lies ahead, dark around it within the glass.
+            Node = "thermal_spi_t7_LOD0", Thermal = true, Sealed = true, FieldDegrees = 150f, FieldRect = new Vector2(50f, 35f),
             CupHeight = 0.039f, CupRadii0 = new Vector4(0.0243f, 0.0253f, 0.0276f, 0.029f), CupRadii1 = new Vector4(0.0308f, 0.0318f, 0f, 0f),
             Tubes = new[] { At(-0.03063f, 0.05866f, -0.04368f), At(-0.03063f, 0.05866f, -0.04368f), At(0.03003f, 0.05866f, -0.04368f), At(0.03003f, 0.05866f, -0.04368f) },
             LensRadius = 0.01432f, FloorDepth = 0.00913f, OpeningRadius = 0.01636f, RimHeight = 0.00537f, RimRadius = 0.02433f,

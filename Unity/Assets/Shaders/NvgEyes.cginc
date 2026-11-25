@@ -38,7 +38,21 @@ float3 nightVision (float3 ray, float fused) {
  return tube * inside;
 }
 
-float field (float3 ray, float4 axis) { return smoothstep(_TubeField.x, _TubeField.y, dot(ray, axis.xyz)); }
+// A device whose picture is a screen behind its eyepieces, not a tube's cone (the T-7's): the field a rectangle about
+// the axis, level with the camera. _TubeRect: x, y the tangents of its half width and half height, z how far inside
+// its edge (in tangent) it starts to fade; x 0: a cone (_TubeField). _TubeUp: the camera's up (world).
+float4 _TubeRect, _TubeUp;
+float tubeField (float3 ray, float3 axis) {
+ if (_TubeRect.x <= 0) return smoothstep(_TubeField.x, _TubeField.y, dot(ray, axis));
+ float along = dot(ray, axis);
+ if (along <= 1e-4) return 0;
+ float3 up = normalize(_TubeUp.xyz - axis * dot(_TubeUp.xyz, axis));
+ float3 right = cross(up, axis);
+ float2 at = abs(float2(dot(ray, right), dot(ray, up))) / along;
+ float2 edge = 1 - smoothstep(_TubeRect.xy - _TubeRect.z, _TubeRect.xy, at);
+ return edge.x * edge.y;
+}
+float field (float3 ray, float4 axis) { return tubeField(ray, axis.xyz); }
 
 // An eyepiece's pincushion distortion: its magnification grows toward the edge of its field, so a line of sight that
 // far off the tube's axis looks out a little nearer to it, and what lies there is drawn out larger. It shows the

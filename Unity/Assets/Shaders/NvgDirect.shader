@@ -16,6 +16,21 @@ Shader "Justachae/NVG/Direct" {
  float4x4 _EyeInvVP0, _EyeInvVP1;
  float4 _TubeField, _TubeAxis0, _TubeAxis1, _TubeAxis2, _TubeAxis3;
  float4 _EyeAim0, _EyeAim1;   // as the composite's (NvgEyes.cginc)
+ // (As NvgEyes.cginc's.)
+ // A device whose picture is a screen behind its eyepieces, not a tube's cone (the T-7's): the field a rectangle about
+ // the axis, level with the camera. _TubeRect: x, y the tangents of its half width and half height, z how far inside
+ // its edge (in tangent) it starts to fade; x 0: a cone (_TubeField). _TubeUp: the camera's up (world).
+ float4 _TubeRect, _TubeUp;
+ float tubeField (float3 ray, float3 axis) {
+  if (_TubeRect.x <= 0) return smoothstep(_TubeField.x, _TubeField.y, dot(ray, axis));
+  float along = dot(ray, axis);
+  if (along <= 1e-4) return 0;
+  float3 up = normalize(_TubeUp.xyz - axis * dot(_TubeUp.xyz, axis));
+  float3 right = cross(up, axis);
+  float2 at = abs(float2(dot(ray, right), dot(ray, up))) / along;
+  float2 edge = 1 - smoothstep(_TubeRect.xy - _TubeRect.z, _TubeRect.xy, at);
+  return edge.x * edge.y;
+ }
  float4 _DirectInset;    // how far past the lens's edge the device goes, as a share of the frame
  float4 _DirectPlanes;   // x its near plane's 1/depth, y its far plane's, z the main camera's near plane's, w its far plane's
 
@@ -62,10 +77,7 @@ Shader "Justachae/NVG/Direct" {
  bool within (sampler2D map, float2 uv, float4x4 inverse, float4 aim) {
   float4 far = mul(inverse, float4(uv * 2 - 1, 1, 1));
   float3 ray = normalize(normalize(far.xyz / far.w) + aim.xyz);
-  float4 fields = float4(smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis0.xyz)),
-      smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis1.xyz)),
-      smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis2.xyz)),
-      smoothstep(_TubeField.x, _TubeField.y, dot(ray, _TubeAxis3.xyz)));
+  float4 fields = float4(tubeField(ray, _TubeAxis0.xyz), tubeField(ray, _TubeAxis1.xyz), tubeField(ray, _TubeAxis2.xyz), tubeField(ray, _TubeAxis3.xyz));
   if (!open(map, uv, fields)) return false;
   float2 d = _DirectInset.xy;
   return open(map, uv + float2(d.x, 0), fields) && open(map, uv - float2(d.x, 0), fields)

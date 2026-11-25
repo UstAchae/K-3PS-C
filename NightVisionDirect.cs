@@ -684,6 +684,8 @@ internal static partial class NightVisionEyepieces
         for (int i = 0; i < TubeAxisIds.Length; i++)
             _directMaterial.SetVector(TubeAxisIds[i], composite.GetVector(TubeAxisIds[i]));
         _directMaterial.SetVector(TubeFieldId, composite.GetVector(TubeFieldId));
+        _directMaterial.SetVector(TubeRectId, composite.GetVector(TubeRectId));
+        _directMaterial.SetVector(TubeUpId, composite.GetVector(TubeUpId));
 
         // The sealed eyecups' insides go dark as the device comes down: from where each half of the device stands, not from the
         // main camera's depth, which holds what is nearest at its near plane.
