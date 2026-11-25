@@ -21,6 +21,9 @@ internal static partial class NightVisionEyepieces
     private static readonly List<MountRig> _previewMounts = new List<MountRig>();
     private static readonly Dictionary<GameObject, MountRig> _previewMountOf = new Dictionary<GameObject, MountRig>();
     private static bool _previewInstalled;
+    // A model with a mount whose item had no settings yet when it was made: given one once some are saved for it.
+    private static readonly Dictionary<GameObject, (Transform device, PlayerBody body)> _previewWaiting = new Dictionary<GameObject, (Transform, PlayerBody)>();
+    private static int _previewSettingsRead;
 
     private static void InstallPreviewMounts(Harmony harmony)
     {
@@ -53,12 +56,8 @@ internal static partial class NightVisionEyepieces
             if (device == null || kind == null)
                 return;
             ShowGlow(model.transform, device, kind);
-            MountRig? rig = MountRig.Make(device, playerBody.Equipment, playerBody.transform, worn: false, onlyIfSet: true);
-            if (rig == null)
-                return;
-            _previewMounts.Add(rig);
-            _previewMountOf[model] = rig;
-            rig.Adjust();
+            if (!MakePreviewMount(model, device, playerBody))
+                _previewWaiting[model] = (device, playerBody);
         }
         catch (System.Exception e)
         {
@@ -75,6 +74,7 @@ internal static partial class NightVisionEyepieces
         DropDestroyedRenderers(__instance, model);
         HeadwearTilt.Forget(model.transform);
         ForgetGlow(model.transform);
+        _previewWaiting.Remove(model);
         if (_previewMountOf.TryGetValue(model, out MountRig rig))
         {
             rig.Release();
@@ -116,10 +116,54 @@ internal static partial class NightVisionEyepieces
         NewCameraPlugin.Log?.LogInfo($"Slot model going ({model.name}): {gone} destroyed renderer(s) of {renderers.Length} taken out of the game's list, which would have stopped it there.");
     }
 
+    private static bool MakePreviewMount(GameObject model, Transform device, PlayerBody playerBody)
+    {
+        MountRig? rig = MountRig.Make(device, playerBody.Equipment, playerBody.transform, worn: false, onlyIfSet: true);
+        if (rig == null)
+            return false;
+        _previewMounts.Add(rig);
+        _previewMountOf[model] = rig;
+        rig.Adjust();
+        return true;
+    }
+
+    // The mounts' settings saved since (the worn one adjusted): the models' mounts set by them from now on, and those
+    // made before their item had any given a mount now. Only when something was saved: nothing searched per frame.
+    private static void ReadPreviewSettingsAgain()
+    {
+        if (_previewSettingsRead == MountSettingsVersion)
+            return;
+        _previewSettingsRead = MountSettingsVersion;
+        if (!NewCameraSwitch.Enabled)
+            return;
+        foreach (MountRig rig in _previewMounts)
+            rig.Reload();
+        int made = 0;
+        if (_previewWaiting.Count > 0)
+        {
+            List<GameObject>? done = null;
+            foreach (KeyValuePair<GameObject, (Transform device, PlayerBody body)> e in _previewWaiting)
+            {
+                if (e.Key == null || e.Value.device == null || e.Value.body == null)
+                    (done ??= new List<GameObject>()).Add(e.Key!);
+                else if (!_previewMountOf.ContainsKey(e.Key) && MakePreviewMount(e.Key, e.Value.device, e.Value.body))
+                {
+                    (done ??= new List<GameObject>()).Add(e.Key);
+                    made++;
+                }
+            }
+            if (done != null)
+                foreach (GameObject g in done)
+                    _previewWaiting.Remove(g);
+        }
+        NewCameraPlugin.Log?.LogInfo($"Mount settings saved: {_previewMounts.Count - made} model(s) of the player set again, {made} given a mount now.");
+    }
+
     // Each frame, the models' mounts set again; all whole again with this mod off.
     internal static void UpdatePreviewMounts()
     {
         UpdateShownGlows();
+        ReadPreviewSettingsAgain();
         for (int i = _previewMounts.Count - 1; i >= 0; i--)
         {
             MountRig rig = _previewMounts[i];

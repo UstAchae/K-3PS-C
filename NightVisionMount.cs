@@ -189,6 +189,7 @@ internal static partial class NightVisionEyepieces
     internal static KeyboardShortcut SlideForward = new KeyboardShortcut(KeyCode.Equals, KeyCode.LeftControl), SlideBack = new KeyboardShortcut(KeyCode.Minus, KeyCode.LeftControl);
     private static readonly string MountsPath = Path.Combine(BepInEx.Paths.ConfigPath, "justachae.thirdpersoncamera.mounts.txt");
     private static Dictionary<string, Vector3>? _mountSettings;   // by the mount item's id: height, tilt, slide
+    internal static int MountSettingsVersion;                      // one more each time they are saved: the previews' mounts read them again
 
     private static readonly KeyCode[][] ModifierKeys =
     {
@@ -278,6 +279,7 @@ internal static partial class NightVisionEyepieces
             return;
         ReadMountSettings();
         _mountSettings![id] = settings;
+        MountSettingsVersion++;
         var lines = new List<string>();
         foreach (KeyValuePair<string, Vector3> e in _mountSettings)
             lines.Add(string.Format(CultureInfo.InvariantCulture, "{0} {1:R} {2:R} {3:R}", e.Key, e.Value.x, e.Value.y, e.Value.z));
@@ -506,6 +508,13 @@ internal static partial class NightVisionEyepieces
                 _jointTilt.localRotation = _tiltRest;
             if (_jointSlide != null)
                 _jointSlide.localPosition = _slideRest;
+        }
+
+        // The settings kept for its item read again (saved since from the worn one): set so from the next Adjust.
+        internal void Reload()
+        {
+            if (_mount != null)
+                LoadSettings(_mount, _mountId);
         }
 
         private void LoadSettings(Mount mount, string? id)
