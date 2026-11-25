@@ -577,6 +577,7 @@ internal static partial class NightVisionEyepieces
         _lensRest = Array.Empty<Transform>();
         _lensPods = Array.Empty<Transform?>();
         _lensFloors = Array.Empty<Vector4>();
+        _faceLights = Array.Empty<Light?>();   // (gone with the lens nodes they hang under)
         _body = null;
         _deviceRoot = null;
         _rotator = null;
@@ -715,6 +716,7 @@ internal static partial class NightVisionEyepieces
         }
         HangOnPods(body);
         MeasureObjective(body);
+        MakeFaceLights();
     }
 
     // A device whose eyepieces swing away: each lens also hung on its pod, where it stands with the pod down (its turn

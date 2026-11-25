@@ -87,6 +87,7 @@ internal static partial class NightVisionEyepieces
 
     internal static void OnCameraPreCull(Camera camera)
     {
+        LightFace(camera);
         if (camera != Camera.main)
             return;
         HideIrLaserLights(camera);
