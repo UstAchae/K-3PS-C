@@ -43,10 +43,30 @@ internal static partial class NightVisionEyepieces
     private static string ThermalProbeFolder => Path.Combine(BepInEx.Paths.BepInExRootPath, "k3psc-thermal-probe");
 
     // Once a frame, as the eyepieces' state for the frame is known.
+    // The six ways are gone through only with this on (off since 1.9.24: run once, 2026-11-25, its figures in
+    // NightVisionThermal.cs). Off, the picture alone is saved once a session, as it is, nothing changed for a frame:
+    // so a build's picture can be measured against the last one's.
+    private const bool ThermalProbeFull = false;
+
     private static void ThermalProbeTick(bool downAndOn, bool inRaid)
     {
         if (_thermalProbeDone)
             return;
+        if (!ThermalProbeFull)
+        {
+            if (!(Active && _flip >= 0.999f && _body != null && _device.Thermal && _thermalPicture != null))
+            {
+                _thermalProbeSettled = 0;
+                return;
+            }
+            if (++_thermalProbeSettled < ThermalProbeSettle * 2)
+                return;
+            _thermalProbeDone = true;
+            Directory.CreateDirectory(ThermalProbeFolder);
+            ThermalProbeSave(0, "check_" + NewCameraPlugin.PluginVersion);
+            NewCameraPlugin.Log?.LogInfo($"Thermal probe: our picture as it is saved once ({_thermalPicture.width}x{_thermalPicture.height}) to {ThermalProbeFolder}.");
+            return;
+        }
         if (!inRaid)
             _thermalRaidSince = -1f;
         else if (_thermalRaidSince < 0f)
@@ -148,12 +168,12 @@ internal static partial class NightVisionEyepieces
     }
 
     // What is seen at the end of a step of the first round.
-    private static void ThermalProbeSave(int step)
+    private static void ThermalProbeSave(int step, string? named = null)
     {
         try
         {
-            string name = (step + 1) + "_" + ThermalProbeSteps[step].Replace(' ', '_').Replace(":", "").Replace("'", "");
-            if (step == 0 || step == 5)
+            string name = named ?? (step + 1) + "_" + ThermalProbeSteps[step].Replace(' ', '_').Replace(":", "").Replace("'", "");
+            if (named == null && (step == 0 || step == 5))
                 ScreenCapture.CaptureScreenshot(Path.Combine(ThermalProbeFolder, name + "_screen.png"));
             if ((step == 0 || step == 3 || step == 4) && _thermalPicture != null)
             {

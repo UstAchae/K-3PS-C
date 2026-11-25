@@ -239,7 +239,12 @@ internal static partial class NightVisionEyepieces
         // eyecup's first ring.
         new Device
         {
-            Node = "thermal_spi_t7_LOD0", Thermal = true, Sealed = true,
+            // (Its picture over the whole of each glass, 1.9.24: a screen behind an eyepiece, not a tube's cone. With the
+            // 60 degrees every device has unless it says otherwise, the eye 7 mm from a glass 64 degrees wide to each
+            // side saw the cone's edge inside the glass, the glass grey beyond it: arcs along the top and bottom of the
+            // picture, the user's, 2026-11-25, "夜视仪画面周围有什么东西把画面挡住了"; still there in the screen saved
+            // with 1.9.23, so not the turned lines 1.9.22 took them for.)
+            Node = "thermal_spi_t7_LOD0", Thermal = true, Sealed = true, FieldDegrees = 150f,
             CupHeight = 0.039f, CupRadii0 = new Vector4(0.0243f, 0.0253f, 0.0276f, 0.029f), CupRadii1 = new Vector4(0.0308f, 0.0318f, 0f, 0f),
             Tubes = new[] { At(-0.03063f, 0.05866f, -0.04368f), At(-0.03063f, 0.05866f, -0.04368f), At(0.03003f, 0.05866f, -0.04368f), At(0.03003f, 0.05866f, -0.04368f) },
             LensRadius = 0.01432f, FloorDepth = 0.00913f, OpeningRadius = 0.01636f, RimHeight = 0.00537f, RimRadius = 0.02433f,

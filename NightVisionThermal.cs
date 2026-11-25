@@ -598,6 +598,16 @@ internal static partial class NightVisionEyepieces
                     continue;
                 Component made = ours.AddComponent(effect.GetType());
                 CopySettings(effect, made);
+                // No film grain on our picture (1.9.24). Measured 2026-11-25 on saved pictures (1707x960, a raid): with the
+                // copied effects the picture's fine noise 0.0171 about a mean of 0.229, the same in every 32-pixel block
+                // and with no likeness between neighbours; without them 0.0007; the hold over frames made no difference.
+                // Of the five only this one has a grain. On the game's own frame it is laid on once, on the whole frame;
+                // on ours it was laid on the picture at two thirds of the screen's size and then again with the frame.
+                if (made is PrismEffects prism)
+                {
+                    NewCameraPlugin.Log?.LogInfo($"NVG thermal: the copied PrismEffects had its grain {(prism.useNoise ? "on" : "off")} (intensity {prism.noiseIntensity:F3}, scale {prism.noiseScale:F2}, {prism.noiseType}); off on our camera.");
+                    prism.useNoise = false;
+                }
                 ((MonoBehaviour)made).enabled = true;
             }
         }
