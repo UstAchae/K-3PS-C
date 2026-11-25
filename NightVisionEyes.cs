@@ -404,7 +404,11 @@ internal static partial class NightVisionEyepieces
         float podAway = Mathf.SmoothStep(0f, 1f, Mathf.Max(PodGone(leftTube), PodGone(rightTube)) * 3f);
         // (Kept for FusionField's note; no text made here.)
         _notePod = podAway; _noteA = a; _noteB = b; _noteLeft = leftShift; _noteRight = rightShift; _noteOwn = eyesOwn;
-        _fieldApart = _device.Monocular ? 0f
+        // (Nor sealed thermal goggles, 1.9.22: down, the T-7's eyes stand 7 mm from glasses 64 degrees wide each, the
+        // two 111 to 125 degrees apart for 126 to 129 together: on the threshold, apart 0.4 to 0.9 as the head moved, the
+        // lines turned 9 to 20 degrees in the log of 2026-11-25, and each half's field stood in over the other's: the
+        // user's, "夜视仪画面周围有什么东西把画面挡住了", arcs along the top and bottom of the picture.)
+        _fieldApart = _device.Monocular || _device.Thermal ? 0f
             : together > 1e-4f ? Mathf.SmoothStep(0f, 1f, (Vector3.Angle(leftDownLine, rightDownLine) * Mathf.Deg2Rad / together - 0.8f) / 0.2f) * (1f - podAway) : 0f;
         // (Only with the device down and its eyepieces before the eyes: flipping up, an eyepiece's axis turns away from the
         // line to its glass, 99 degrees in the log of 2026-11-23, and the lines were turned by as much.)
