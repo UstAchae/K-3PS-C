@@ -487,6 +487,9 @@ internal static partial class NightVisionEyepieces
         bool on = worn && (powered || power > 0.01f && filterThere);
         Wake(worn && (switchedOn || on) ? renderer : null, cameras?.NightVision);
         Active = on;
+        // The picture's colour as now seen through this goggle: its light on the player's other models takes it (NightVisionPreviewMounts).
+        if (powered && !thermal)
+            _phosphorOf[_device.Node] = PhosphorColor();
         _split = _flip;
         HoldMainThermal(cameras, thermal && worn);
         KeepThermalGlow(thermalDevice);

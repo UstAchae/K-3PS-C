@@ -180,8 +180,78 @@ internal static partial class NightVisionEyepieces
         return null;
     }
 
-    // (No light on the face on this branch: the previews' models get none either.)
-    private static void ShowGlow(Transform model, Transform body, Device kind) { }
-    private static void ForgetGlow(Transform model) { }
-    private static void UpdateShownGlows() { }
+    // The goggle's own light on such a model (the game's, lit while the goggle is switched on) in the colour of the
+    // picture: the one the player last saw through this goggle (BRNVG's tint, or the game's filter's: PhosphorColor,
+    // kept in NightVisionEyepieces), else the colour the game draws this item's picture in. Its own colour back when the
+    // model goes or the mod is switched off. (No light on the face of our own on this branch: only the game's is tinted.)
+    private sealed class ShownGlow
+    {
+        internal Transform Model = null!;
+        internal Light Light = null!;
+        internal NightVisionDevice Switch = null!;
+        internal Device Kind = null!;
+        internal Color Own;
+        internal bool Noted;
+    }
+
+    private static readonly List<ShownGlow> _shownGlows = new List<ShownGlow>();
+    private static readonly Dictionary<string, Color> _phosphorOf = new Dictionary<string, Color>();
+
+    private static void ShowGlow(Transform model, Transform body, Device kind)
+    {
+        if (kind.Thermal)
+            return;
+        ForgetGlow(model);
+        NightVisionDevice? device = body.GetComponentInParent<NightVisionDevice>(true);
+        if (device == null || device._light == null)
+            return;
+        _shownGlows.Add(new ShownGlow { Model = model, Light = device._light, Switch = device, Kind = kind, Own = device._light.color });
+    }
+
+    private static void ForgetGlow(Transform model)
+    {
+        for (int i = _shownGlows.Count - 1; i >= 0; i--)
+        {
+            if (_shownGlows[i].Model == model)
+                DropGlow(i);
+        }
+    }
+
+    private static void DropGlow(int i)
+    {
+        ShownGlow glow = _shownGlows[i];
+        if (glow.Light != null)
+            glow.Light.color = glow.Own;
+        _shownGlows.RemoveAt(i);
+    }
+
+    private static void UpdateShownGlows()
+    {
+        for (int i = _shownGlows.Count - 1; i >= 0; i--)
+        {
+            ShownGlow glow = _shownGlows[i];
+            if (glow.Model == null || glow.Light == null || glow.Switch == null || !NewCameraSwitch.Enabled)
+            {
+                DropGlow(i);
+                continue;
+            }
+            if (!glow.Light.enabled)
+                continue;
+            if (!_phosphorOf.TryGetValue(glow.Kind.Node, out Color color))
+            {
+                if (DeviceComponent?.GetValue(glow.Switch) is not NightVisionComponent component)
+                    continue;
+                Color own = component.Template.Color;
+                float brightest = Mathf.Max(own.r, Mathf.Max(own.g, own.b));
+                color = brightest > 1e-4f ? own / brightest : glow.Own;
+            }
+            if (glow.Light.color != color)
+                glow.Light.color = color;
+            if (!glow.Noted)
+            {
+                glow.Noted = true;
+                NewCameraPlugin.Log?.LogInfo($"Goggle light on a model of the player ({glow.Kind.Node}): {glow.Own} -> {color} ({(_phosphorOf.ContainsKey(glow.Kind.Node) ? "the picture last seen" : "the item's picture colour")})");
+            }
+        }
+    }
 }
