@@ -30,6 +30,9 @@ Shader "Justachae/NVG/Binocular" {
    UNITY_DECLARE_DEPTH_TEXTURE(_DirectLD);
    UNITY_DECLARE_DEPTH_TEXTURE(_DirectRD);
    float4 _BareOver;
+   // 1: nothing of the frame is shown around the eyepieces (sealed thermal goggles down, the frame the main camera's
+   // own thermal one: all of it heat, the device drawn into it too; around the lenses is the inside of the cups, dark).
+   float _SceneOff;
    float4 frag (v2f_img i) : SV_Target {
     float4 scene = tex2D(_MainTex, i.uv);
     if (_Mode < 0.5) return scene;
@@ -45,7 +48,7 @@ Shader "Justachae/NVG/Binocular" {
     float3 device = eye.rgb * (1 - saturate(cover * _LensClear + (1 - _LensClear) * dark));
     // The scene only past the device and never through a lens: behind the glass is the tube, so where its picture
     // falls short (the line of sight off the pupil, between the two eyes' views) the glass is dark, not a window.
-    float3 seen = device + light.rgb * _Lamp.x + glow + (1 - saturate(eye.a)) * (1 - cover) * scene.rgb;
+    float3 seen = device + light.rgb * _Lamp.x + glow + (1 - saturate(eye.a)) * (1 - cover) * scene.rgb * (1 - _SceneOff);
     // The eyepieces (their picture and their glass) laid over the frame, whole but where the bare eye's view of the
     // device stands before them (below).
     float share = 1;

@@ -497,7 +497,10 @@ internal static partial class NightVisionEyepieces
         if (powered && !thermal)
             _phosphorOf[_device.Node] = PhosphorColor();
         _split = _flip;
-        HoldMainThermal(cameras, thermal && worn);
+        // (All the way down and on: the main camera's own thermal draws the picture, NightVisionThermal.cs.)
+        _thermalOnMain = ThermalThroughMain && thermal && on && _flip >= 0.999f && _device.Sealed;
+        HoldMainThermal(cameras, thermal && worn && !_thermalOnMain);
+        MainThermalMode(cameras, _thermalOnMain);
         ThermalProbeTick(present && thermal && thermalItem?.Togglable != null && thermalItem.Togglable.On, player is not HideoutPlayer);
         KeepThermalGlow(thermalDevice);
         if (thermal && on && _thermalNoted != _body)

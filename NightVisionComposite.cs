@@ -236,6 +236,10 @@ internal static partial class NightVisionEyepieces
     {
         if (!Active)
             return Texture2D.blackTexture;
+        // (Through the main camera, 1.9.25: the frame at this stage is the game's own thermal one, scaled up by its
+        // upscaler and with the goggles' last pass on it; the lenses show it as they show the game's night vision.)
+        if (_device.Thermal && _thermalOnMain)
+            return MainThermalOn ? frame : Texture2D.blackTexture;
         if (_device.Thermal)
             return _thermalPicture != null ? _thermalPicture : Texture2D.blackTexture;
 
@@ -324,6 +328,7 @@ internal static partial class NightVisionEyepieces
     private static readonly int TubeFusedId = Shader.PropertyToID("_TubeFused");
     private static readonly int FusedRectId = Shader.PropertyToID("_FusedRect");
     private static readonly int FusedShareId = Shader.PropertyToID("_FusedShare");
+    private static readonly int SceneOffId = Shader.PropertyToID("_SceneOff");
     private static void Compose(Material composite, Material glow, RenderTexture from, RenderTexture to, Texture picture, Texture? fusedPicture)
     {
         composite.SetFloat(ModeId, 1f);
@@ -344,6 +349,7 @@ internal static partial class NightVisionEyepieces
         composite.SetVector(FusedRectId, rect);
         // In whatever lens only while the eyepieces are one round field: apart, in its own tubes alone.
         composite.SetFloat(FusedShareId, 1f - _fieldApart);
+        composite.SetFloat(SceneOffId, _device.Thermal && _thermalOnMain ? 1f : 0f);
         // The glow worked out only when it is shown.
         RenderTexture? lit = EyepieceGlow ? Glow(composite, glow, from) : null;
         composite.SetTexture(GlowId, lit != null ? lit : Texture2D.blackTexture);

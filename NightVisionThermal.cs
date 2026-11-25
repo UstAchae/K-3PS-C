@@ -215,7 +215,62 @@ internal static partial class NightVisionEyepieces
     private static bool _skipNoted;
 
     private static bool ThermalAlone => _direct && _device.Thermal && _device.Sealed && Active && _flip >= 0.999f
-        && _thermalCamera != null && _thermalPicture != null;
+        && _thermalCamera != null && _thermalPicture != null && !_thermalOnMain;
+
+    // The goggles' picture through the main camera (1.9.25, at the user's word, 2026-11-25). With the goggles all the
+    // way down and on, the main camera's own thermal is given back and draws the frame as the game has it: the scene
+    // once, at the upscaler's input size, its two passes there, scaled up to the screen by the game's upscaler (DLSS
+    // at the user's settings), the goggles' last pass at the screen's size (SSAAPropagator). The eyepieces take that
+    // frame for their picture, as with night vision, and show nothing of it around the lenses (NvgBinocular,
+    // _SceneOff: it is all heat, the device drawn into it too). No camera of ours renders then, the main camera's
+    // scene is not left out, and nothing of the picture is ours to smooth or sharpen.
+    // Why: our own camera's picture had no upscaler (1707x960 laid straight into the lenses, the goggles' last pass at
+    // that size), and cost a second drawing of the scene (2.6 to 3.2 ms of 13.2 to 15.1 a frame, the probe of
+    // 2026-11-25; the game's own 8.3).
+    // Kept as the game does not have them, as on our camera before (the user's, 2026-11-22): no grain, not held for
+    // frames at a time, no lag, no blocks; the game's mask off. Put back as they were when the goggles go up.
+    internal const bool ThermalThroughMain = true;
+    private static bool _thermalOnMain;
+    private static ThermalVision? _mainTaken;
+    private static bool _mainNoisy, _mainStuck, _mainBlurred, _mainPixelated, _mainNoted;
+    private static bool MainThermalOn => _mainTaken != null && _mainTaken.On;
+
+    private static void MainThermalMode(CameraManager? cameras, bool now)
+    {
+        ThermalVision? main = now ? cameras?.ThermalVision : null;
+        if (_mainTaken != null && _mainTaken != main)
+        {
+            _mainTaken.IsNoisy = _mainNoisy;
+            _mainTaken.IsFpsStuck = _mainStuck;
+            _mainTaken.IsMotionBlurred = _mainBlurred;
+            _mainTaken.IsPixelated = _mainPixelated;
+            // (Its mask back if the game still has it on with nobody holding it off: this mod switched off in the menu.)
+            if (_mainTaken.On && _mainTaken != _heldOff && _mainTaken.TextureMask != null)
+                _mainTaken.TextureMask.enabled = true;
+            _mainTaken = null;
+        }
+        if (main == null)
+            return;
+        if (_mainTaken == null)
+        {
+            _mainTaken = main;
+            _mainNoisy = main.IsNoisy;
+            _mainStuck = main.IsFpsStuck;
+            _mainBlurred = main.IsMotionBlurred;
+            _mainPixelated = main.IsPixelated;
+        }
+        main.IsNoisy = false;
+        main.IsFpsStuck = false;
+        main.IsMotionBlurred = false;
+        main.IsPixelated = false;
+        if (main.TextureMask != null && main.TextureMask.enabled)
+            main.TextureMask.enabled = false;
+        if (!_mainNoted && main.On)
+        {
+            _mainNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG thermal: the goggles' picture through the main camera's own thermal (as the game had it: noisy {_mainNoisy}, stuck {_mainStuck}, lag {_mainBlurred}, blocks {_mainPixelated}; all off); no camera of ours renders, the eyepieces take the frame.");
+        }
+    }
 
     // As the main camera is about to cull.
     private static void SkipMainScene(Camera camera)
@@ -361,6 +416,8 @@ internal static partial class NightVisionEyepieces
     private static void ReleaseThermal()
     {
         HoldMainThermal(BodyVisibility.Cameras, false);
+        MainThermalMode(BodyVisibility.Cameras, false);
+        _thermalOnMain = false;
         KeepThermalGlow(null);
         GiveMainSceneBack();
         if (_thermalCamera != null)

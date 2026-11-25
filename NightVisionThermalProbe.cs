@@ -54,7 +54,7 @@ internal static partial class NightVisionEyepieces
             return;
         if (!ThermalProbeFull)
         {
-            if (!(Active && _flip >= 0.999f && _body != null && _device.Thermal && _thermalPicture != null))
+            if (!(Active && _flip >= 0.999f && _body != null && _device.Thermal && (_thermalOnMain ? MainThermalOn : _thermalPicture != null)))
             {
                 _thermalProbeSettled = 0;
                 return;
@@ -63,8 +63,11 @@ internal static partial class NightVisionEyepieces
                 return;
             _thermalProbeDone = true;
             Directory.CreateDirectory(ThermalProbeFolder);
-            ThermalProbeSave(0, "check_" + NewCameraPlugin.PluginVersion);
-            NewCameraPlugin.Log?.LogInfo($"Thermal probe: our picture as it is saved once ({_thermalPicture.width}x{_thermalPicture.height}) to {ThermalProbeFolder}.");
+            if (_thermalOnMain)
+                ScreenCapture.CaptureScreenshot(Path.Combine(ThermalProbeFolder, "check_" + NewCameraPlugin.PluginVersion + "_screen.png"));
+            else
+                ThermalProbeSave(0, "check_" + NewCameraPlugin.PluginVersion);
+            NewCameraPlugin.Log?.LogInfo($"Thermal probe: {(_thermalOnMain ? "the screen" : "our picture")} as it is saved once to {ThermalProbeFolder} (this frame {Time.unscaledDeltaTime * 1000f:F1} ms).");
             return;
         }
         if (!inRaid)
