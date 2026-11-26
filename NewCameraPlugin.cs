@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.27";
+    public const string PluginVersion = "1.9.28";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -204,6 +204,11 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         gameLensCompress.SettingChanged += (_, _) => NightVisionEyepieces.GameLensCompress = gameLensCompress.Value;
         NightVisionEyepieces.GameLensGain = gameLensGain.Value;
         NightVisionEyepieces.GameLensCompress = gameLensCompress.Value;
+        ConfigEntry<bool> thermalThroughMain = SettingsLayout.Bind(Config, "头戴式成像装备", "热成像护目镜优化", true,
+            new ConfigDescription("T-7 热成像护目镜完全翻下并开机后，热成像画面由游戏主镜头直接画，和原版走同一条通道（经过 DLSS 等放大），目镜取这张画面显示：画面更清晰，帧数更高。关掉后改回旧做法：由本模组另开一台相机画热成像，不经过放大，多画一遍场景，帧数更低。一般保持打开。",
+                null, new ConfigurationManagerAttributes { Order = 0 }));
+        thermalThroughMain.SettingChanged += (_, _) => NightVisionEyepieces.ThermalThroughMain = thermalThroughMain.Value;
+        NightVisionEyepieces.ThermalThroughMain = thermalThroughMain.Value;
         ConfigEntry<float> tritium = SettingsLayout.Bind(Config, "头戴式成像装备", "氚光亮度", 0.6f,
             new ConfigDescription("透过夜视仪看氚光机瞄（以及游戏里做了氚光的其他瞄具）：每个氚光点被物镜散成一个亮度均匀、边缘清楚的圆盘，离眼睛越近圆盘越大、越暗。这一项调这些圆盘有多亮，0 是不画。",
                 new AcceptableValueRange<float>(0f, 4f), new ConfigurationManagerAttributes { Order = 0 }));

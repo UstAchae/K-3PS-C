@@ -222,7 +222,8 @@ internal static partial class NightVisionEyepieces
     // 2026-11-25; the game's own 8.3).
     // Kept as the game does not have them, as on our camera before (the user's, 2026-11-22): no grain, not held for
     // frames at a time, no lag, no blocks; the game's mask off. Put back as they were when the goggles go up.
-    internal const bool ThermalThroughMain = true;
+    // (F12 热成像护目镜优化, on by default; off, our own camera's picture as before 1.9.25: the user's, 2026-11-26.)
+    internal static bool ThermalThroughMain = true;
     private static bool _thermalOnMain;
     private static ThermalVision? _mainTaken;
     private static bool _mainNoisy, _mainStuck, _mainBlurred, _mainPixelated, _mainNoted;
