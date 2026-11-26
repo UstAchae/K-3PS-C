@@ -473,7 +473,7 @@ Shader "Justachae/NVG/Tube" {
   }
   // 11: the light on the tube, measured (NightVisionAutoGain.cs): into a small target with mips, each pixel the frame's
   // light about it (_MainTex, four taps) weighted by how much of a lens is there for either eye (the lens maps): r the
-  // light, g its square, b the weight. Its smallest mip is the mean over all the lenses show.
+  // light, g its fourth power, b the weight. Its smallest mip is the mean over all the lenses show.
   Pass {
    Cull Off ZWrite Off ZTest Always
    CGPROGRAM
@@ -492,12 +492,13 @@ Shader "Justachae/NVG/Tube" {
     float c = light(i.uv + float2(d.x, -d.y)), e = light(i.uv + float2(-d.x, -d.y));
     float4 lens = i.uv.x < _MeterSplit ? tex2D(_MeterLensL, i.uv) : tex2D(_MeterLensR, i.uv);
     float w = saturate(dot(lens, 1));
-    return float4((a + b + c + e) * 0.25 * w, (a * a + b * b + c * c + e * e) * 0.25 * w, w, 1);
+    float a2 = a * a, b2 = b * b, c2 = c * c, e2 = e * e;
+    return float4((a + b + c + e) * 0.25 * w, (a2 * a2 + b2 * b2 + c2 * c2 + e2 * e2) * 0.25 * w, w, 1);
    }
    ENDCG
   }
   // 12: the gain for this frame, into a target of one pixel: toward what brings the measured light (pass 11's
-  // smallest mip: half its mean, half its root mean square, so that what is bright counts for more than its area)
+  // smallest mip: half its mean, half the fourth root of its mean fourth power, so that a strong light counts for far more than its area)
   // down to _GainSet.x, never above 1 nor under _GainSet.y, at _GainSet.z a second going down and _GainSet.w coming
   // back; _GainPrev last frame's, _GainDt the frame's time.
   Pass {
@@ -515,8 +516,8 @@ Shader "Justachae/NVG/Tube" {
     float prev = tex2D(_GainPrev, float2(0.5, 0.5)).r;
     float target = 1;
     if (m.b > 1e-4) {
-     float mean = m.r / m.b, rms = sqrt(max(m.g / m.b, 0));
-     float seen = 0.5 * (mean + rms);
+     float mean = m.r / m.b, high = sqrt(sqrt(max(m.g / m.b, 0)));
+     float seen = 0.5 * (mean + high);
      target = clamp(_GainSet.x / max(seen, 1e-4), _GainSet.y, 1);
     }
     float rate = target < prev ? _GainSet.z : _GainSet.w;

@@ -415,12 +415,18 @@ internal static partial class NightVisionEyepieces
         Vector3 leftDownLine = (leftGlass - leftDown).normalized, rightDownLine = (rightGlass - rightDown).normalized;
         float together = RadiusOf(leftTube, leftGlass, leftDown) + RadiusOf(rightTube, rightGlass, rightDown);
         float podAway = Mathf.SmoothStep(0f, 1f, Mathf.Max(PodGone(leftTube), PodGone(rightTube)) * 3f);
+        // (And only while the glasses are small before the eyes, 1.9.31: the two eyepieces stand apart on the screen
+        // with the goggle far out, each some 11 degrees across; brought close each fills its eye's half, 40 degrees
+        // and more, and there is no "apart" to speak of, yet the measure stood on its threshold there: a PVS-31A
+        // 66 to 81 degrees apart for 79 together counted as apart on and off, its right eye's lines turned up to 25
+        // degrees and back, in the log of 2026-11-26. Not past ApartWidest together, eased out over ApartWidestFade.)
         // (Nor sealed thermal goggles, 1.9.22: down, the T-7's eyes stand 7 mm from glasses 64 degrees wide each, the
         // two 111 to 125 degrees apart for 126 to 129 together: on the threshold, apart 0.4 to 0.9 as the head moved, the
         // lines turned 9 to 20 degrees in the log of 2026-11-25, and each half's field stood in over the other's: the
         // user's, "夜视仪画面周围有什么东西把画面挡住了", arcs along the top and bottom of the picture.)
         _fieldApart = _device.Monocular || _device.Thermal ? 0f
-            : together > 1e-4f ? Mathf.SmoothStep(0f, 1f, (Vector3.Angle(leftDownLine, rightDownLine) * Mathf.Deg2Rad / together - 0.8f) / 0.2f) * (1f - podAway) : 0f;
+            : together > 1e-4f ? Mathf.SmoothStep(0f, 1f, (Vector3.Angle(leftDownLine, rightDownLine) * Mathf.Deg2Rad / together - 0.8f) / 0.2f) * (1f - podAway)
+                * (1f - Mathf.SmoothStep(0f, 1f, (together * Mathf.Rad2Deg - ApartWidest) / ApartWidestFade)) : 0f;
         // (Only with the device down and its eyepieces before the eyes: flipping up, an eyepiece's axis turns away from the
         // line to its glass, 99 degrees in the log of 2026-11-23, and the lines were turned by as much.)
         float AimShare(Vector3 axis, Vector3 line) => _fieldApart * Mathf.Clamp01(_split) * (1f - Mathf.SmoothStep(0f, 1f, (Vector3.Angle(axis, line) - 25f) / 15f));
@@ -429,12 +435,6 @@ internal static partial class NightVisionEyepieces
         _aimRight = (rightAxis - rightLine) * AimShare(rightAxis, rightLine);
         binocular.SetVector(EyeAimIds[0], aimLeft);
         binocular.SetVector(EyeAimIds[1], _aimRight);
-        if (!_fieldApartNoted || Mathf.Abs(_fieldApart - _fieldApartWas) > 0.5f)
-        {
-            _fieldApartNoted = true;
-            _fieldApartWas = _fieldApart;
-            NewCameraPlugin.Log?.LogInfo($"NVG eyepieces: their fields {(_fieldApart > 0.5f ? "each about its own eyepiece" : "one round field")} (apart {_fieldApart:F2}, a pod away {podAway:F2}; the glasses {Vector3.Angle(leftDownLine, rightDownLine):F1} degrees apart, {together * Mathf.Rad2Deg:F1} their radii together; lines turned {Vector3.Angle(leftLine, leftLine + aimLeft):F1} and {Vector3.Angle(rightLine, rightLine + _aimRight):F1} degrees).");
-        }
         float split = asMonocular ? 0.5f : Mathf.Clamp(0.5f * (Across(camera, leftGlass - leftShift) + Across(camera, rightGlass - rightShift)), 0.2f, 0.8f);
         // One eyepiece swung away: the halves meet past the far side of the one left, its cup and housing about its glass
         // (twice the glass's radius), as its own eye sees it: it is seen whole (cut nearer, it was cut through, the user's,
@@ -500,8 +500,7 @@ internal static partial class NightVisionEyepieces
         else
             FusionField(camera, _device.FusionTubes != null && _device.FusionTubes.Length > 0 ? _device.FusionTubes[0] : a <= b ? CentreLensB : CentreLensA, position + rightShift);
     }
-    private static bool _fieldApartNoted;
-    private static float _fieldApartWas;
+    private const float ApartWidest = 30f, ApartWidestFade = 10f;   // degrees, the two glasses' radii together
     private const float RayFar = 2f;                               // m: the lines of sight's frame (only their direction counts)
     private static float RayNear => Mathf.Max(EyeNear, RayFar / 2e5f);
 

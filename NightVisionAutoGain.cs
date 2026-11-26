@@ -20,7 +20,8 @@ internal static partial class NightVisionEyepieces
 
     // The frame's light at this stage is in display range (after the tone mapping); the lenses then show it times
     // 原版夜视目镜亮度 (2.5 as the user has it), so 0.4 of it is already white on the screen. Held to a mean of this.
-    private const float AutoGainTarget = 0.12f;
+    // (0.12 by the mean and the root mean square, 1.9.29: nothing to be seen of it, the user's, 2026-11-26.)
+    private const float AutoGainTarget = 0.10f;
     private const float AutoGainLeast = 1f / 16f;
     // A second, going down and coming back: at once and in half a second or so; over a third of a second and in a second or more.
     private const float GatedDown = 30f, GatedBack = 2f, UngatedDown = 6f, UngatedBack = 1f;
@@ -35,7 +36,24 @@ internal static partial class NightVisionEyepieces
     private static RenderTexture? _meter;
     private static readonly RenderTexture?[] _gains = new RenderTexture?[2];
     private static int _gainNow, _gainFrame = -10;
-    private static string? _autoGainNoted;
+    private static string? _autoGainNoted, _gainSeenFor;
+    private static float _gainLeast = 1f;
+    private static int _gainLooks, _gainLookFrame = -1000;
+    private static bool _gainLooking;
+    private static readonly System.Action<UnityEngine.Rendering.AsyncGPUReadbackRequest> GainRead = request =>
+    {
+        _gainLooking = false;
+        if (request.hasError || _gainLooks < 0)
+            return;
+        float now = request.GetData<float>()[0];
+        _gainLeast = Mathf.Min(_gainLeast, now);
+        _gainLooks++;
+        if (_gainLeast < 0.8f || _gainLooks >= 20)
+        {
+            NewCameraPlugin.Log?.LogInfo($"NVG tubes: {_gainSeenFor}'s gain went down to {_gainLeast:F2} at the least in the first {_gainLooks} looks ({now:F2} now).");
+            _gainLooks = -1;
+        }
+    };
 
     private static bool AutoGainWanted => AutoGainOn && _tubeShader != null && !_device.Fusion && _device.AutoGain > 0
         && _lensMaps[0] != null && _lensMaps[1] != null;
@@ -87,6 +105,21 @@ internal static partial class NightVisionEyepieces
         tube.SetFloat(GainDtId, Mathf.Min(Time.unscaledDeltaTime, 0.1f));
         Graphics.Blit(Texture2D.blackTexture, _gains[write], tube, GainPass);
         _gainNow = write;
+        // Once for a device: how far down the gain has gone, read back from the card now and then (not waited for) until
+        // it has been under 0.8 or half a minute of looking has passed.
+        if (_gainSeenFor != _device.Node)
+        {
+            _gainSeenFor = _device.Node;
+            _gainLeast = 1f;
+            _gainLooks = 0;
+            _gainLooking = false;
+        }
+        if (_gainLooks >= 0 && Time.frameCount - _gainLookFrame >= 90 && !_gainLooking)
+        {
+            _gainLookFrame = Time.frameCount;
+            _gainLooking = true;
+            UnityEngine.Rendering.AsyncGPUReadback.Request(_gains[write], 0, GainRead);
+        }
         if (_autoGainNoted != _device.Node)
         {
             _autoGainNoted = _device.Node;
