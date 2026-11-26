@@ -267,7 +267,8 @@ internal static partial class NightVisionEyepieces
         filter.EnableKeyword("NIGHT_VISION_NOISE");
         // The tube's gain and its pressing of the bright end, before the game's filter (NvgTube.shader); only this
         // picture, the game's: BRNVG's above is its own, set in its own settings.
-        Material? tube = TubeMaterial();
+        bool auto = AutoGainWanted;
+        Material? tube = auto ? _tubeMaterial ??= new Material(_tubeShader!) { name = "Justachae NVG tube", hideFlags = HideFlags.DontSave } : TubeMaterial();
         if (tube == null)
         {
             Graphics.Blit(frame, made, filter);
@@ -275,6 +276,10 @@ internal static partial class NightVisionEyepieces
         }
         tube.SetFloat(TubeGainId, GameLensGain);
         tube.SetFloat(TubeCompressId, GameLensCompress);
+        // (The tubes' own turning down in bright light: NightVisionAutoGain.cs.)
+        tube.SetFloat(AutoGainUseId, auto ? 1f : 0f);
+        if (auto)
+            tube.SetTexture(AutoGainId, AutoGainNow(frame, tube));
         RenderTexture tubed = RenderTexture.GetTemporary(frame.width, frame.height, 0, frame.format);
         Graphics.Blit(frame, tubed, tube, 0);   // (its pass 0 only: the shader has the two eyes' passes after it)
         Graphics.Blit(tubed, made, filter);
@@ -305,6 +310,7 @@ internal static partial class NightVisionEyepieces
         Material tube = _tubeMaterial ??= new Material(_tubeShader) { name = "Justachae NVG tube", hideFlags = HideFlags.DontSave };
         tube.SetFloat(TubeGainId, gain);
         tube.SetFloat(TubeCompressId, 0f);
+        tube.SetFloat(AutoGainUseId, 0f);
         dimmed = RenderTexture.GetTemporary(picture.width, picture.height, 0, picture is RenderTexture rt ? rt.format : RenderTextureFormat.ARGB32);
         Graphics.Blit(picture, dimmed, tube, 0);
         if (!_tubesGainNoted)
