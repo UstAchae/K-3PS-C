@@ -272,7 +272,7 @@ internal static partial class NightVisionEyepieces
             PrepareRelative(camera);
         RenderLenses(camera, binocular, view, position);
         // Thermal goggles' picture, for the lenses (LensPicture).
-        if (_device.Thermal && Active && !_thermalOnMain && !(ProbeKeepPicture && _thermalPicture != null))
+        if (_device.Thermal && Active && !_thermalOnMain)
             RenderThermal(camera);
     }
 
@@ -415,8 +415,6 @@ internal static partial class NightVisionEyepieces
         Vector3 leftDownLine = (leftGlass - leftDown).normalized, rightDownLine = (rightGlass - rightDown).normalized;
         float together = RadiusOf(leftTube, leftGlass, leftDown) + RadiusOf(rightTube, rightGlass, rightDown);
         float podAway = Mathf.SmoothStep(0f, 1f, Mathf.Max(PodGone(leftTube), PodGone(rightTube)) * 3f);
-        // (Kept for FusionField's note; no text made here.)
-        _notePod = podAway; _noteA = a; _noteB = b; _noteLeft = leftShift; _noteRight = rightShift; _noteOwn = eyesOwn;
         // (Nor sealed thermal goggles, 1.9.22: down, the T-7's eyes stand 7 mm from glasses 64 degrees wide each, the
         // two 111 to 125 degrees apart for 126 to 129 together: on the threshold, apart 0.4 to 0.9 as the head moved, the
         // lines turned 9 to 20 degrees in the log of 2026-11-25, and each half's field stood in over the other's: the
@@ -624,16 +622,6 @@ internal static partial class NightVisionEyepieces
         Interop.EyepieceFusion.FieldInMainUv = new Vector4(centre.x / aspect, centre.y, radius, aspect);
         _fusionFieldFrame = Time.frameCount;
         _fusionFieldOf = _clipOnClaimed ? _fusionKey : _device.Node;
-        // (Where the field stands against its glass, whenever that changes by a thirtieth of the height: at most twice a
-        // second. For a field seen off its glass, 1.9.15: which state it was in.)
-        Vector2 against = centre - glassCentre;
-        if (_fieldAgainstNotes < 40 && (against - _fieldAgainstNoted).sqrMagnitude > 0.03f * 0.03f && Time.frameCount - _fieldAgainstFrame > 30)
-        {
-            _fieldAgainstNoted = against;
-            _fieldAgainstNotes++;   // (forty a session: with the eye at the glass it moved with every turn of the head, and filled the log)
-            _fieldAgainstFrame = Time.frameCount;
-            NewCameraPlugin.Log?.LogInfo($"NVG fusion: the field now ({centre.x / aspect:F3}, {centre.y:F3}) radius {radius:F3}, its glass ({glassCentre.x / aspect:F3}, {glassCentre.y:F3}) radius {glassRadius:F3}, the tube's field ({coneCentre.x / aspect:F3}, {coneCentre.y:F3}) radius {_fusionCone.z:F3}; apart {_fieldApart:F2}, a pod away {_notePod:F2}, the eyepieces {_noteA * 1000f:F0} and {_noteB * 1000f:F0} mm across from the camera, eyes moved {_noteLeft * 1000f:F0} and {_noteRight * 1000f:F0} mm, down {_split:F2}, the eyes' own places {_noteOwn:F2}.");
-        }
         if (_fusionFieldNoted != _fusionFieldOf)
         {
             _fusionFieldNoted = _fusionFieldOf;
@@ -641,10 +629,6 @@ internal static partial class NightVisionEyepieces
         }
     }
     private static string? _fusionFieldNoted;
-    private static Vector2 _fieldAgainstNoted;
-    private static int _fieldAgainstFrame = -1000, _fieldAgainstNotes;
-    private static float _notePod, _noteA, _noteB, _noteOwn;
-    private static Vector3 _noteLeft, _noteRight;
     private static int _fusionFieldFrame = -10;
     private static Vector3 _fusionCone;   // the tube's own field this frame: its centre (uv) and radius (of the height)
     private static string? _fusionFieldOf;

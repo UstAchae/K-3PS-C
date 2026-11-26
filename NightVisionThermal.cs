@@ -82,13 +82,6 @@ internal static partial class NightVisionEyepieces
     {
         if (_thermalCamera == null || _irLightShader == null)
             return;
-        // (The thermal probe's steps without the hold: its buffer left empty for the frame.)
-        if (ProbeNoHold)
-        {
-            _thermalHold?.Clear();
-            _thermalHeldFrame = -10;
-            return;
-        }
         for (int i = 0; i < 2; i++)
         {
             RenderTexture? history = _thermalHistory[i];
@@ -138,7 +131,7 @@ internal static partial class NightVisionEyepieces
     // follows the still world by.
     private static void JitterThermal(Camera camera)
     {
-        if (camera != _thermalCamera || _thermalHoldMaterial == null || _thermalPicture == null || ProbeNoHold)
+        if (camera != _thermalCamera || _thermalHoldMaterial == null || _thermalPicture == null)
             return;
         // Its own layer's temporal anti-aliasing has jittered it by now (the log of 1.8.171: on, for ours as for the main
         // camera): that jitter taken as it is. Else one of our own.
@@ -503,11 +496,6 @@ internal static partial class NightVisionEyepieces
         {
             width = Mathf.Max(ssaa.GetInputWidth(), 1);
             height = Mathf.Max(ssaa.GetInputHeight(), 1);
-        }
-        if (ProbeHalfPicture)
-        {
-            width = Mathf.Max(width / 2, 1);
-            height = Mathf.Max(height / 2, 1);
         }
         if (_thermalPicture == null || _thermalPicture.width != width || _thermalPicture.height != height)
         {
