@@ -4,8 +4,8 @@ namespace EFTNewCamera;
 
 // The tubes' own turning down of their gain in bright light, for the game's night-vision picture in the eyepieces (the
 // user's, 2026-11-26, on players finding the goggles blinding before a strong light: "最好让原版画面和 BRNVG 都能有自动
-// 门控"; BRNVG's picture has its own automatic gain, and a fusion device's tubes are turned down by its own mod through
-// EyepieceFusion, so neither is touched here).
+// 门控"; BRNVG's picture has its own automatic gain and is not touched here; a fusion device's own mod turns its tubes down by its keys through
+// EyepieceFusion, laid on after this gain).
 // A tube's screen has a brightest it can be, and the tube holds its picture under it: with much light on it, it
 // turns its gain down for the whole picture, and up again as the light goes. An auto-gated tube (the GPNVG-18's, the
 // PVS-14's, the PVS-31A's) does it at once; one without (the PNV-10T's, the N-15's) over a moment, and comes back
@@ -48,14 +48,28 @@ internal static partial class NightVisionEyepieces
         float now = request.GetData<float>()[0];
         _gainLeast = Mathf.Min(_gainLeast, now);
         _gainLooks++;
-        if (_gainLeast < 0.8f || _gainLooks >= 20)
+        // (The first time it is under 0.8, under 0.5 and under 0.25, and how low it has been after 20 looks and at the
+        // last, the 400th, some ten minutes of the goggle down: a handful of lines a device. 1.9.31 looked for half a
+        // minute only, and said 0.96 of a goggle whose wearer may not have faced a light in that time.)
+        if (_gainStep < GainSteps.Length && now < GainSteps[_gainStep])
         {
-            NewCameraPlugin.Log?.LogInfo($"NVG tubes: {_gainSeenFor}'s gain went down to {_gainLeast:F2} at the least in the first {_gainLooks} looks ({now:F2} now).");
-            _gainLooks = -1;
+            NewCameraPlugin.Log?.LogInfo($"NVG tubes: {_gainSeenFor}'s gain down to {now:F2} (first under {GainSteps[_gainStep]:F2}, at look {_gainLooks}).");
+            while (_gainStep < GainSteps.Length && now < GainSteps[_gainStep])
+                _gainStep++;
         }
+        if (_gainLooks == 20 || _gainLooks >= 400)
+            NewCameraPlugin.Log?.LogInfo($"NVG tubes: {_gainSeenFor}'s gain {_gainLeast:F2} at the least in its first {_gainLooks} looks ({now:F2} now).");
+        if (_gainLooks >= 400 || _gainStep >= GainSteps.Length)
+            _gainLooks = -1;
     };
+    private static readonly float[] GainSteps = { 0.8f, 0.5f, 0.25f };
+    private static int _gainStep;
 
-    private static bool AutoGainWanted => AutoGainOn && _tubeShader != null && !_device.Fusion && _device.AutoGain > 0
+    // (A fusion device's too, 1.9.32: the ENVG-B's and the F-PANO's clients turn their tubes down only by their keys
+    // while these eyepieces show them, their own automatic brightness being for when they do not; agreed with their
+    // session, 2026-11-26. Their keys' gain is laid on after this one, TubesGain. The user judged the gain on an
+    // F-PANO and saw nothing of it: it was not at work there.)
+    private static bool AutoGainWanted => AutoGainOn && _tubeShader != null && _device.AutoGain > 0
         && _lensMaps[0] != null && _lensMaps[1] != null;
 
     // This frame's gain (a texture of one pixel), worked out from the light that reaches the tubes (frame).
@@ -112,6 +126,7 @@ internal static partial class NightVisionEyepieces
             _gainSeenFor = _device.Node;
             _gainLeast = 1f;
             _gainLooks = 0;
+            _gainStep = 0;
             _gainLooking = false;
         }
         if (_gainLooks >= 0 && Time.frameCount - _gainLookFrame >= 90 && !_gainLooking)
