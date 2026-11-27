@@ -30,9 +30,6 @@ internal static partial class TwoEyes
             * NightVisionEyepieces.OneEyeShare
         : 0f;
 
-    // F12 单筒：裸眼瞄准时分划的透明度: the bare eye's sight lens seen through (0 solid).
-    internal static float BareLensSeeThrough = 0.5f;
-    private static float LensOpacity => 1f - Mathf.Clamp01(BareLensSeeThrough);
     // Which eye aims (_shareBare: 1 the bare eye; it goes over as the gun changes shoulders, CameraPosition), and how far
     // the aim has come up (_aim, 0 to 1): the bare eye's gun only while it aims.
     private static float _shareBare, _aim;

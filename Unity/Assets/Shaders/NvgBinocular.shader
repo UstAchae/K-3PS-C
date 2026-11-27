@@ -51,7 +51,8 @@ Shader "Justachae/NVG/Binocular" {
     float3 seen = device + light.rgb * _Lamp.x + glow + (1 - saturate(eye.a)) * (1 - cover) * scene.rgb * (1 - _SceneOff);
     // The eyepieces (their picture and their glass) laid over the frame, whole but where the bare eye's view of the
     // device stands before them (below).
-    float share = 1;
+    // (_BareOver.z: how much of the eyepieces is laid over the frame, half while the bare eye leads; 0 not given: whole.)
+    float share = _BareOver.z > 0 ? _BareOver.z : 1;
     if (_BareOver.x > 0) {
      float raw = _BareOver.y > 0.5 ? SAMPLE_DEPTH_TEXTURE(_DirectRD, i.uv) : SAMPLE_DEPTH_TEXTURE(_DirectLD, i.uv);
      #if defined(UNITY_REVERSED_Z)

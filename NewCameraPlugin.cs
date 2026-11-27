@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.37";
+    public const string PluginVersion = "1.9.38";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -175,12 +175,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<bool> reflections = SettingsLayout.Bind(Config, "头戴式成像装备", "镜片反光", false,
             new ConfigDescription("夜视仪翻下时，目镜镜片表面映出的周围环境和高光，叠在镜片里的夜视画面上。关掉后镜片里只剩夜视画面，设备上的玻璃部件也不画。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
-        ConfigEntry<float> deviceSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "夜视仪透明度", 0f,
-            new ConfigDescription("夜视仪机身（不含目镜里的画面）有多透明：0 是实心（默认），1 是看不见。",
-                new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
-        ConfigEntry<float> bareGunSeeThrough = SettingsLayout.Bind(Config, "头戴式成像装备", "单筒：裸眼瞄准时分划的透明度", 0.5f,
-            new ConfigDescription("戴单筒夜视仪（PVS-14）、用没戴夜视仪的那只眼瞄准时，那只眼看到的倍镜分划（镜片里的画面）有多透明：0 是实心，1 是看不见，默认 0.5。透过它看到的是后面的画面，在目镜区域里就是夜视画面。枪本身是实心的。",
-                new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 0 }));
         ConfigEntry<KeyboardShortcut> leadKey = SettingsLayout.Bind(Config, "头戴式成像装备", "单筒：切换主视眼", new KeyboardShortcut(KeyCode.Slash),
             new ConfigDescription("戴单筒夜视仪（PVS-14，或 ENVG-B 翻上一个目镜）、用没戴夜视仪的那只眼瞄准时，按这个键在两种画面之间切换。夜视眼为主：镜头移到戴夜视仪的那只眼，夜视眼看到的枪和夜视仪是实心的，裸眼看到的枪和夜视仪以一半的透明度叠上去。裸眼为主：镜头像平时瞄准一样移到瞄准眼，裸眼看到的枪是实心的（没有夜视，盖在夜视仪上面），裸眼看到的夜视仪是实心的，夜视眼看到的枪和夜视仪以一半的透明度叠上去，目镜里的夜视画面是完整的。只在这样瞄准时有效，选择会一直保留到下次切换。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
@@ -225,8 +219,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
             NightVisionEyepieces.EyepieceGlow = glow.Value;
             NightVisionEyepieces.LensReflections = reflections.Value;
             NightVisionEyepieces.EyeShift = eyeShift.Value;
-            TwoEyes.BareLensSeeThrough = bareGunSeeThrough.Value;
-            NightVisionEyepieces.DeviceSeeThrough = deviceSeeThrough.Value;
             NightVisionEyepieces.RaiseMount = raiseMount.Value;
             NightVisionEyepieces.LowerMount = lowerMount.Value;
             NightVisionEyepieces.TiltUp = tiltUp.Value;
@@ -236,8 +228,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         }
 
         eyeShift.SettingChanged += (_, _) => Refresh();
-        bareGunSeeThrough.SettingChanged += (_, _) => Refresh();
-        deviceSeeThrough.SettingChanged += (_, _) => Refresh();
         picture.SettingChanged += (_, _) => Refresh();
         raiseMount.SettingChanged += (_, _) => Refresh();
         lowerMount.SettingChanged += (_, _) => Refresh();

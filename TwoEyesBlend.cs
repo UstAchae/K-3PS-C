@@ -46,9 +46,10 @@ internal static partial class TwoEyes
 
     // ---------------------------------------------------------------- the sight on the bare eye's gun
 
-    // How much of a scope's lens (its magnified picture) is laid over what lies behind it: by the F12 setting, with the
-    // aim, none once handed back.
-    private static float SightLensShare => LensOpacity * _aim * (1f - Handed);
+    // How much of a scope's lens (its magnified picture) is laid over what lies behind it: as its gun is. The goggle's
+    // eye leading, half; the bare eye leading, whole. (Not a setting any more, 1.9.38: the user's, 2026-11-27, "确保是
+    // 这样的，不再允许玩家调整"; the F12 value had been 0.25 in their own settings, three quarters of the lens.)
+    private static float SightLensShare => Mathf.Lerp(BareSeen, 1f, _lead) * _aim * (1f - Handed);
 
     // How much of a holographic or red-dot sight's window is laid in (the two eyes' views of what is seen through it):
     // as much as that gun is there.
@@ -72,9 +73,14 @@ internal static partial class TwoEyes
         // How far the bare eye's view of a monocular is drawn from that eye's own place (1), not from where the goggle
         // eye's is drawn (0).
         internal readonly float BareOut;
+        // How much of the eyepieces' picture is laid over the frame: whole, but half while the bare eye leads (1.9.38,
+        // the user's, 2026-11-27: "如果是裸眼混合，就让裸眼的画面实心，混合过来的夜视画面透明度50%"; it had been whole
+        // whichever eye led).
+        internal readonly float PictureShare;
 
-        internal DeviceBlend(float apart, float mix, float goggleShare, float bareShare, float bareBeforePicture, float bareOut)
+        internal DeviceBlend(float apart, float mix, float goggleShare, float bareShare, float bareBeforePicture, float bareOut, float pictureShare)
         {
+            PictureShare = pictureShare;
             Apart = apart;
             Mix = mix;
             GoggleShare = goggleShare;
@@ -97,6 +103,20 @@ internal static partial class TwoEyes
         float late = Mathf.Clamp01((apart - 0.6f) / 0.4f);
         late = late * late * (3f - 2f * late);
         float before = direct ? late * (1f - Handed) * _lead : 0f;
-        return new DeviceBlend(apart, mix, bareLeads ? BareSeen : 1f, bareLeads ? 1f : BareSeen, before, 1f - _lead * (1f - apart));
+        float picture = Mathf.Lerp(1f, BareSeen, _lead * mix * (1f - Handed));
+        NoteShares(mix, bareLeads, picture);
+        return new DeviceBlend(apart, mix, bareLeads ? BareSeen : 1f, bareLeads ? 1f : BareSeen, before, 1f - _lead * (1f - apart), picture);
+    }
+
+    // Once for each eye's leading, with the aim all the way up and the lead settled: every share as it is handed to the
+    // shaders, so that what the user asked to be made sure of is in the log and not only in the code.
+    private static int _sharesNoted;
+    private static void NoteShares(float mix, bool bareLeads, float picture)
+    {
+        int bit = bareLeads ? 2 : 1;
+        if ((_sharesNoted & bit) != 0 || !BareAims || _aim < 0.999f || Handed > 0f || mix < 0.999f || _lead > 0.001f && _lead < 0.999f)
+            return;
+        _sharesNoted |= bit;
+        NewCameraPlugin.Log?.LogInfo($"Two eyes, {(bareLeads ? "the bare eye leading" : "the goggle's eye leading")}, aimed: the bare eye's gun {GunBareShare:F2}, the goggle eye's gun {GunGoggleShare:F2}, the bare gun's scope lens {SightLensShare:F2}, its sight window {SightWindowShare:F2}; the device as the goggle's eye sees it {(bareLeads ? BareSeen : 1f):F2}, as the bare eye sees it {(bareLeads ? 1f : BareSeen):F2}; the eyepieces' picture {picture:F2} (1 whole).");
     }
 }
