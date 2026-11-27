@@ -115,12 +115,16 @@ internal static partial class NightVisionEyepieces
     // Whose handler this frame's claim is for: the device's own node, or the clip-on's name (ClaimClipOn).
     private static string _fusionKey = "";
     private static bool _clipOnClaimed;
+    private static bool _clipOnAway;   // claimed for a clip-on whose pod is up: nothing of it shown this frame
     private static void ClaimFusion(Camera camera)
     {
         _clipOnClaimed = false;
-        if (_lensNodes.Length == 0 || !LensesOn(camera))
+        _clipOnAway = false;
+        if (_lensNodes.Length == 0)
             return;
         if (ClaimClipOn(camera))
+            return;
+        if (!LensesOn(camera))
             return;
         // (Only a device some mod serves: one with no handler registered is left to its own mod's way of drawing.)
         if (!_device.Fusion || !Interop.EyepieceFusion.Serves(_device.Node))
@@ -188,7 +192,25 @@ internal static partial class NightVisionEyepieces
                 tube = i;
             }
         }
-        if (tube >= _lensRest.Length || PodGone(tube) >= 1f)
+        if (tube >= _lensRest.Length)
+            return false;
+        // Its pod swung up (1.9.54): the frame is still claimed for it, and nothing of it is shown. (Let go of, its
+        // own mod took the frame for unclaimed and drew its picture over the middle of the screen, with no eyepiece
+        // there: the user's, 2026-11-27, a PVS-31A's pods up, "热融合怎么还留在中间…应该跟随目镜成像区域才对".)
+        if (PodGone(tube) >= 1f)
+        {
+            if (!DownOrFlipping)
+                return false;
+            _clipOnAway = true;
+            _fusedTubes = Vector4.zero;
+            _fusionKey = name;
+            Interop.EyepieceFusion.Deployed = _flip;
+            Interop.EyepieceFusion.ClaimedFrame = Time.frameCount;
+            Interop.EyepieceFusion.ClaimedDevice = _device.Node;
+            Interop.EyepieceFusion.ClaimedClipOn = name;
+            return true;
+        }
+        if (!LensesOn(camera))
             return false;
         for (int i = 0; i < 4; i++)
             _fusedTubes[i] = i < _device.Tubes.Length && Mathf.Abs(_device.Tubes[i].Centre.x - across) <= nearest + 0.001f ? 1f : 0f;
