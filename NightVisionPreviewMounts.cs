@@ -48,14 +48,20 @@ internal static partial class NightVisionEyepieces
             if (!NewCameraSwitch.Enabled || playerBody == null || model == null || _previewMountOf.ContainsKey(model))
                 return;
             // Only a model of the player shown apart: not anyone's in a raid (the worn one's is its own).
-            if (playerBody.GetComponentInParent<Player>() != null)
+            if (playerBody.GetComponentInParent<Player>() is Player wearer)
+            {
+                // (Your own headwear made anew, an eyecup fitted or another helmet: the worn pods' nodes looked for again.)
+                if (wearer.IsYourPlayer && __instance.EquipmentSlot == EquipmentSlot.Headwear)
+                    WornPodsStale();
                 return;
+            }
             if (__instance.EquipmentSlot == EquipmentSlot.Headwear)
                 HeadwearTilt.Show(playerBody, model.transform, __instance.ContainedItem.Value);
             Transform? device = DeviceNode(model, out Device? kind);
             if (device == null || kind == null)
                 return;
             ShowGlow(model.transform, device, kind);
+            ShowPods(model.transform, kind, playerBody.Equipment);
             if (!MakePreviewMount(model, device, playerBody))
                 _previewWaiting[model] = (device, playerBody);
         }
@@ -73,6 +79,7 @@ internal static partial class NightVisionEyepieces
             return;
         DropDestroyedRenderers(__instance, model);
         HeadwearTilt.Forget(model.transform);
+        ForgetPods(model.transform);
         ForgetGlow(model.transform);
         _previewWaiting.Remove(model);
         if (_previewMountOf.TryGetValue(model, out MountRig rig))
@@ -162,6 +169,7 @@ internal static partial class NightVisionEyepieces
     // Each frame, the models' mounts set again; all whole again with this mod off.
     internal static void UpdatePreviewMounts()
     {
+        UpdateShownPods();
         UpdateShownGlows();
         ReadPreviewSettingsAgain();
         for (int i = _previewMounts.Count - 1; i >= 0; i--)

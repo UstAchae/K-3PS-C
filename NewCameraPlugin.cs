@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.46";
+    public const string PluginVersion = "1.9.47";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -175,6 +175,16 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         ConfigEntry<bool> reflections = SettingsLayout.Bind(Config, "头戴式成像装备", "镜片反光", false,
             new ConfigDescription("夜视仪翻下时，目镜镜片表面映出的周围环境和高光，叠在镜片里的夜视画面上。关掉后镜片里只剩夜视画面，设备上的玻璃部件也不画。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));
+        ConfigEntry<KeyboardShortcut> podLeft = SettingsLayout.Bind(Config, "头戴式成像装备", "目镜水平翻上：左", new KeyboardShortcut(KeyCode.LeftArrow, KeyCode.LeftAlt),
+            new ConfigDescription("把夜视仪的左目镜向外水平翻上，再按一次翻回来。只对目镜能单独翻动的夜视仪有效（ENVG-B）。翻上还是放下会按夜视仪记住，重进游戏后仍然保持，加载页面、仓库和总览里的角色也照着显示。",
+                null, new ConfigurationManagerAttributes { Order = 0 }));
+        ConfigEntry<KeyboardShortcut> podRight = SettingsLayout.Bind(Config, "头戴式成像装备", "目镜水平翻上：右", new KeyboardShortcut(KeyCode.RightArrow, KeyCode.LeftAlt),
+            new ConfigDescription("把夜视仪的右目镜向外水平翻上，再按一次翻回来。其余同上。",
+                null, new ConfigurationManagerAttributes { Order = 0 }));
+        podLeft.SettingChanged += (_, _) => NightVisionEyepieces.PodLeftKey = podLeft.Value;
+        podRight.SettingChanged += (_, _) => NightVisionEyepieces.PodRightKey = podRight.Value;
+        NightVisionEyepieces.PodLeftKey = podLeft.Value;
+        NightVisionEyepieces.PodRightKey = podRight.Value;
         ConfigEntry<KeyboardShortcut> leadKey = SettingsLayout.Bind(Config, "头戴式成像装备", "单筒：切换主视眼", new KeyboardShortcut(KeyCode.Slash),
             new ConfigDescription("戴单筒夜视仪（PVS-14，或 ENVG-B 翻上一个目镜）、用没戴夜视仪的那只眼瞄准时，按这个键在两种画面之间切换。夜视眼为主：镜头移到戴夜视仪的那只眼，夜视眼看到的枪和夜视仪是实心的，裸眼看到的枪和夜视仪以一半的透明度叠上去。裸眼为主：镜头像平时瞄准一样移到瞄准眼，只显示裸眼看到的画面，夜视眼的东西（目镜里的夜视画面、它看到的枪和夜视仪）一概不叠上来，是纯裸眼瞄准。只在这样瞄准时有效，选择会一直保留到下次切换。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));

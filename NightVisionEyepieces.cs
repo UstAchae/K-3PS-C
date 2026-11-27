@@ -86,6 +86,11 @@ internal static partial class NightVisionEyepieces
         // its turn identity while the eyepiece is down before the eye. Each tube goes with the pod nearest it across.
         internal string[] Pods = Array.Empty<string>();
         internal string[] CupPods = Array.Empty<string>();   // the eyecups' own node on each pod, in the same order
+        // The pods' swing (NightVisionPods.cs): how far up, in degrees (0: this mod does not turn them); each pod's axis,
+        // in its own frame, in the same order; and whether the goggle's own mod turns them until it hands them over.
+        internal float PodSwing;
+        internal Vector3[] PodAxes = { Vector3.up, Vector3.down };
+        internal bool PodsOwnMod;
     }
 
     // Whether a device's removable eyecups are on it (its cup slot holds an active node by their name).
@@ -130,7 +135,7 @@ internal static partial class NightVisionEyepieces
         return new Device
         {
             Node = "nvg_envgb_psq42_LOD0", CupSlot = "mod_eyecup", CupNode = "envgb_eyecup", CupOff = cupOff,
-            Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods, CupPods = EnvgbCupPods,
+            Fusion = true, FieldDegrees = 40f, Pods = EnvgbPods, CupPods = EnvgbCupPods, PodSwing = 90f, PodsOwnMod = true,
             Tubes = new[] { At(-x, centreY, z), At(-x, centreY, z), At(x, centreY, z), At(x, centreY, z) },
             LensRadius = 0.0149f, FloorDepth = floorDepth, OpeningRadius = openingRadius, RimHeight = rimHeight, RimRadius = rimRadius,
             CardSize = new Vector2(card, card),
@@ -515,6 +520,7 @@ internal static partial class NightVisionEyepieces
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
         KeepGlow(device);
         UpdateMountHeight(player);
+        UpdatePods(player, nightItem?.Item?.Id.ToString());
 
         EnsureRendererPatch();
         RestoreMask(cameras);
@@ -565,6 +571,7 @@ internal static partial class NightVisionEyepieces
 
     internal static void Release()
     {
+        ReleaseWornPods(turnDown: false);
         ShowDeviceAgain();
         ClearDirect();
         _direct = false;

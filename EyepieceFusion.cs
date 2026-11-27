@@ -211,3 +211,23 @@ public static class EyepieceFusion
         return true;
     }
 }
+
+// A goggle's eyepieces swung up sideways on their pods, as a state K-3PS-C keeps (1.9.47): which pods are up is kept by
+// the goggle's item, across restarts, laid on every model of the player (the worn one, the loading screen's, the
+// inventory's), and switched by K-3PS-C's own keys. A goggle whose own mod turns its pods keeps doing so until it calls
+// HandOver; from then on it must not turn them or read its own keys for them, and reads where they stand here.
+// The pods are numbered as K-3PS-C has them for the device: 0 the left, 1 the right.
+public static class EyepiecePods
+{
+    public const int Version = 1;
+
+    // The device's own mod gives the turning of its pods to K-3PS-C (by the device's node name, as EyepieceFusion's).
+    public static void HandOver(string deviceNode) => NightVisionEyepieces.PodsHandedOver(deviceNode);
+
+    // Whether K-3PS-C turns this device's pods now.
+    public static bool Turns(string deviceNode) => NightVisionEyepieces.PodsTurned(deviceNode);
+
+    // The worn goggle's pod: where it stands (0 down, 1 up, eased over the swing) and where it is going.
+    public static float Up(int pod) => NightVisionEyepieces.WornPodUp(pod);
+    public static bool Wanted(int pod) => NightVisionEyepieces.WornPodWanted(pod);
+}
