@@ -316,6 +316,7 @@ internal static partial class NightVisionEyepieces
         float eyesOwn = _blend.Apart;
         _goggleEyeRight = _device.Monocular ? a + CameraPosition.Horizontal > 0f : podMono && (lone == CentreLensA) != (a <= b);
         binocular.SetVector(BareOverId, new Vector4(_blend.BareBeforePicture, _goggleEyeRight ? 0f : 1f, _blend.PictureShare, 0f));
+        binocular.SetFloat(FeatherId, HalfFeather);
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;
         Vector3 leftShift = EyeShiftOf(a <= b ? a : b), rightShift = EyeShiftOf(a <= b ? b : a);
@@ -639,6 +640,8 @@ internal static partial class NightVisionEyepieces
     private static TwoEyes.DeviceBlend _blend;
     private static bool _goggleEyeRight;
     private static readonly int BareOverId = Shader.PropertyToID("_BareOver");
+    private static readonly int FeatherId = Shader.PropertyToID("_Feather");
+    private const float HalfFeather = 0.05f;   // of the frame's height (72 pixels of 1440): NvgBinocular.shader
 
     // Where the eyes are while a goggle is worn (the user's, 2026-11-19): behind its eyepieces as they stand down before
     // the eyes, by the mount as it is set, not the set distance from the head's middle (CameraPosition.AimEye, which is

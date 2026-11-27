@@ -104,19 +104,7 @@ internal static partial class TwoEyes
         late = late * late * (3f - 2f * late);
         float before = direct ? late * (1f - Handed) * _lead : 0f;
         float picture = Mathf.Lerp(1f, BareSeen, _lead * mix * (1f - Handed));
-        NoteShares(mix, bareLeads, picture);
         return new DeviceBlend(apart, mix, bareLeads ? BareSeen : 1f, bareLeads ? 1f : BareSeen, before, 1f - _lead * (1f - apart), picture);
     }
 
-    // Once for each eye's leading, with the aim all the way up and the lead settled: every share as it is handed to the
-    // shaders, so that what the user asked to be made sure of is in the log and not only in the code.
-    private static int _sharesNoted;
-    private static void NoteShares(float mix, bool bareLeads, float picture)
-    {
-        int bit = bareLeads ? 2 : 1;
-        if ((_sharesNoted & bit) != 0 || !BareAims || _aim < 0.999f || Handed > 0f || mix < 0.999f || _lead > 0.001f && _lead < 0.999f)
-            return;
-        _sharesNoted |= bit;
-        NewCameraPlugin.Log?.LogInfo($"Two eyes, {(bareLeads ? "the bare eye leading" : "the goggle's eye leading")}, aimed: the bare eye's gun {GunBareShare:F2}, the goggle eye's gun {GunGoggleShare:F2}, the bare gun's scope lens {SightLensShare:F2}, its sight window {SightWindowShare:F2}; the device as the goggle's eye sees it {(bareLeads ? BareSeen : 1f):F2}, as the bare eye sees it {(bareLeads ? 1f : BareSeen):F2}; the eyepieces' picture {picture:F2} (1 whole).");
-    }
 }

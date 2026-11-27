@@ -33,6 +33,7 @@ Shader "Justachae/NVG/Binocular" {
    // 1: nothing of the frame is shown around the eyepieces (sealed thermal goggles down, the frame the main camera's
    // own thermal one: all of it heat, the device drawn into it too; around the lenses is the inside of the cups, dark).
    float _SceneOff;
+   float _Feather;   // of the frame's height: how far in from its rim an eyepiece laid over at half is eased out
    float4 frag (v2f_img i) : SV_Target {
     float4 scene = tex2D(_MainTex, i.uv);
     if (_Mode < 0.5) return scene;
@@ -53,6 +54,26 @@ Shader "Justachae/NVG/Binocular" {
     // device stands before them (below).
     // (_BareOver.z: how much of the eyepieces is laid over the frame, half while the bare eye leads; 0 not given: whole.)
     float share = _BareOver.z > 0 ? _BareOver.z : 1;
+    // Laid over at less than whole (the bare eye leading), the eyepiece's rim is no longer hidden in the device's own
+    // housing: its picture ended at a line against the bare eye's scene (the user's, 2026-11-27, 1.9.38: "这个圆有点太
+    // 分明了吧"). An eyepiece a few centimetres before an eye that looks far off is far out of focus: its edge is eased
+    // out over _Feather of the frame's height inward from the glass's rim, by how much glass lies about the pixel.
+    if (share < 0.999) {
+     float2 r = float2(_Feather * _MainTex_TexelSize.x / _MainTex_TexelSize.y, _Feather);
+     float about = 0;
+     for (int k = 0; k < 12; k++) {
+      float a = k * 0.5235988;
+      float2 at = i.uv + float2(cos(a), sin(a)) * r;
+      about += step(0.02, max(tex2Dlod(_LeftGlass, float4(at, 0, 0)).r, tex2Dlod(_RightGlass, float4(at, 0, 0)).r));
+     }
+     for (int j = 0; j < 6; j++) {
+      float a = j * 1.0471976 + 0.2617994;
+      float2 at = i.uv + float2(cos(a), sin(a)) * r * 0.5;
+      about += step(0.02, max(tex2Dlod(_LeftGlass, float4(at, 0, 0)).r, tex2Dlod(_RightGlass, float4(at, 0, 0)).r));
+     }
+     float soft = smoothstep(0.45, 1.0, about / 18.0);
+     share *= lerp(1, soft, saturate((1 - share) * 2));
+    }
     if (_BareOver.x > 0) {
      float raw = _BareOver.y > 0.5 ? SAMPLE_DEPTH_TEXTURE(_DirectRD, i.uv) : SAMPLE_DEPTH_TEXTURE(_DirectLD, i.uv);
      #if defined(UNITY_REVERSED_Z)
