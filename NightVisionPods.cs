@@ -505,8 +505,36 @@ internal static partial class NightVisionEyepieces
 
     // Each frame: the models' pods laid again when a state has changed, and a new model's a few times more, for its
     // eyecups (2, 10 and 40 frames after it was made).
+    private static bool _podsWereOn = true;
     private static void UpdateShownPods()
     {
+        // This mod switched off: every pod it turns laid down, on every model and on the worn goggle (the game's own
+        // goggle has no such state, and with a pod left up the game's picture and another mod's would be drawn for a
+        // goggle that is not before the eye); as kept again when it is switched back on.
+        bool on = NewCameraSwitch.Enabled;
+        if (on != _podsWereOn)
+        {
+            _podsWereOn = on;
+            _shownPodsVersion = -1;
+            if (!on)
+            {
+                foreach (PodNodes nodes in _shownPods)
+                {
+                    if (nodes.Root == null)
+                        continue;
+                    nodes.Find();
+                    nodes.Turn(0f, 0f);
+                }
+                if (_wornPods != null && _wornPods.Root != null)
+                {
+                    _wornPods.Find();
+                    _wornPods.Turn(0f, 0f);
+                }
+                _podUp[0] = _podUp[1] = 0f;
+            }
+        }
+        if (!on)
+            return;
         bool changed = _shownPodsVersion != _podsVersion;
         _shownPodsVersion = _podsVersion;
         for (int i = _shownPods.Count - 1; i >= 0; i--)

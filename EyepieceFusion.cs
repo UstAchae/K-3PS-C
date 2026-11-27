@@ -145,6 +145,10 @@ public static class EyepieceFusion
 
     public static string? ClaimedClipOn { get; internal set; }
 
+    // The frame is claimed for a clip-on that is not shown: its pod is swung up (1.9.55). Its picture is not asked
+    // for (fuse is not called), so its mod need not make one this frame. Valid on the frame ClaimedFrame names.
+    public static bool ClaimedUnshown { get; internal set; }
+
     public static void RegisterClipOn(string clipOn, float fieldDegrees, Func<RenderTexture, RenderTexture, bool> fuse)
     {
         if (string.IsNullOrEmpty(clipOn) || fuse == null)

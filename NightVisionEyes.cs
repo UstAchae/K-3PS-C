@@ -120,6 +120,7 @@ internal static partial class NightVisionEyepieces
     {
         _clipOnClaimed = false;
         _clipOnAway = false;
+        Interop.EyepieceFusion.ClaimedUnshown = false;
         if (_lensNodes.Length == 0)
             return;
         if (ClaimClipOn(camera))
@@ -202,6 +203,7 @@ internal static partial class NightVisionEyepieces
             if (!DownOrFlipping)
                 return false;
             _clipOnAway = true;
+            Interop.EyepieceFusion.ClaimedUnshown = true;
             _fusedTubes = Vector4.zero;
             _fusionKey = name;
             Interop.EyepieceFusion.Deployed = _flip;
