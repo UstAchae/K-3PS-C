@@ -40,7 +40,8 @@ internal static partial class NightVisionEyepieces
     }
 
     // Whether this mod turns this kind of goggle's pods.
-    private static bool PodsTurned(Device kind) => kind.Pods.Length > 0 && kind.PodSwing > 0f && (!kind.PodsOwnMod || _podsHandedOver.Contains(kind.Node));
+    // (Not with this mod switched off: the goggle's own mod, which reads this every frame, then turns them again itself.)
+    private static bool PodsTurned(Device kind) => NewCameraSwitch.Enabled && kind.Pods.Length > 0 && kind.PodSwing > 0f && (!kind.PodsOwnMod || _podsHandedOver.Contains(kind.Node));
     internal static bool PodsTurned(string deviceNode)
     {
         foreach (Device kind in Devices)
