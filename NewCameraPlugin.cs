@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.33";
+    public const string PluginVersion = "1.9.34";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -48,6 +48,9 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
     private void Awake()
     {
         Log = Logger;
+        // TEMPORARY (BrnvgGainProbe.cs): out again once BRNVG's gain is carried into the eyepieces.
+        if (HarmonyLib.AccessTools.TypeByName("BorkelRNVG.Controllers.RealisticNightVisionRenderer") is System.Type brnvgRenderer)
+            BrnvgGainProbe.Install(brnvgRenderer);
         // No section: the F12 window shows the master switch right under the plugin's name, without a heading.
         ConfigEntry<bool> enabled = SettingsLayout.Bind(Config, "", "总开关", true,
             new ConfigDescription("关掉后整个 mod 不起作用，一切按游戏原样。", null, new ConfigurationManagerAttributes { Order = 8 }));
