@@ -73,14 +73,17 @@ internal static partial class NightVisionEyepieces
     private static Camera? _irCamera;
     private static readonly Dictionary<LaserBeam, IrLaser> _irLaserRecords = new Dictionary<LaserBeam, IrLaser>();
     private static readonly Dictionary<Light, Texture?> _irCookies = new Dictionary<Light, Texture?>();
-    // And each one's render mode, with its cookie (1.9.42). A blank cookie keeps an IR light out of what is lit a pixel
-    // at a time (the frame's surfaces); what is lit a vertex at a time or by the probes, the dust a shot throws up and
-    // other particles, has no cookie and took the light's colour all the same: red dust to the naked eye with the
-    // goggle down, none in a sight's picture, where the light is off (the user's, 2026-11-27: "夜视仪翻下时，裸眼那只
-    // 眼能看到红色的灰，但光学瞄具里没有红色的灰"). Forced to be a pixel light for that frame, it is in neither the
-    // vertex lights nor the probes.
-    private static readonly Dictionary<Light, LightRenderMode> _irModes = new Dictionary<Light, LightRenderMode>();
-    private static bool _irModeNoted;
+    // And each one's colour, with its cookie (1.9.43). A blank cookie keeps an IR light out of what is lit a pixel at a
+    // time through the cookie (the frame's surfaces); the dust a shot throws up and other particles are lit without it,
+    // and took the light's colour, which in the game is pure red (1, 0, 0): red dust to the naked eye with the goggle
+    // down, none in a sight's picture, where the light is off (the user's, 2026-11-27). Forcing it to be a pixel light
+    // (1.9.42) changed nothing ("试过了，还是红的"). So for the naked eye's frame its colour is taken down to next to
+    // nothing: not to black, and its intensity left, so that it still casts the shadows the IR layer reads; the layer
+    // is lit by the colour kept here.
+    private static readonly Dictionary<Light, Color> _irColors = new Dictionary<Light, Color>();
+    private const float IrColorLeft = 1f / 4096f;
+    private static bool _irColorNoted;
+    private static Color IrColor(Light light) => _irColors.TryGetValue(light, out Color colour) ? colour : light.color;
     private static Texture? _irSoftCookie, _irFalloff;
     private static Texture2D? _irBlank;
     private static int _nakedFrame = -1;
@@ -233,16 +236,14 @@ internal static partial class NightVisionEyepieces
                 AttachIrShadowed(light);
             }
             light.cookie = IrBlank();
-            if (!_irModes.ContainsKey(light))
-                _irModes[light] = light.renderMode;
-            if (light.renderMode != LightRenderMode.ForcePixel)
+            if (!_irColors.ContainsKey(light))
+                _irColors[light] = light.color;
+            Color own = _irColors[light];
+            light.color = new Color(own.r * IrColorLeft, own.g * IrColorLeft, own.b * IrColorLeft, own.a);
+            if (!_irColorNoted)
             {
-                light.renderMode = LightRenderMode.ForcePixel;
-                if (!_irModeNoted)
-                {
-                    _irModeNoted = true;
-                    NewCameraPlugin.Log?.LogInfo($"NVG IR: an IR light ({light.name}, colour {light.color}, {light.type}) made a pixel light for the naked eye's frame, so that it lights no particles there; it was {_irModes[light]}.");
-                }
+                _irColorNoted = true;
+                NewCameraPlugin.Log?.LogInfo($"NVG IR: an IR light ({light.name}, colour {own}) lights the naked eye's frame at {IrColorLeft:F5} of its colour; the IR layer by the whole.");
             }
         }
         if (__instance.FlareLight != null)
@@ -567,7 +568,7 @@ internal static partial class NightVisionEyepieces
         Transform t = light.transform;
         var block = new MaterialPropertyBlock();
         block.SetVector(IrLightPosId, new Vector4(t.position.x, t.position.y, t.position.z, 1f / (light.range * light.range)));
-        block.SetVector(IrLightColorId, LinearLightColor(light.color, l.Intensity));
+        block.SetVector(IrLightColorId, LinearLightColor(IrColor(light), l.Intensity));
         block.SetMatrix(IrWorldToLightId, Matrix4x4.TRS(t.position, t.rotation, Vector3.one).inverse);
         block.SetVector(IrSpotId, new Vector4(1f / Mathf.Tan(light.spotAngle * 0.5f * Mathf.Deg2Rad), 1f - light.shadowStrength, 0f, 0f));
         Texture? cookie = IrCookie(light);
@@ -596,12 +597,12 @@ internal static partial class NightVisionEyepieces
                 c.Key.cookie = c.Value;
         }
         _irCookies.Clear();
-        foreach (KeyValuePair<Light, LightRenderMode> m in _irModes)
+        foreach (KeyValuePair<Light, Color> c in _irColors)
         {
-            if (m.Key != null)
-                m.Key.renderMode = m.Value;
+            if (c.Key != null)
+                c.Key.color = c.Value;
         }
-        _irModes.Clear();
+        _irColors.Clear();
         foreach (IrLight l in _irLaserHidden)
         {
             if (l.Light != null)
