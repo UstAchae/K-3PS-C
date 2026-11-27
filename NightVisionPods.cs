@@ -125,16 +125,24 @@ internal static partial class NightVisionEyepieces
         internal string? Item;
         internal readonly Transform?[] Pods = new Transform?[2], Cups = new Transform?[2];
 
-        internal void Find()
+        // Frames after which the nodes are looked for once more (a model's eyecups are a model of their own, hung on it
+        // a little after it is made): a few times after it is made, then no more.
+        internal int LookAgain, MadeFrame;
+
+        // shownOnly: only nodes of a model that is shown (the worn goggle's slot can still hold a model the game has
+        // laid aside); a model shown apart is taken whole, shown yet or not.
+        internal void Find(bool shownOnly)
         {
             Pods[0] = Pods[1] = Cups[0] = Cups[1] = null;
             foreach (Transform node in Root.GetComponentsInChildren<Transform>(true))
             {
+                if (shownOnly && !node.gameObject.activeInHierarchy)
+                    continue;
                 int pod = System.Array.IndexOf(Kind.Pods, node.name);
-                if (pod >= 0 && pod < 2 && node.gameObject.activeInHierarchy)
+                if (pod >= 0 && pod < 2)
                     Pods[pod] = node;
                 int cup = System.Array.IndexOf(Kind.CupPods, node.name);
-                if (cup >= 0 && cup < 2 && node.gameObject.activeInHierarchy)
+                if (cup >= 0 && cup < 2)
                     Cups[cup] = node;
             }
         }
@@ -180,7 +188,7 @@ internal static partial class NightVisionEyepieces
         if (_wornPods == null || _wornPods.Root != root || _wornPods.Item != item || _wornPods.Kind != _device)
         {
             _wornPods = new PodNodes { Kind = _device, Root = root, Item = item };
-            _wornPods.Find();
+            _wornPods.Find(shownOnly: true);
             int bits = PodState(item);
             _podUp[0] = (bits & 1) != 0 ? 1f : 0f;
             _podUp[1] = (bits & 2) != 0 ? 1f : 0f;
@@ -191,7 +199,7 @@ internal static partial class NightVisionEyepieces
         else if (_wornPodsStale || Lost(_wornPods.Pods[0]) || Lost(_wornPods.Pods[1]) || Lost(_wornPods.Cups[0]) || Lost(_wornPods.Cups[1]))
         {
             _wornPodsStale = false;
-            _wornPods.Find();
+            _wornPods.Find(shownOnly: true);
         }
         int state = PodState(item);
         int was = state;
@@ -221,27 +229,96 @@ internal static partial class NightVisionEyepieces
         _podUp[0] = _podUp[1] = 0f;
     }
 
-    // ---------------------------------------------------------------- the player's other models
+    // ---------------------------------------------------------------- every other model of a goggle
 
+    // Every model of a goggle the game makes is told its item (EFT.Visual.NightVisionDevice.Init: the worn one, a body
+    // shown apart on the loading screen or in the inventory, the one turning in an item's own window) and told when it
+    // is let go (Deinit). By those two, 1.9.49. (1.9.47 went by the body's slot models: an item's own window has no
+    // body, and a body not shown yet had its nodes passed over: the user's, 2026-11-27, one pod up on the head and
+    // "总览的 ENVG-B 的预览图还是没变".)
     private static readonly List<PodNodes> _shownPods = new List<PodNodes>();
     private static int _shownPodsVersion = -1;
+    private static int _shownPodsNoted;   // (the first few models noted, to show where they come from)
 
-    // A model of the player shown apart, its goggle found (SlotModelPostfix).
-    private static void ShowPods(Transform model, Device kind, InventoryEquipment? equipment)
+    private static void InstallPods(HarmonyLib.Harmony harmony)
     {
-        if (!PodsTurned(kind))
+        System.Reflection.MethodInfo? init = HarmonyLib.AccessTools.Method(typeof(EFT.Visual.NightVisionDevice), nameof(EFT.Visual.NightVisionDevice.Init));
+        System.Reflection.MethodInfo? deinit = HarmonyLib.AccessTools.Method(typeof(EFT.Visual.NightVisionDevice), nameof(EFT.Visual.NightVisionDevice.Deinit));
+        if (init == null || deinit == null)
+        {
+            NewCameraPlugin.Log?.LogWarning("NVG pods: the goggle model's Init or Deinit not found; only the worn goggle's pods are turned.");
             return;
-        string? item = GoggleItemId(equipment);
-        var nodes = new PodNodes { Kind = kind, Root = model, Item = item };
-        nodes.Find();
-        if (nodes.Pods[0] == null && nodes.Pods[1] == null)
-            return;
-        int bits = PodState(item);
-        nodes.Turn((bits & 1) != 0 ? 1f : 0f, (bits & 2) != 0 ? 1f : 0f);
-        _shownPods.Add(nodes);
+        }
+        harmony.Patch(init, postfix: new HarmonyLib.HarmonyMethod(HarmonyLib.AccessTools.Method(typeof(NightVisionEyepieces), nameof(GoggleModelPostfix))));
+        harmony.Patch(deinit, prefix: new HarmonyLib.HarmonyMethod(HarmonyLib.AccessTools.Method(typeof(NightVisionEyepieces), nameof(GoggleModelGoingPrefix))));
     }
 
-    // A slot's model going: its pods down again, whoever's it was.
+    private static void GoggleModelPostfix(EFT.Visual.NightVisionDevice __instance, Item item)
+    {
+        try
+        {
+            if (__instance == null || item == null)
+                return;
+            Transform model = __instance.transform;
+            Device? kind = null;
+            foreach (Transform node in model.GetComponentsInChildren<Transform>(true))
+            {
+                foreach (Device known in Devices)
+                {
+                    if (known.Pods.Length > 0 && known.PodSwing > 0f && node.name == known.Node)
+                        kind = known;
+                }
+                if (kind != null)
+                    break;
+            }
+            if (kind == null)
+                return;
+            for (int i = _shownPods.Count - 1; i >= 0; i--)
+            {
+                if (_shownPods[i].Root == null || _shownPods[i].Root == model)
+                    _shownPods.RemoveAt(i);
+            }
+            var nodes = new PodNodes { Kind = kind, Root = model, Item = item.Id.ToString(), LookAgain = 3, MadeFrame = Time.frameCount };
+            _shownPods.Add(nodes);
+            LayShown(nodes);
+            if (_shownPodsNoted < 6)
+            {
+                _shownPodsNoted++;
+                NewCameraPlugin.Log?.LogInfo($"NVG pods: a model of {kind.Node} ({nodes.Item}) made under {(model.root != null ? model.root.name : "nothing")}, its pods laid as kept (turned here: {PodsTurned(kind)}; state {PodState(nodes.Item)}; device nodes {(nodes.Pods[0] != null ? 1 : 0) + (nodes.Pods[1] != null ? 1 : 0)}, eyecup nodes {(nodes.Cups[0] != null ? 1 : 0) + (nodes.Cups[1] != null ? 1 : 0)}).");
+            }
+        }
+        catch (System.Exception e)
+        {
+            NewCameraPlugin.Log?.LogWarning("NVG pods: a goggle's model not laid: " + e.Message);
+        }
+    }
+
+    // A model's pods as kept, at once. Not the worn one's while it is worn: its pods are eased (UpdatePods).
+    private static void LayShown(PodNodes nodes)
+    {
+        if (!PodsTurned(nodes.Kind) || _wornPods != null && _wornPods.Root != null && nodes.Root.IsChildOf(_wornPods.Root))
+            return;
+        nodes.Find(shownOnly: false);
+        int bits = PodState(nodes.Item);
+        nodes.Turn((bits & 1) != 0 ? 1f : 0f, (bits & 2) != 0 ? 1f : 0f);
+    }
+
+    // A model let go (to the game's pool): its pods down again, whoever wears it next.
+    private static void GoggleModelGoingPrefix(EFT.Visual.NightVisionDevice __instance)
+    {
+        try
+        {
+            if (__instance == null)
+                return;
+            ForgetPods(__instance.transform);
+        }
+        catch (System.Exception e)
+        {
+            NewCameraPlugin.Log?.LogWarning("NVG pods: a goggle's model not put back: " + e.Message);
+        }
+    }
+
+    // A model going (its own, or the slot's it is part of): its pods down again.
     private static void ForgetPods(Transform model)
     {
         for (int i = _shownPods.Count - 1; i >= 0; i--)
@@ -250,19 +327,22 @@ internal static partial class NightVisionEyepieces
             if (nodes.Root == null || nodes.Root == model || nodes.Root.IsChildOf(model))
             {
                 if (nodes.Root != null)
+                {
+                    nodes.Find(shownOnly: false);
                     nodes.Turn(0f, 0f);
+                }
                 _shownPods.RemoveAt(i);
             }
         }
-        if (_wornPods != null && _wornPods.Root != null && _wornPods.Root.IsChildOf(model))
+        if (_wornPods != null && _wornPods.Root != null && (_wornPods.Root.IsChildOf(model) || model.IsChildOf(_wornPods.Root)))
             ReleaseWornPods(turnDown: true);
     }
 
-    // Each frame: the shown models' pods laid again when a state has changed.
+    // Each frame: the models' pods laid again when a state has changed, and a new model's a few times more, for its
+    // eyecups (2, 10 and 40 frames after it was made).
     private static void UpdateShownPods()
     {
-        if (_shownPodsVersion == _podsVersion)
-            return;
+        bool changed = _shownPodsVersion != _podsVersion;
         _shownPodsVersion = _podsVersion;
         for (int i = _shownPods.Count - 1; i >= 0; i--)
         {
@@ -272,8 +352,19 @@ internal static partial class NightVisionEyepieces
                 _shownPods.RemoveAt(i);
                 continue;
             }
-            int bits = PodState(nodes.Item);
-            nodes.Turn((bits & 1) != 0 ? 1f : 0f, (bits & 2) != 0 ? 1f : 0f);
+            bool again = false;
+            if (nodes.LookAgain > 0)
+            {
+                int since = Time.frameCount - nodes.MadeFrame;
+                int due = nodes.LookAgain == 3 ? 2 : nodes.LookAgain == 2 ? 10 : 40;
+                if (since >= due)
+                {
+                    nodes.LookAgain--;
+                    again = true;
+                }
+            }
+            if (changed || again)
+                LayShown(nodes);
         }
     }
 

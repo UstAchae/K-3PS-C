@@ -61,7 +61,6 @@ internal static partial class NightVisionEyepieces
             if (device == null || kind == null)
                 return;
             ShowGlow(model.transform, device, kind);
-            ShowPods(model.transform, kind, playerBody.Equipment);
             if (!MakePreviewMount(model, device, playerBody))
                 _previewWaiting[model] = (device, playerBody);
         }

@@ -428,6 +428,7 @@ internal static partial class NightVisionEyepieces
         InstallIr(harmony);
         InstallThermal(harmony);
         InstallPreviewMounts(harmony);
+        InstallPods(harmony);
         TrackAmbientLights();
 
         _installed = true;
