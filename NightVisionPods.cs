@@ -166,6 +166,51 @@ internal static partial class NightVisionEyepieces
         });
     }
 
+    // A model with no hinges of its own: a node made at each pod's hinge and its parts hung on it, once for a model
+    // (it keeps them through the game's pool).
+    private static void EnsurePivots(Transform within, Device kind)
+    {
+        if (kind.Pivots.Length == 0)
+            return;
+        Transform[] all = within.GetComponentsInChildren<Transform>(true);
+        foreach ((string name, Vector3 at, string[] parts) in kind.Pivots)
+        {
+            Transform? pivot = null, parent = null;
+            foreach (Transform node in all)
+            {
+                if (node.name == name)
+                    pivot = node;
+                else if (parent == null && System.Array.IndexOf(parts, node.name) >= 0)
+                    parent = node.parent;
+            }
+            if (pivot != null || parent == null)
+                continue;
+            var made = new GameObject(name) { layer = parent.gameObject.layer };
+            pivot = made.transform;
+            pivot.SetParent(parent, false);
+            pivot.SetLocalPositionAndRotation(at, Quaternion.identity);
+            foreach (Transform node in all)
+            {
+                if (System.Array.IndexOf(parts, node.name) >= 0 && node.parent == parent)
+                    node.SetParent(pivot, true);
+            }
+        }
+    }
+
+    // The node a device's frame is taken from: its own, or the one named in its place (its hinges made first).
+    private static Transform FrameOf(Transform node, Device kind, Transform within)
+    {
+        EnsurePivots(within, kind);
+        if (kind.Frame == null)
+            return node;
+        foreach (Transform other in within.GetComponentsInChildren<Transform>(true))
+        {
+            if (other.name == kind.Frame)
+                return other;
+        }
+        return node;
+    }
+
     // A pod's turn, share 0 down to 1 up.
     private static Quaternion PodTurn(Device kind, int pod, float share)
     {
@@ -392,6 +437,7 @@ internal static partial class NightVisionEyepieces
             }
             if (kind == null)
                 return;
+            EnsurePivots(model, kind);
             for (int i = _shownPods.Count - 1; i >= 0; i--)
             {
                 if (_shownPods[i].Root == null || _shownPods[i].Root == model)

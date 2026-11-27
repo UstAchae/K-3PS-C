@@ -214,7 +214,7 @@ internal static partial class NightVisionEyepieces
                     if (node.name != known.Node)
                         continue;
                     kind = known;
-                    return node;
+                    return FrameOf(node, known, device.transform);
                 }
             }
         }

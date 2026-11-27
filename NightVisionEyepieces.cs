@@ -91,6 +91,13 @@ internal static partial class NightVisionEyepieces
         internal float PodSwing;
         internal Vector3[] PodAxes = { Vector3.up, Vector3.down };
         internal bool PodsOwnMod;
+        // A model whose pods are plain meshes with no hinge of their own (the PVS-31A's): a node is made for each pod at
+        // its hinge (NightVisionPods.EnsurePivots: name, the hinge's place in the frame of the parts' parent, the parts
+        // by name), the parts hung on it, and it is what turns (its name among Pods).
+        internal (string name, Vector3 at, string[] parts)[] Pivots = Array.Empty<(string, Vector3, string[])>();
+        // Where Node is itself one of those parts, the node the device's frame is taken from in its place: one that
+        // stands still, in the same pose (the model's parts all share one).
+        internal string? Frame;
     }
 
     // Whether a device's removable eyecups are on it (its cup slot holds an active node by their name).
@@ -237,6 +244,18 @@ internal static partial class NightVisionEyepieces
         {
             // (Its tubes' real field, 40 degrees, as the PVS-14's below.)
             Node = "nvg_l3_pvs31a_device_01_LOD0", FieldDegrees = 40f,
+            // Its pods swing up sideways (1.9.53, the user's, 2026-11-27: "能不能把 PVS-31A 也改成这种可以水平翻上的"):
+            // each about the barrel at its end of the bridge, fore and aft through (0.0343, -0.0301) from the model's
+            // origin, right above its tube (a circle fitted to the bridge's arm end: 6.5 mm across the barrel, the
+            // tube 42 mm under it), outward and up by a quarter turn, as the real one's stow. The model has no hinge
+            // nodes: one is made for each pod. Node is the right pod's own mesh, so the frame is the bridge's.
+            Frame = "nvg_l3_pvs31a_mount_LOD0", PodSwing = 90f, PodAxes = new[] { Vector3.back, Vector3.forward },
+            Pods = new[] { "Justachae pod L", "Justachae pod R" },
+            Pivots = new[]
+            {
+                ("Justachae pod L", new Vector3(-0.0343f, -0.0301f, 0f), new[] { "nvg_l3_pvs31a_device_02_LOD0", "nvg_l3_pvs31a_device_02_LOD1" }),
+                ("Justachae pod R", new Vector3(0.0343f, -0.0301f, 0f), new[] { "nvg_l3_pvs31a_device_01_LOD0", "nvg_l3_pvs31a_device_01_LOD1" }),
+            },
             Tubes = new[] { At(-0.03481f, 0.06356f, -0.07219f), At(-0.03481f, 0.06356f, -0.07219f), At(0.03480f, 0.06356f, -0.07223f), At(0.03480f, 0.06356f, -0.07223f) },
             LensRadius = 0.01336f, FloorDepth = 0.00687f, OpeningRadius = 0.01336f, RimHeight = 0.00109f, RimRadius = 0.01366f,
             CardSize = new Vector2(0.016f, 0.016f),
@@ -687,7 +706,7 @@ internal static partial class NightVisionEyepieces
                         if (known.CupNode.Length > 0 && HasCups(node, known) == known.CupOff)
                             continue;
                         _device = known;
-                        return node;
+                        return FrameOf(node, known, device.transform);
                     }
                 }
             }
@@ -750,7 +769,8 @@ internal static partial class NightVisionEyepieces
         if (_device.Pods.Length == 0)
             return;
         var pods = new System.Collections.Generic.List<Transform>();
-        foreach (Transform node in body.GetComponentsInChildren<Transform>(true))
+        // (Under the whole device, not the body alone: the PVS-31A's hinges are made beside its bridge, not under it.)
+        foreach (Transform node in (_deviceRoot != null ? _deviceRoot : body).GetComponentsInChildren<Transform>(true))
         {
             if (Array.IndexOf(_device.Pods, node.name) >= 0)
                 pods.Add(node);
@@ -770,7 +790,8 @@ internal static partial class NightVisionEyepieces
             float best = float.MaxValue;
             foreach (Transform pod in pods)
             {
-                Matrix4x4 down = Chain(body, pod.parent) * Matrix4x4.TRS(pod.localPosition, Quaternion.identity, pod.localScale);
+                // (From the body to the pod as it stands down, whatever each hangs from.)
+                Matrix4x4 down = body.worldToLocalMatrix * pod.parent.localToWorldMatrix * Matrix4x4.TRS(pod.localPosition, Quaternion.identity, pod.localScale);
                 float across = Mathf.Abs(down.GetColumn(3).x - lens.GetColumn(3).x);
                 if (across < best)
                 {
