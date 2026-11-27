@@ -55,7 +55,63 @@ internal static partial class NightVisionEyepieces
     private static int PodState(string? id)
     {
         ReadPodStates();
-        return id != null && _podStates!.TryGetValue(id, out int bits) ? bits : 0;
+        if (id == null)
+            return 0;
+        if (_podStates!.TryGetValue(id, out int bits))
+            return bits;
+        return _podCopies.TryGetValue(id, out string? of) && _podStates.TryGetValue(of, out bits) ? bits : 0;
+    }
+
+    // The game draws an item's icon, and dresses the body of the loading screen and of the overview, from a COPY of the
+    // item, made for the drawing with ids of its own (ItemExtensions.CloneVisibleItem): by its id such a copy's goggle
+    // had no state, and its pods were down (the user's, 2026-11-27, pods up on the head: "贴图还是不对…加载页面还是不
+    // 对"; the log of that session: the copies' models laid with state 0). So each copy's goggle is told which goggle
+    // it is a copy of, as the copy is made: by the item's kind, the first copy of a kind for the first of that kind.
+    private static readonly Dictionary<string, string> _podCopies = new Dictionary<string, string>();
+    private static readonly List<Item> _copyFrom = new List<Item>();
+    private static bool _copyNoted;
+
+    private static void CloneVisiblePostfix(object item, object __result)
+    {
+        try
+        {
+            if (_podStates == null || _podStates.Count == 0 || item is not Item from || __result is not Item copy || ReferenceEquals(from, copy))
+                return;
+            _copyFrom.Clear();
+            foreach (Item part in from.GetAllItems())
+            {
+                string id = part.Id.ToString();
+                if (_podStates.ContainsKey(id) || _podCopies.ContainsKey(id))
+                    _copyFrom.Add(part);
+            }
+            if (_copyFrom.Count == 0)
+                return;
+            foreach (Item part in copy.GetAllItems())
+            {
+                for (int i = 0; i < _copyFrom.Count; i++)
+                {
+                    if (_copyFrom[i].TemplateId != part.TemplateId)
+                        continue;
+                    string of = _copyFrom[i].Id.ToString();
+                    if (_podCopies.TryGetValue(of, out string? first))
+                        of = first;
+                    if (_podCopies.Count > 4096)
+                        _podCopies.Clear();
+                    _podCopies[part.Id.ToString()] = of;
+                    _copyFrom.RemoveAt(i);
+                    if (!_copyNoted)
+                    {
+                        _copyNoted = true;
+                        NewCameraPlugin.Log?.LogInfo($"NVG pods: a copy of a goggle ({part.Id}) takes the pods' state of the one it is a copy of ({of}: {PodState(of)}).");
+                    }
+                    break;
+                }
+            }
+            _copyFrom.Clear();
+        }
+        catch (System.Exception)
+        {
+        }
     }
 
     private static void ReadPodStates()
@@ -278,7 +334,8 @@ internal static partial class NightVisionEyepieces
             foreach (Item part in item.GetAllItems())
             {
                 if (_podStates.TryGetValue(part.Id.ToString(), out int bits) && bits != 0)
-                    __result ^= unchecked((bits + 1) * (int)0x9E3779B1);
+                    // (Another number than 1.9.50's: its pictures were drawn from copies with their pods down, and are kept.)
+                    __result ^= unchecked((bits + 1) * (int)0x85EBCA6B);
             }
         }
         catch (System.Exception)
@@ -294,6 +351,26 @@ internal static partial class NightVisionEyepieces
             harmony.Patch(hash, postfix: new HarmonyLib.HarmonyMethod(HarmonyLib.AccessTools.Method(typeof(NightVisionEyepieces), nameof(IconHashPostfix))));
         else
             NewCameraPlugin.Log?.LogWarning("NVG pods: the item icons' hash not found; an item's picture does not show its pods' state.");
+        // (A generic method: patched as made for an item and for a body's whole gear, the two it is called for.)
+        System.Reflection.MethodInfo? clone = HarmonyLib.AccessTools.Method(typeof(EFT.InventoryLogic.ItemExtensions), "CloneVisibleItem");
+        System.Reflection.MethodInfo? copied = HarmonyLib.AccessTools.Method(typeof(NightVisionEyepieces), nameof(CloneVisiblePostfix));
+        int patched = 0;
+        if (clone != null && clone.IsGenericMethodDefinition && copied != null)
+        {
+            foreach (System.Type of in new[] { typeof(Item), typeof(InventoryEquipment) })
+            {
+                try
+                {
+                    harmony.Patch(clone.MakeGenericMethod(of), postfix: new HarmonyLib.HarmonyMethod(copied));
+                    patched++;
+                }
+                catch (System.Exception e)
+                {
+                    NewCameraPlugin.Log?.LogWarning($"NVG pods: copies of {of.Name} not followed: {e.Message}");
+                }
+            }
+        }
+        NewCameraPlugin.Log?.LogInfo($"NVG pods: copies of items followed for their goggles' state ({patched} of 2 ways).");
         System.Reflection.MethodInfo? init = HarmonyLib.AccessTools.Method(typeof(EFT.Visual.NightVisionDevice), nameof(EFT.Visual.NightVisionDevice.Init));
         System.Reflection.MethodInfo? deinit = HarmonyLib.AccessTools.Method(typeof(EFT.Visual.NightVisionDevice), nameof(EFT.Visual.NightVisionDevice.Deinit));
         if (init == null || deinit == null)
