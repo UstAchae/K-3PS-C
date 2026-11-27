@@ -337,10 +337,20 @@ internal static class AimArms
                 Transform? root = bones.Weapon_Root_Anim;
                 SteadyHead(player, cameraPosition, cameraRotation, out Vector3 steadyPosition, out Quaternion steadyRotation);
                 // The stock at the chest: on the view itself, balanced already (the head is not held for it).
+                // (But not on the free look, 1.9.37: the head turned by the middle mouse button took the gun round with
+                // it, the view being what the gun is laid along; the user's, 2026-11-27: "抵肩瞄准的时候用鼠标中键扭头，
+                // 枪也跟着动了". The view as it would be without that turn: the turn taken off again about the neck.)
                 if (gunItself != null)
                 {
                     steadyPosition = cameraPosition;
                     steadyRotation = cameraRotation;
+                    Quaternion free = FreeLookTurn(player);
+                    if (_hasObserved && !Settled(free))
+                    {
+                        Quaternion back = Quaternion.Inverse(free);
+                        steadyRotation = back * cameraRotation;
+                        steadyPosition = _neckPosition + back * (cameraPosition - _neckPosition);
+                    }
                 }
                 Quaternion bodyRotation = _bodyLook * Quaternion.Inverse(_smoothLook) * steadyRotation;
                 Vector3 bodyPosition = CameraPosition.Resolve(steadyPosition - CameraPosition.Resolve(Vector3.zero, steadyRotation), bodyRotation);
