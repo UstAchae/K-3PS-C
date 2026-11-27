@@ -1015,7 +1015,6 @@ internal static partial class NightVisionEyepieces
     // with none it would never adjust its gain); and back as it was.
     private static void OpenLens(Behaviour renderer, bool open)
     {
-        BrnvgGainProbe.OpenNow = open;   // TEMPORARY (BrnvgGainProbe.cs)
         if (_openTexture == null)
         {
             // BRNVG fits its lens texture to the frame's height at the texture's own aspect: a wide one reaches past both sides.
