@@ -145,14 +145,6 @@ public static class EyepieceFusion
 
     public static string? ClaimedClipOn { get; internal set; }
 
-    // The tubes' own gain this frame (1.9.30): a texture of one pixel, its red 1 at full gain and less as the tubes
-    // turn themselves down in bright light (K-3PS-C's automatic gain, for the game's picture). White when there is
-    // none (BRNVG's picture, a fusion device, the switch off). The picture handed to a clip-on's fuse() has this gain
-    // on it already; a clip-on's own picture, which in truth goes through the same tube, is to be multiplied by it
-    // (sample it at 0.5, 0.5). Valid while fuse() runs.
-    public static Texture TubeGain => _tubeGain != null ? _tubeGain : Texture2D.whiteTexture;
-    internal static Texture? _tubeGain;
-
     public static void RegisterClipOn(string clipOn, float fieldDegrees, Func<RenderTexture, RenderTexture, bool> fuse)
     {
         if (string.IsNullOrEmpty(clipOn) || fuse == null)

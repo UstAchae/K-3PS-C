@@ -16,7 +16,7 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
 {
     public const string PluginGuid = "justachae.thirdpersoncamera";
     public const string PluginName = "Justachae's Third-Person Skeleton and Camera";
-    public const string PluginVersion = "1.9.32";
+    public const string PluginVersion = "1.9.33";
 
     internal static BepInEx.Logging.ManualLogSource? Log;
     private const string SkeletonThird = "第三人称骨架", SkeletonFirst = "第一人称骨架";
@@ -204,11 +204,6 @@ public sealed class NewCameraPlugin : BaseUnityPlugin
         gameLensCompress.SettingChanged += (_, _) => NightVisionEyepieces.GameLensCompress = gameLensCompress.Value;
         NightVisionEyepieces.GameLensGain = gameLensGain.Value;
         NightVisionEyepieces.GameLensCompress = gameLensCompress.Value;
-        ConfigEntry<bool> autoGain = SettingsLayout.Bind(Config, "头戴式成像装备", "原版夜视自动增益", true,
-            new ConfigDescription("目镜里用游戏原版夜视滤镜成像时，画面太亮（对着强光、在亮处）就自动把目镜里的画面整体压暗，光线变暗后再慢慢恢复，像真实夜视管那样，不再晃眼。只压暗，不提亮：暗处的画面和关掉时一样。GPNVG-18、PVS-14、PVS-31A 等新式夜视仪压暗得快（自动门控），PNV-10T 和 N-15 压暗得慢，PNV-57E 没有。只作用于目镜里原版夜视滤镜的画面；ENVG-B 和 F-PANO 也一样，它们自己的增益按键照常叠加。Borkel's Realistic NVGs 的画面用它自己的自动增益。",
-                null, new ConfigurationManagerAttributes { Order = 2 }));
-        autoGain.SettingChanged += (_, _) => NightVisionEyepieces.AutoGainOn = autoGain.Value;
-        NightVisionEyepieces.AutoGainOn = autoGain.Value;
         ConfigEntry<bool> thermalThroughMain = SettingsLayout.Bind(Config, "头戴式成像装备", "热成像护目镜优化", true,
             new ConfigDescription("T-7 热成像护目镜完全翻下并开机后，热成像画面由游戏主镜头直接画，和原版走同一条通道（经过 DLSS 等放大），目镜取这张画面显示：画面更清晰，帧数更高。关掉后改回旧做法：由本模组另开一台相机画热成像，不经过放大，多画一遍场景，帧数更低。一般保持打开。",
                 null, new ConfigurationManagerAttributes { Order = 0 }));

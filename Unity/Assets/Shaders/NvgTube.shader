@@ -15,17 +15,13 @@ Shader "Justachae/NVG/Tube" {
    sampler2D _MainTex;
    float _TubeGain;      // the gain
    float _TubeCompress;  // 0 straight, 1 the tube's saturation
-   // The tube's own turning down of its gain in bright light (passes 11 and 12; NightVisionAutoGain.cs): a texture
-   // of one pixel, 1 full gain; used by _AutoGainUse (0: not).
-   sampler2D _AutoGain;
-   float _AutoGainUse;
 
    float4 frag (v2f_img i) : SV_Target {
     float4 c = tex2D(_MainTex, i.uv);
     float light = dot(c.rgb, float3(0.2126, 0.7152, 0.0722));
     if (light <= 1e-6)
      return c;
-    float straight = _TubeGain * lerp(1.0, tex2D(_AutoGain, float2(0.5, 0.5)).r, _AutoGainUse) * light;
+    float straight = _TubeGain * light;
     float saturated = 1.0 - exp(-straight);
     float now = lerp(straight, saturated, saturate(_TubeCompress));
     c.rgb *= now / light;
@@ -468,61 +464,6 @@ Shader "Justachae/NVG/Tube" {
      cover += (a.a + b.a) * weights[k];
     }
     return cover > 0.0001 ? float4(sum / cover, cover) : float4(0, 0, 0, 0);
-   }
-   ENDCG
-  }
-  // 11: the light on the tube, measured (NightVisionAutoGain.cs): into a small target with mips, each pixel the frame's
-  // light about it (_MainTex, four taps) weighted by how much of a lens is there for either eye (the lens maps): r the
-  // light, g its fourth power, b the weight. Its smallest mip is the mean over all the lenses show.
-  Pass {
-   Cull Off ZWrite Off ZTest Always
-   CGPROGRAM
-   #pragma vertex vert_img
-   #pragma fragment frag
-   #include "UnityCG.cginc"
-   sampler2D _MainTex, _MeterLensL, _MeterLensR;
-   float4 _MainTex_TexelSize;
-   float _MeterSplit;   // where across the frame the left eye's lens map gives way to the right's
-
-   float light (float2 uv) { return dot(tex2D(_MainTex, uv).rgb, float3(0.2126, 0.7152, 0.0722)); }
-
-   float4 frag (v2f_img i) : SV_Target {
-    float2 d = _MainTex_TexelSize.xy * 1.25;
-    float a = light(i.uv + float2(d.x, d.y)), b = light(i.uv + float2(-d.x, d.y));
-    float c = light(i.uv + float2(d.x, -d.y)), e = light(i.uv + float2(-d.x, -d.y));
-    float4 lens = i.uv.x < _MeterSplit ? tex2D(_MeterLensL, i.uv) : tex2D(_MeterLensR, i.uv);
-    float w = saturate(dot(lens, 1));
-    float a2 = a * a, b2 = b * b, c2 = c * c, e2 = e * e;
-    return float4((a + b + c + e) * 0.25 * w, (a2 * a2 + b2 * b2 + c2 * c2 + e2 * e2) * 0.25 * w, w, 1);
-   }
-   ENDCG
-  }
-  // 12: the gain for this frame, into a target of one pixel: toward what brings the measured light (pass 11's
-  // smallest mip: half its mean, half the fourth root of its mean fourth power, so that a strong light counts for far more than its area)
-  // down to _GainSet.x, never above 1 nor under _GainSet.y, at _GainSet.z a second going down and _GainSet.w coming
-  // back; _GainPrev last frame's, _GainDt the frame's time.
-  Pass {
-   Cull Off ZWrite Off ZTest Always
-   CGPROGRAM
-   #pragma vertex vert_img
-   #pragma fragment frag
-   #include "UnityCG.cginc"
-   sampler2D _Meter, _GainPrev;
-   float4 _GainSet;
-   float _GainDt;
-
-   float4 frag (v2f_img i) : SV_Target {
-    float4 m = tex2Dlod(_Meter, float4(0.5, 0.5, 0, 16));
-    float prev = tex2D(_GainPrev, float2(0.5, 0.5)).r;
-    float target = 1;
-    if (m.b > 1e-4) {
-     float mean = m.r / m.b, high = sqrt(sqrt(max(m.g / m.b, 0)));
-     float seen = 0.5 * (mean + high);
-     target = clamp(_GainSet.x / max(seen, 1e-4), _GainSet.y, 1);
-    }
-    float rate = target < prev ? _GainSet.z : _GainSet.w;
-    float now = prev + (target - prev) * (1 - exp(-rate * _GainDt));
-    return float4(now, now, now, 1);
    }
    ENDCG
   }
