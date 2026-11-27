@@ -35,6 +35,10 @@ internal static partial class TwoEyes
     // (The bare eye leading, none of it, 1.9.40: that is then the bare eye's own view and nothing else, the user's,
     // 2026-11-27: "把裸眼混合改成不混合任何东西，直接显示裸眼的画面". It had been half.)
     private static float GunGoggleShare => Mathf.Lerp(1f, Mathf.Lerp(1f, 0f, Whole * (1f - Handed)), _lead);
+    // Whether that gun is put into the frame at all (NightVisionDirect): with none of it to be seen it is not drawn.
+    // (1.9.40 still drew it, on its half of the pixels, and took its colour out again afterwards: what was left of it
+    // stood beside the bare eye's gun, the user's, 2026-11-27: "现在裸眼瞄准还能看到第二把枪".)
+    internal static bool GoggleGunSeen => GunGoggleShare > 0.002f;
 
     // How blurred the bare eye's gun is (0 sharp, 1 as blurred as it gets): the further the aim is from up, and all the
     // way as it is handed back, so it meets the goggle's blurred picture of the gun.

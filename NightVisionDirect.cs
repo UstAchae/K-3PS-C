@@ -1076,7 +1076,7 @@ internal static partial class NightVisionEyepieces
         for (int t = 0; t < 4; t++)
             buffer.SetGlobalTexture(DirectGoggleGun[t], _goggleGunTextures[t]!);
         buffer.SetGlobalTexture(DirectGoggleGunDepth, goggleDepth);
-        buffer.SetGlobalFloat(DirectGoggleShownId, 1f);
+        buffer.SetGlobalFloat(DirectGoggleShownId, TwoEyes.GoggleGunSeen ? 1f : 0f);
         buffer.SetGlobalFloat(DirectBareAimsId, TwoEyes.BareAims ? 1f : 0f);
         _bareShiftNow = shift;
         // Its sight's lens: the gun left out there, so the frame keeps what lies behind it (the goggle's picture is made
