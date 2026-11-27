@@ -45,7 +45,11 @@ internal static class OpticPicture
             ProceduralWeaponAnimation.SightNBone? scope = Scopes.Current(animation);
             // The stock at the chest (ChestStance): nothing is looked through, so no sight makes its picture (the game
             // would render its whole scene again for it every frame); the sight aimed through next is turned on again.
-            if (aiming && ChestStance.Weight > 0f)
+            // (Only while the stance is held, 1.9.36: by its weight, which eases out as the gun comes back up to the eye,
+            // the sight stayed off all the way up and came on at the end, its lens black before the eye and then the
+            // picture; the user's, 2026-11-27: "从抵肩瞄准回到瞄准时，能看到光学瞄具从变黑变回工作状态的切换，这里穿帮
+            // 了". Let go, it is on again from the first frame, the gun still down at the chest.)
+            if (aiming && ChestStance.Active)
             {
                 ReleaseHeld();
                 if (animation.ScopeAimTransforms != null)
