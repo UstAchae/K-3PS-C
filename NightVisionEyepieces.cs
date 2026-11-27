@@ -395,7 +395,11 @@ internal static partial class NightVisionEyepieces
             if (!PodMonocular(out int lone))
                 return 0f;
             int raised = lone == CentreLensA ? CentreLensB : CentreLensA;
-            return PodGone(raised) * (1f - PodGone(lone));
+            // (Not taken back as the other eyepiece swings up too, 1.9.56: with the bare eye aiming, the two eyes'
+            // state was eased out over that swing, the two views of the device crossing back to side by side on the
+            // way, and it showed as a flash; the user's, 2026-11-27: "裸眼瞄准的时候，水平翻上另一边目镜的动画还有闪，
+            // 让它不要闪，直接水平翻上去". It stands whole until both are up, when the game draws the device again.)
+            return PodGone(raised);
         }
     }
 
