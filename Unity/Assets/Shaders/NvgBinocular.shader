@@ -52,8 +52,9 @@ Shader "Justachae/NVG/Binocular" {
     float3 seen = device + light.rgb * _Lamp.x + glow + (1 - saturate(eye.a)) * (1 - cover) * scene.rgb * (1 - _SceneOff);
     // The eyepieces (their picture and their glass) laid over the frame, whole but where the bare eye's view of the
     // device stands before them (below).
-    // (_BareOver.z: how much of the eyepieces is laid over the frame, half while the bare eye leads; 0 not given: whole.)
-    float share = _BareOver.z > 0 ? _BareOver.z : 1;
+    // (_BareOver.z: how much of the eyepieces is laid over the frame, none while the bare eye leads; given only with
+    // _BareOver.w 1, else whole.)
+    float share = _BareOver.w > 0.5 ? saturate(_BareOver.z) : 1;
     // Laid over at less than whole (the bare eye leading), the eyepiece's rim is no longer hidden in the device's own
     // housing: its picture ended at a line against the bare eye's scene (the user's, 2026-11-27, 1.9.38: "这个圆有点太
     // 分明了吧"). An eyepiece a few centimetres before an eye that looks far off is far out of focus: its edge is eased

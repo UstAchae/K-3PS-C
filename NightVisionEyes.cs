@@ -315,7 +315,7 @@ internal static partial class NightVisionEyepieces
         _blend = TwoEyes.Device(_direct, _device.Monocular);
         float eyesOwn = _blend.Apart;
         _goggleEyeRight = _device.Monocular ? a + CameraPosition.Horizontal > 0f : podMono && (lone == CentreLensA) != (a <= b);
-        binocular.SetVector(BareOverId, new Vector4(_blend.BareBeforePicture, _goggleEyeRight ? 0f : 1f, _blend.PictureShare, 0f));
+        binocular.SetVector(BareOverId, new Vector4(_blend.BareBeforePicture, _goggleEyeRight ? 0f : 1f, _blend.PictureShare, 1f));
         binocular.SetFloat(FeatherId, HalfFeather);
         float comesIn = Mathf.Lerp(EyeShift, 1f, eyesOwn) * _split;
         Vector3 EyeShiftOf(float lens) => _direct && !asMonocular ? right * (lens * comesIn) - back : Vector3.zero;

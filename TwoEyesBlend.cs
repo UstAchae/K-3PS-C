@@ -32,7 +32,9 @@ internal static partial class TwoEyes
 
     // How much of the goggle eye's gun is seen (in the frame, through the goggle where it stands in its picture). The
     // goggle's eye leading: whole. The bare eye leading: half, and whole again as all is handed back.
-    private static float GunGoggleShare => Mathf.Lerp(1f, Mathf.Lerp(1f, BareSeen, Whole * (1f - Handed)), _lead);
+    // (The bare eye leading, none of it, 1.9.40: that is then the bare eye's own view and nothing else, the user's,
+    // 2026-11-27: "把裸眼混合改成不混合任何东西，直接显示裸眼的画面". It had been half.)
+    private static float GunGoggleShare => Mathf.Lerp(1f, Mathf.Lerp(1f, 0f, Whole * (1f - Handed)), _lead);
 
     // How blurred the bare eye's gun is (0 sharp, 1 as blurred as it gets): the further the aim is from up, and all the
     // way as it is handed back, so it meets the goggle's blurred picture of the gun.
@@ -73,7 +75,7 @@ internal static partial class TwoEyes
         // How far the bare eye's view of a monocular is drawn from that eye's own place (1), not from where the goggle
         // eye's is drawn (0).
         internal readonly float BareOut;
-        // How much of the eyepieces' picture is laid over the frame: whole, but half while the bare eye leads (1.9.38,
+        // How much of the eyepieces' picture is laid over the frame: whole, none while the bare eye leads (half in 1.9.38,
         // the user's, 2026-11-27: "如果是裸眼混合，就让裸眼的画面实心，混合过来的夜视画面透明度50%"; it had been whole
         // whichever eye led).
         internal readonly float PictureShare;
@@ -103,8 +105,10 @@ internal static partial class TwoEyes
         float late = Mathf.Clamp01((apart - 0.6f) / 0.4f);
         late = late * late * (3f - 2f * late);
         float before = direct ? late * (1f - Handed) * _lead : 0f;
-        float picture = Mathf.Lerp(1f, BareSeen, _lead * mix * (1f - Handed));
-        return new DeviceBlend(apart, mix, bareLeads ? BareSeen : 1f, bareLeads ? 1f : BareSeen, before, 1f - _lead * (1f - apart), picture);
+        // The bare eye leading: nothing of the goggle's eye is laid over (1.9.40): not its picture, not its view of the
+        // device; the bare eye's own view of the device whole. Eased with the lead, so the change of eye is no jump.
+        float picture = Mathf.Lerp(1f, 0f, _lead * mix * (1f - Handed));
+        return new DeviceBlend(apart, mix, Mathf.Lerp(1f, 0f, _lead), Mathf.Lerp(BareSeen, 1f, _lead), before, 1f - _lead * (1f - apart), picture);
     }
 
 }
