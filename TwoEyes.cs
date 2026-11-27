@@ -79,9 +79,11 @@ internal static partial class TwoEyes
     // (Not eased with the flip any more, 1.9.44: with the goggle switched on or off while the bare eye aims, the camera
     // slid between the eyes, the second gun faded in and out and the two views of the device crossed over as it
     // flipped; the user's, 2026-11-27: "裸眼瞄准的时候如果按 N 切换夜视仪的话就不要有什么过渡什么的了，直接让夜视仪
-    // 翻上翻下就行了，现在还有杂过程". While it flips, all is as with the goggle up: the camera at the aiming eye, the
-    // game's own gun; the two eyes' state only once it is all the way down, and gone the moment it starts up.)
-    private static float Apart => NightVisionEyepieces.Flip >= 0.999f ? 1f : 0f;
+    // 翻上翻下就行了，现在还有杂过程". The two eyes' state whole for as long as the goggle is down or flipping (Now), so
+    // that the goggle is seen where it will stand, all the way down and all the way up, and only flips.
+    // (1.9.44 had it only once all the way down: while it flipped the goggle was drawn as for no aim, and showed there
+    // for a moment before it came to its place; the user's, "它中间闪了一下在不瞄准的时候才能看到的位置".)
+    private static float Apart => 1f;
     // From the camera to the bare eye while it aims: the aiming eye's place (the gun is placed for it) from the camera's.
     // From the camera to the goggle's eye, for its gun and the lasers on it: where its lens stands from the head's middle
     // (SeeLens). Eased in with the aim (not aiming, the gun is the game's, from the camera). None while the goggle's eye
