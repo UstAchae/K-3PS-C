@@ -76,7 +76,12 @@ internal static partial class TwoEyes
     private static float _goggleEye = 0.03f;
     private static float BareEye => -_goggleEye;
     // As the goggle flips down the eyes go out to their places from where the camera would be, and back as it flips up.
-    private static float Apart => Mathf.SmoothStep(0f, 1f, NightVisionEyepieces.Flip);
+    // (Not eased with the flip any more, 1.9.44: with the goggle switched on or off while the bare eye aims, the camera
+    // slid between the eyes, the second gun faded in and out and the two views of the device crossed over as it
+    // flipped; the user's, 2026-11-27: "裸眼瞄准的时候如果按 N 切换夜视仪的话就不要有什么过渡什么的了，直接让夜视仪
+    // 翻上翻下就行了，现在还有杂过程". While it flips, all is as with the goggle up: the camera at the aiming eye, the
+    // game's own gun; the two eyes' state only once it is all the way down, and gone the moment it starts up.)
+    private static float Apart => NightVisionEyepieces.Flip >= 0.999f ? 1f : 0f;
     // From the camera to the bare eye while it aims: the aiming eye's place (the gun is placed for it) from the camera's.
     // From the camera to the goggle's eye, for its gun and the lasers on it: where its lens stands from the head's middle
     // (SeeLens). Eased in with the aim (not aiming, the gun is the game's, from the camera). None while the goggle's eye
