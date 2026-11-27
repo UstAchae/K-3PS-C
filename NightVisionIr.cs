@@ -73,6 +73,14 @@ internal static partial class NightVisionEyepieces
     private static Camera? _irCamera;
     private static readonly Dictionary<LaserBeam, IrLaser> _irLaserRecords = new Dictionary<LaserBeam, IrLaser>();
     private static readonly Dictionary<Light, Texture?> _irCookies = new Dictionary<Light, Texture?>();
+    // And each one's render mode, with its cookie (1.9.42). A blank cookie keeps an IR light out of what is lit a pixel
+    // at a time (the frame's surfaces); what is lit a vertex at a time or by the probes, the dust a shot throws up and
+    // other particles, has no cookie and took the light's colour all the same: red dust to the naked eye with the
+    // goggle down, none in a sight's picture, where the light is off (the user's, 2026-11-27: "夜视仪翻下时，裸眼那只
+    // 眼能看到红色的灰，但光学瞄具里没有红色的灰"). Forced to be a pixel light for that frame, it is in neither the
+    // vertex lights nor the probes.
+    private static readonly Dictionary<Light, LightRenderMode> _irModes = new Dictionary<Light, LightRenderMode>();
+    private static bool _irModeNoted;
     private static Texture? _irSoftCookie, _irFalloff;
     private static Texture2D? _irBlank;
     private static int _nakedFrame = -1;
@@ -225,6 +233,17 @@ internal static partial class NightVisionEyepieces
                 AttachIrShadowed(light);
             }
             light.cookie = IrBlank();
+            if (!_irModes.ContainsKey(light))
+                _irModes[light] = light.renderMode;
+            if (light.renderMode != LightRenderMode.ForcePixel)
+            {
+                light.renderMode = LightRenderMode.ForcePixel;
+                if (!_irModeNoted)
+                {
+                    _irModeNoted = true;
+                    NewCameraPlugin.Log?.LogInfo($"NVG IR: an IR light ({light.name}, colour {light.color}, {light.type}) made a pixel light for the naked eye's frame, so that it lights no particles there; it was {_irModes[light]}.");
+                }
+            }
         }
         if (__instance.FlareLight != null)
             __instance.FlareLight.SetAlpha(-1f);
@@ -577,6 +596,12 @@ internal static partial class NightVisionEyepieces
                 c.Key.cookie = c.Value;
         }
         _irCookies.Clear();
+        foreach (KeyValuePair<Light, LightRenderMode> m in _irModes)
+        {
+            if (m.Key != null)
+                m.Key.renderMode = m.Value;
+        }
+        _irModes.Clear();
         foreach (IrLight l in _irLaserHidden)
         {
             if (l.Light != null)
