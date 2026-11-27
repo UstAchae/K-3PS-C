@@ -42,7 +42,13 @@ internal static partial class TwoEyes
     // the bare eye's is and grows whole as the bare eye's, blurred, fades from over it; then the game's own, in that
     // same place.
     // (Whichever eye leads: the user's, 2026-11-19.)
-    internal static bool BareAims => _shareBare > 0.5f && _aim > 0.001f && !(CameraPosition.AimLeaving && _handed >= 1f);
+    private static bool BareAimsAny => _shareBare > 0.5f && _aim > 0.001f && !(CameraPosition.AimLeaving && _handed >= 1f);
+    // The bare eye aims AND something of the goggle's eye is laid with it (the goggle's eye leading, or on the way from
+    // one to the other): only then is the gun drawn here, apart for each eye. The bare eye leading there is nothing to
+    // lay (1.9.40), and the gun is the game's own, drawn by the game as with the goggle up (1.9.46): drawn here it was
+    // lit and shadowed a little differently, and changed as the goggle went up or came down (the user's, 2026-11-27:
+    // "在裸眼情况下，夜视仪翻上和翻下的时候，枪上的阴影感觉也不一致").
+    internal static bool BareAims => BareAimsAny && _lead < 0.999f;
     private static float _handed;
     private const float HandSeconds = 0.2f;
     private static float Handed => Mathf.SmoothStep(0f, 1f, _handed);
@@ -56,7 +62,7 @@ internal static partial class TwoEyes
     // From NewCameraPlugin.Update: the key, only while the bare eye aims; and the easing.
     internal static void Update()
     {
-        if (LeadKey.IsDown() && Now && BareAims)
+        if (LeadKey.IsDown() && Now && BareAimsAny)
         {
             BareLeads = !BareLeads;
             NewCameraPlugin.Log?.LogInfo($"Two eyes: the {(BareLeads ? "bare eye" : "goggle's eye")} leads from now on.");
