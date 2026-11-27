@@ -239,8 +239,10 @@ internal static partial class NightVisionEyepieces
     {
         internal Transform Model = null!, Body = null!;
         internal NightVisionDevice? Switch;
+        internal string? Item;
         internal Device Kind = null!;
-        internal readonly List<(Light light, float behind)> Lights = new List<(Light, float)>();
+        // (pod: the pod its lens is on, 0 the left or 1 the right, by where the lens stands across the device.)
+        internal readonly List<(Light light, float behind, int pod)> Lights = new List<(Light, float, int)>();
     }
 
     private static readonly List<ShownGlow> _shownGlows = new List<ShownGlow>();
@@ -277,7 +279,7 @@ internal static partial class NightVisionEyepieces
             light.shadows = LightShadows.None;
             light.renderMode = LightRenderMode.ForcePixel;
             light.enabled = false;
-            glow.Lights.Add((light, behind));
+            glow.Lights.Add((light, behind, tube.Centre.x < 0f ? 0 : 1));
         }
         _shownGlows.Add(glow);
     }
@@ -298,7 +300,7 @@ internal static partial class NightVisionEyepieces
         NightVisionDevice? device = _shownGlows[i].Switch;
         if (device != null && device._light != null && DeviceComponent?.GetValue(device) != null)
             device.CG_Init();
-        foreach ((Light light, float _) in _shownGlows[i].Lights)
+        foreach ((Light light, float _, int _) in _shownGlows[i].Lights)
         {
             if (light != null)
                 Object.Destroy(light.gameObject);
@@ -329,12 +331,18 @@ internal static partial class NightVisionEyepieces
             if (glow.Switch != null && glow.Switch._light != null && glow.Switch._light.enabled)
                 glow.Switch._light.enabled = false;
             float scale = glow.Body.lossyScale.x;
-            foreach ((Light light, float behind) in glow.Lights)
+            // A pod swung up: its tube is off, and throws no light on the face (1.9.50; the user's, 2026-11-27: "水平翻上
+            // 以后，脸上的光也没跟着动").
+            if (lit && glow.Item == null)
+                glow.Item = component!.Item.Id.ToString();   // (once: no text made each frame)
+            int up = lit && PodsTurned(glow.Kind) ? PodState(glow.Item) : 0;
+            foreach ((Light light, float behind, int pod) in glow.Lights)
             {
                 if (light == null)
                     continue;
-                light.enabled = lit;
-                if (!lit)
+                bool shines = lit && (up & (1 << pod)) == 0;
+                light.enabled = shines;
+                if (!shines)
                     continue;
                 light.color = color;
                 light.intensity = FaceLightIntensity;

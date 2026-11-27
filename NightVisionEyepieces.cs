@@ -521,7 +521,7 @@ internal static partial class NightVisionEyepieces
         KeepEyepieceImage(cameras, worn && (on || _flip > 0.001f));
         KeepGlow(device);
         UpdateMountHeight(player);
-        UpdatePods(player, nightItem?.Item?.Id.ToString());
+        UpdatePods(player, PodItemOf(nightItem));
 
         EnsureRendererPatch();
         RestoreMask(cameras);
