@@ -92,7 +92,10 @@ internal static partial class NightVisionEyepieces
     {
         LightFace(camera);
         if (camera != Camera.main)
+        {
+            HideDeviceFromOptic(camera);
             return;
+        }
         HideIrLaserLights(camera);
         if (_body != null)
             AdjustMount(camera);
@@ -249,8 +252,55 @@ internal static partial class NightVisionEyepieces
     private static float _clipShare;    // its field as a share of the tube's
     private static float _clipHostCone; // the tube's own field's radius on the screen (of the height)
 
+    // A sight's own camera (a scope's, a magnifier's) stands on the gun, before the eye, and what hangs before the goggle's
+    // objective can stand before it: a clip-on's body filled the lower two thirds of a magnifier's picture, sharp and
+    // black (K-ECOTI on a PVS-31A, the EOTech's G33; the user's, 2026-11-27: "光学瞄具里不应该看到这个"; measured by its
+    // mod, the block already in the tube's picture and within the lens). The game itself draws none of the head's gear
+    // in first person, so a sight never shows it: the worn device, and whatever hangs on it, is left to its shadow for
+    // that camera's render too, while it is down (1.9.57).
+    private static readonly List<Renderer> _opticRenderers = new List<Renderer>();
+    private static readonly List<(Renderer renderer, UnityEngine.Rendering.ShadowCastingMode casting)> _hiddenFromOptic = new List<(Renderer, UnityEngine.Rendering.ShadowCastingMode)>();
+    private static Camera? _hiddenFromCamera;
+    private static bool _opticHideNoted;
+
+    private static void HideDeviceFromOptic(Camera camera)
+    {
+        if (_body == null || !DownOrFlipping || _hiddenFromCamera != null)
+            return;
+        if (camera != EFT.CameraControl.CameraManager.Instance?.OpticCameraManager?.Camera)
+            return;
+        DeviceSlot().GetComponentsInChildren(false, _opticRenderers);
+        foreach (Renderer r in _opticRenderers)
+        {
+            if (r.shadowCastingMode == UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly)
+                continue;
+            _hiddenFromOptic.Add((r, r.shadowCastingMode));
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
+        }
+        _hiddenFromCamera = camera;
+        if (!_opticHideNoted)
+        {
+            _opticHideNoted = true;
+            NewCameraPlugin.Log?.LogInfo($"NVG eyepieces: the worn device left out of the sight's own camera ({camera.name}; {_hiddenFromOptic.Count} of {_opticRenderers.Count} renderers).");
+        }
+    }
+
+    private static void ShowDeviceToOpticAgain(Camera camera)
+    {
+        if (_hiddenFromCamera != camera)
+            return;
+        _hiddenFromCamera = null;
+        foreach ((Renderer renderer, UnityEngine.Rendering.ShadowCastingMode casting) in _hiddenFromOptic)
+        {
+            if (renderer != null)
+                renderer.shadowCastingMode = casting;
+        }
+        _hiddenFromOptic.Clear();
+    }
+
     internal static void OnCameraPostRender(Camera camera)
     {
+        ShowDeviceToOpticAgain(camera);
         if (camera == Camera.main)
             GiveMainSceneBack();
         if (camera == Camera.main)
